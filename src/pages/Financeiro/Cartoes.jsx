@@ -2,14 +2,26 @@ import React from 'react';
 import Icon from '../../components/Icon';
 import { p, formatMoney, getTxMonth, isInvoicePayment } from '../../utils/finance';
 
-function Cartoes({ cardStats, filterMonth, setInvoiceModal, transactions = [] }) {
+function Cartoes({ accounts = [], transactions = [], selectedMonth, selectedYear }) {
+    // 1. Calcula o mês do filtro atual (ex: "10/2026")
+    const month = selectedMonth !== undefined ? selectedMonth : new Date().getMonth();
+    const year = selectedYear !== undefined ? selectedYear : new Date().getFullYear();
+    const filterMonth = `${String(month + 1).padStart(2, '0')}/${year}`;
+
+    // 2. Extrai automaticamente os cartões da lista global de contas
+    const cardStats = (accounts || []).filter(a => a.type === 'cartao');
+
+    // Função temporária de fallback para o modal de fatura
+    const setInvoiceModal = (data) => {
+        alert(`Para dar baixa na fatura do ${data.cardName} no valor de ${formatMoney(data.total)}, vá ao separador Lançamentos e registe uma Saída.`);
+    };
+
     return (
         <div className="space-y-4 fade-in">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(cardStats || []).map(card => {
+                {cardStats.map(card => {
                     // 1. Pega todas as compras deste cartão no mês atual.
-                    // ATUALIZAÇÃO: Forçamos a 'Fatura Rolada' a aparecer na lista de compras!
-                    const cardTxs = transactions
+                    const cardTxs = (transactions || [])
                         .filter(t => t.account === card.name && getTxMonth(t) === filterMonth && (!isInvoicePayment(t) || t.category === 'Fatura Rolada'))
                         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -17,7 +29,7 @@ function Cartoes({ cardStats, filterMonth, setInvoiceModal, transactions = [] })
                     const faturaTotal = cardTxs.reduce((acc, t) => t.type === 'saida' ? acc + p(t.amount) : acc - p(t.amount), 0);
 
                     // 3. Verifica pagamentos e rolagens feitos NESTE mês
-                    const faturaPagamentos = transactions.filter(t =>
+                    const faturaPagamentos = (transactions || []).filter(t =>
                         t.account === card.name &&
                         isInvoicePayment(t) &&
                         t.type === 'entrada' &&
@@ -66,7 +78,7 @@ function Cartoes({ cardStats, filterMonth, setInvoiceModal, transactions = [] })
                                         </h2>
                                     </div>
                                     
-                                    {/* RESUMO PARCIAL: Exibe os valores se o pagamento não foi integral */}
+                                    {/* RESUMO PARCIAL */}
                                     {isParcialmentePaga && (
                                         <div className="mt-3 pt-3 border-t border-slate-200 border-dashed grid grid-cols-2 gap-2">
                                             <div className="bg-white p-2 rounded border border-slate-100">
@@ -80,14 +92,14 @@ function Cartoes({ cardStats, filterMonth, setInvoiceModal, transactions = [] })
                                         </div>
                                     )}
                                     
-                                    {/* ALERTA DE PAGAMENTO PARCIAL (Se sobrou saldo sem baixa) */}
+                                    {/* ALERTA DE PAGAMENTO PARCIAL */}
                                     {!isPaga && valorPagoReal > 0 && (
                                         <p className="text-[9px] font-black text-orange-500 mt-1 uppercase">Falta pagar: {formatMoney(saldoPendenteReal)}</p>
                                     )}
                                 </div>
                             </div>
                             
-                            {/* ESCONDE O BOTÃO SE JÁ ESTIVER PAGA OU ROLADA */}
+                            {/* BOTÃO DE BAIXA */}
                             {!isPaga && faturaTotal > 0 && (
                                 <div className="mb-3">
                                     <button 
@@ -148,7 +160,7 @@ function Cartoes({ cardStats, filterMonth, setInvoiceModal, transactions = [] })
                     <div className="col-span-full p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                         <Icon name="credit-card" size={24} className="mx-auto text-slate-300 mb-2" />
                         <p className="text-slate-500 font-black uppercase text-[11px]">Nenhum cartão cadastrado</p>
-                        <p className="text-slate-400 font-bold text-[9px] mt-1">Vá à aba Ajustes para adicionar os seus cartões de crédito.</p>
+                        <p className="text-slate-400 font-bold text-[9px] mt-1">Vá à aba Lançamentos para registar e usar os seus cartões de crédito.</p>
                     </div>
                 )}
             </div>
