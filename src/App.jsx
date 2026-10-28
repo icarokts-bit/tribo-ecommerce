@@ -11,8 +11,7 @@ import Login from './pages/Login';
 
 // ATENÇÃO AOS CAMINHOS: Ajuste as pastas abaixo conforme onde guardou os ficheiros
 import Kanban from './pages/GestaoPedidos/Kanban'; 
-import Produtos from './pages/Produtos'; // ou './pages/GestaoPedidos/Produtos' se guardou lá
-
+import Produtos from "./pages/GestaoPedidos/Produtos";
 // ==========================================
 // 1. COMPONENTE DE LAYOUT (MENU LATERAL)
 // ==========================================
