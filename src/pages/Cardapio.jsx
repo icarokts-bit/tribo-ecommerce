@@ -32,7 +32,7 @@ export default function Cardapio() {
     const [qty, setQty] = useState(1);
     const [observation, setObservation] = useState('');
     
-    // Novo estado genérico para variações (ex: Cor, Tamanho, Material)
+    // Estado genérico para variações (ex: Cor, Tamanho, Material)
     const [selectedVariations, setSelectedVariations] = useState({});
 
     const [deliveryAreas, setDeliveryAreas] = useState([]); 
@@ -2111,3 +2111,18 @@ export default function Cardapio() {
                             )}
                         </div>
                     </div>
+                </div>
+            )}
+            
+            <style jsx>{`
+                @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+                @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+                .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                .animate-scale-up { animation: scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+            `}</style>
+        </div>
+    );
+}
