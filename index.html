@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Tribo Sistemas - SaaS</title>
+
+    <!-- ========================================== -->
+    <!-- 1. LIGAÇÃO DO PWA (MANIFESTO E CORES)      -->
+    <!-- ========================================== -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="apple-touch-icon" href="/icon-192x192.png" />
+    <!-- ========================================== -->
+
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+
+    <!-- ========================================== -->
+    <!-- 2. SCRIPT DO SERVICE WORKER (INSTALADOR)   -->
+    <!-- ========================================== -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service Worker Registado com sucesso!'))
+            .catch(err => console.log('Erro no Service Worker:', err));
+        });
+      }
+    </script>
+    <!-- ========================================== -->
+  </body>
+</html>

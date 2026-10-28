@@ -1,0 +1,22 @@
+{
+  "short_name": "Totem Tribo",
+  "name": "Autoatendimento Tribo Burger",
+  "start_url": "/totem/tribotech",
+  "display": "fullscreen",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=300;400;600;800&display=swap');
+
+/* ================= ESCALA ULTRA COMPACTA DE INFORMAÇÕES ================= */
+html { font-size: 10px; } 
+body { 
+    font-family: 'Plus Jakarta Sans', sans-serif; 
+    background-color: #FDFCF9; 
+    color: #1A202C; 
+    overflow-x: hidden; 
+}
+
+.glass-card { background: rgba(255, 255, 255, 0.95); border: 1px solid rgba(226, 232, 240, 0.6); }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+.fade-in { animation: fadeIn 0.2s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+
+.table-input { width: 100%; height: 100%; text-align: center; background: transparent; border: none; font-weight: 800; font-size: 10px; outline: none; padding: 4px; }
+.table-input:focus { background-color: rgba(211, 226, 152, 0.2); }
+.stat-banner { background: #1A202C; border-bottom: 4px solid #D97757; color: white; padding: 1.2rem; border-radius: 1.2rem; text-align: center; }
+.status-badge { font-size: 7px; font-weight: 900; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.05em; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.scale-up-center { animation: scale-up-center 0.15s cubic-bezier(0.390, 0.575, 0.565, 1.000) both; }
+@keyframes scale-up-center { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+.delete-confirm { background-color: #EF4444 !important; color: white !important; font-size: 8px !important; padding: 2px 6px; border-radius: 4px; }
+
+/* =========================================================
+   MODO APP AUTOMÁTICO PARA TABELAS (TELAS PEQUENAS)
+   ========================================================= */
+@media (max-width: 1024px) {
+  .tabela-app thead {
+    display: none;
+  }
+
+  .tabela-app tr {
+    display: block;
+    background-color: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 1.2rem;
+    margin-bottom: 1.2rem;
+    padding: 1rem 1.2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .tabela-app td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px dashed #e2e8f0;
+    padding: 0.8rem 0;
+    font-size: 1.1rem;
+    font-weight: 800;
+    text-align: right;
+  }
+
+  .tabela-app td:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .tabela-app td:first-child {
+    padding-top: 0;
+  }
+
+  .tabela-app td::before {
+    content: attr(data-label);
+    font-weight: 900;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    text-align: left;
+    margin-right: 1.5rem;
+  }
+}
+
+/* ================= CONFIGURAÇÕES DE IMPRESSÃO ================= */
+@media print {
+    body { background-color: white !important; color: black !important; }
+    .print\:hidden, aside, header { display: none !important; }
+    .glass-card { box-shadow: none !important; border: 1px solid #ccc !important; break-inside: avoid; }
+    main { padding: 0 !important; margin: 0 !important; max-width: 100% !important; overflow: visible !important; }
+}
+
+/* Classe utilitária caso queira forçar texto normal onde precisar */
+.texto-normal {
+    text-transform: none !important;
+}
