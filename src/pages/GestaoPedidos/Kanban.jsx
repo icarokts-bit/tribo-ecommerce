@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../firebase';
-import Icon from '../components/Icon';
+import { db } from '../../firebase';
+import Icon from '../../components/Icon';
 
 export default function Kanban({ user, permissoes }) {
     const [orders, setOrders] = useState([]);

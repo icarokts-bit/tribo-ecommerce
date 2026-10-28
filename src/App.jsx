@@ -7,7 +7,7 @@ import Cardapio from './pages/Cardapio';
 
 // Páginas Administrativas
 import Login from './pages/Login';
-import Kanban from './pages/Kanban'; // O painel de gestão de pedidos (Próximo passo)
+import Kanban from './pages/GestaoPedidos/Kanban';
 
 function App() {
   const [user, setUser] = useState(null);
