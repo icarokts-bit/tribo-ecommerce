@@ -3,20 +3,43 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } f
 import { auth } from './firebase';
 import Icon from './components/Icon'; 
 
-// Páginas Públicas
+// ==========================================
+// IMPORTAÇÕES DAS PÁGINAS E MÓDULOS
+// ==========================================
+
+// Públicas
 import Cardapio from './pages/Cardapio';
 import Login from './pages/Login';
 
-// Módulos de E-commerce
+// Módulos Financeiros (Pasta Financeiro)
+import DashboardFin from './pages/Financeiro/DashboardFin';
+import Vendas from './pages/Financeiro/Vendas';
+import Saldos from './pages/Financeiro/Saldos';
+import AReceber from './pages/Financeiro/AReceber';
+import APagar from './pages/Financeiro/APagar';
+import Cartoes from './pages/Financeiro/Cartoes';
+import Dre from './pages/Financeiro/Dre';
+import Fornecedores from './pages/Financeiro/Fornecedores';
+import Resultados from './pages/Financeiro/Resultados';
+
+// Módulos E-commerce (Pasta GestaoPedidos)
 import Kanban from './pages/GestaoPedidos/Kanban'; 
-import Produtos from './pages/GestaoPedidos/Produtos'; // Altere para './pages/Produtos' se guardou fora da pasta GestaoPedidos
+import Produtos from './pages/GestaoPedidos/Produtos'; 
+import HistoricoPedidos from './pages/GestaoPedidos/HistoricoPedidos';
+import ClientesDelivery from './pages/GestaoPedidos/ClientesDelivery';
+import Fidelidade from './pages/GestaoPedidos/Fidelidade';
+import AjustesImpressao from './pages/GestaoPedidos/AjustesImpressao';
+
+// Módulos Avulsos / RH (Pasta pages)
+import ExtratoDetalhado from './pages/ExtratoDetalhado';
+import GestaoFuncionarios from './pages/GestaoFuncionarios';
+import GestaoDelivery from './pages/GestaoDelivery';
+import GestaoFreelancer from './pages/GestaoFreelancer';
 
 // ==========================================
-// 1. CONFIGURAÇÃO DOS MÓDULOS (MENU COMPLETO)
+// CONFIGURAÇÃO DOS MÓDULOS (MENU)
 // ==========================================
 export const modulosSaaS = [
-    // === MÓDULO COMPLETO (FINANCEIRO E GESTÃO) ===
-    
     // Visão Geral
     { id: 'fin_dashboard', label: 'Lançamentos', icon: 'edit', group: 'Visão Geral', path: '/admin/lancamentos', planos: ['completo', 'trial', 'master'] },
     { id: 'vendas', label: 'Vendas', icon: 'shopping-cart', group: 'Visão Geral', path: '/admin/vendas', planos: ['completo', 'trial', 'master'] },
@@ -45,7 +68,7 @@ export const modulosSaaS = [
     { id: 'relatorio_unificado', label: 'Relatório Completo', icon: 'file-plus', group: 'Relatórios', path: '/admin/relatorios', planos: ['completo', 'trial', 'master'] },
     { id: 'marketing', label: 'Marketing', icon: 'megaphone', group: 'Relatórios', path: '/admin/marketing', planos: ['completo', 'trial', 'master'] },
 
-    // === MÓDULO E-COMMERCE ONLINE ===
+    // E-commerce Online
     { id: 'gestao_pedidos', label: 'Gestão de Pedidos', icon: 'shopping-bag', group: 'E-commerce Online', path: '/admin/pedidos', planos: ['completo', 'trial', 'master'] },
     { id: 'historico_pedidos', label: 'Histórico de Pedidos', icon: 'archive', group: 'E-commerce Online', path: '/admin/historico', planos: ['completo', 'trial', 'master'] },
     { id: 'catalogo_delivery', label: 'Catálogo de Produtos', icon: 'grid', group: 'E-commerce Online', path: '/admin/produtos', planos: ['completo', 'trial', 'master'] },
@@ -53,17 +76,16 @@ export const modulosSaaS = [
     { id: 'areas_entrega', label: 'Áreas de Entrega', icon: 'map-pin', group: 'E-commerce Online', path: '/admin/areas-entrega', planos: ['completo', 'trial', 'master'] },
     { id: 'fidelidade', label: 'Fidelidade', icon: 'award', group: 'E-commerce Online', path: '/admin/fidelidade', planos: ['completo', 'trial', 'master'] },
 
-    // === CONFIGURAÇÕES GERAIS ===
+    // Configurações
     { id: 'ajustes', label: 'Ajustes', icon: 'settings', group: 'Configurações', path: '/admin/ajustes', planos: ['completo', 'trial', 'master'] },
 ];
 
 // ==========================================
-// 2. COMPONENTE DE LAYOUT (MENU LATERAL)
+// COMPONENTE DE LAYOUT (MENU LATERAL)
 // ==========================================
 function AdminLayout({ children, user }) {
   const location = useLocation();
   
-  // Agrupa os módulos pelo nome do grupo
   const groupedModules = modulosSaaS.reduce((acc, modulo) => {
       if (!acc[modulo.group]) acc[modulo.group] = [];
       acc[modulo.group].push(modulo);
@@ -72,7 +94,6 @@ function AdminLayout({ children, user }) {
 
   return (
       <div className="flex h-screen bg-slate-100 overflow-hidden font-sans">
-          
           <aside className="w-16 md:w-64 bg-slate-900 text-white flex flex-col transition-all duration-300 shrink-0 z-50">
               <div className="h-16 flex items-center justify-center border-b border-slate-800 shrink-0 bg-slate-950">
                   <span className="hidden md:block font-black tracking-widest text-lg text-amber-400">TRIBO SISTEMAS</span>
@@ -128,7 +149,7 @@ function AdminLayout({ children, user }) {
 }
 
 // ==========================================
-// 3. ROTEAMENTO PRINCIPAL
+// ROTEAMENTO PRINCIPAL
 // ==========================================
 function App() {
   const [user, setUser] = useState(null);
@@ -149,28 +170,50 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Rota da Loja Pública */}
         <Route path="/:slug" element={<Cardapio />} />
         
-        {/* Rota de Login */}
         <Route path="/login" element={!user ? <Login onLogin={(u, p) => { setUser(u); setPermissoes(p); }} /> : <Navigate to="/admin/pedidos" replace />} />
 
-        {/* Rotas do Admin */}
         <Route path="/admin/*" element={user ? (
             <AdminLayout user={user}>
               <Routes>
                 <Route path="/" element={<Navigate to="pedidos" replace />} />
                 
-                {/* Módulos Prontos do E-commerce */}
+                {/* Rotas Mapeadas - Visão Geral */}
+                <Route path="lancamentos" element={<DashboardFin user={user} permissoes={permissoes} />} />
+                <Route path="vendas" element={<Vendas user={user} permissoes={permissoes} />} />
+                <Route path="saldos" element={<Saldos user={user} permissoes={permissoes} />} />
+
+                {/* Rotas Mapeadas - Financeiro */}
+                <Route path="a-receber" element={<AReceber user={user} permissoes={permissoes} />} />
+                <Route path="a-pagar" element={<APagar user={user} permissoes={permissoes} />} />
+                <Route path="cartoes" element={<Cartoes user={user} permissoes={permissoes} />} />
+                <Route path="extrato" element={<ExtratoDetalhado user={user} permissoes={permissoes} />} />
+                <Route path="dre" element={<Dre user={user} permissoes={permissoes} />} />
+
+                {/* Rotas Mapeadas - Cadastro e RH */}
+                <Route path="fornecedores" element={<Fornecedores user={user} permissoes={permissoes} />} />
+                <Route path="funcionarios" element={<GestaoFuncionarios user={user} permissoes={permissoes} />} />
+                <Route path="logistica" element={<GestaoDelivery user={user} permissoes={permissoes} />} />
+                <Route path="freelancer" element={<GestaoFreelancer user={user} permissoes={permissoes} />} />
+
+                {/* Rotas Mapeadas - Relatórios */}
+                <Route path="resultados" element={<Resultados user={user} permissoes={permissoes} />} />
+
+                {/* Rotas Mapeadas - E-commerce */}
                 <Route path="pedidos" element={<Kanban user={user} permissoes={permissoes} />} />
                 <Route path="produtos" element={<Produtos user={user} permissoes={permissoes} />} />
+                <Route path="historico" element={<HistoricoPedidos user={user} permissoes={permissoes} />} />
+                <Route path="clientes" element={<ClientesDelivery user={user} permissoes={permissoes} />} />
+                <Route path="fidelidade" element={<Fidelidade user={user} permissoes={permissoes} />} />
+                <Route path="ajustes" element={<AjustesImpressao user={user} permissoes={permissoes} />} />
                 
-                {/* Rota temporária para os módulos que ainda vamos migrar/construir */}
+                {/* Fallback Seguro para botões sem ficheiro ainda (ex: Marketing, Relatório Completo) */}
                 <Route path="*" element={
                     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-100">
                         <Icon name="tool" size={48} className="text-slate-300 mb-4" />
                         <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">Módulo em Construção</h2>
-                        <p className="text-sm font-bold text-slate-500 mt-2">Esta tela do ERP está sendo migrada para a nova versão.</p>
+                        <p className="text-sm font-bold text-slate-500 mt-2">Esta tela do ERP está a ser preparada ou aguarda o ficheiro correspondente.</p>
                     </div>
                 } />
               </Routes>
