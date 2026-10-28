@@ -54,7 +54,7 @@ function Login({ onLogin }) {
                 }
 
                 // ==========================================
-                // NOVA LÓGICA: LEITURA DO CRACHÁ (FUNCIONÁRIO)
+                // LÓGICA: LEITURA DO CRACHÁ (FUNCIONÁRIO)
                 // ==========================================
                 let permissoes = { 
                     isFuncionario: false, 
@@ -103,7 +103,7 @@ function Login({ onLogin }) {
             <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
                 <div className="text-center mb-8">
                     <h1 className="text-2xl font-black text-slate-800 uppercase tracking-widest">Tribo Sistemas</h1>
-                    <p className="text-sm text-slate-500 mt-2">Inteligência Financeira para Delivery</p>
+                    <p className="text-sm text-slate-500 mt-2">Gestão de E-commerce e Produção</p>
                 </div>
 
                 {error && <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-sm font-bold mb-4 text-center">{error}</div>}
@@ -114,7 +114,7 @@ function Login({ onLogin }) {
                     
                     {isRegistering && (
                         <div>
-                            <label className="text-xs font-bold text-slate-600 ml-1">Seu Nome / Hamburgueria</label>
+                            <label className="text-xs font-bold text-slate-600 ml-1">Seu Nome / Nome da Loja</label>
                             <input 
                                 type="text" 
                                 required={isRegistering} 
