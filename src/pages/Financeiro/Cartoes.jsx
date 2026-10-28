@@ -6,7 +6,7 @@ function Cartoes({ cardStats, filterMonth, setInvoiceModal, transactions = [] })
     return (
         <div className="space-y-4 fade-in">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {cardStats.map(card => {
+                {(cardStats || []).map(card => {
                     // 1. Pega todas as compras deste cartão no mês atual.
                     // ATUALIZAÇÃO: Forçamos a 'Fatura Rolada' a aparecer na lista de compras!
                     const cardTxs = transactions
