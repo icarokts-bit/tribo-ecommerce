@@ -1,12 +1,17 @@
 import React, { useMemo } from 'react';
-import Icon from '../components/Icon';
+import Icon from '../components/Icon'; // Se der erro de caminho, altere para '../../components/Icon'
 
-export default function RelatorioRH({ transactions = [], filterMonth }) {
+export default function RelatorioRH({ transactions = [], selectedMonth, selectedYear }) {
     
     // Função local para formatar moeda
     const formatarMoeda = (valor) => {
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
     };
+
+    // 1. Calcula o mês do filtro atual no formato YYYY-MM
+    const month = selectedMonth !== undefined ? selectedMonth : new Date().getMonth();
+    const year = selectedYear !== undefined ? selectedYear : new Date().getFullYear();
+    const filterMonth = `${year}-${String(month + 1).padStart(2, '0')}`;
 
     // Pega o mês da transação (YYYY-MM)
     const getTxMonth = (tx) => {
@@ -31,7 +36,7 @@ export default function RelatorioRH({ transactions = [], filterMonth }) {
         const porFuncionario = {};
 
         // Filtra apenas despesas do mês selecionado que sejam relacionadas a RH
-        const filtradas = transactions.filter(t => {
+        const filtradas = (transactions || []).filter(t => {
             if (getTxMonth(t) !== filterMonth) return false;
             if (t.type !== 'saida') return false;
             if (t.status !== 'pago' && t.status !== 'pendente') return false; // Ignora cancelados se houver
