@@ -35,6 +35,7 @@ import ExtratoDetalhado from './pages/ExtratoDetalhado';
 import GestaoFuncionarios from './pages/GestaoFuncionarios';
 import GestaoDelivery from './pages/GestaoDelivery';
 import GestaoFreelancer from './pages/GestaoFreelancer';
+import RelatorioRH from './pages/RelatorioRH'; // <--- CORREÇÃO AQUI
 
 // ==========================================
 // CONFIGURAÇÃO DOS MÓDULOS (MENU)
@@ -156,7 +157,7 @@ function App() {
   const [permissoes, setPermissoes] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Estados Globais do ERP Financeiro (Inicializados com arrays vazios para nunca dar erro de undefined)
+  // Estados Globais do ERP Financeiro
   const [transactions, setTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -192,7 +193,6 @@ function App() {
 
   const donoUid = permissoes?.donoUid || user?.uid;
 
-  // Escuta as coleções financeiras no Firebase
   useEffect(() => {
     if (!donoUid) return;
     const basePath = `artifacts/tribo-burger-financeiro/users/${donoUid}`;
@@ -220,7 +220,6 @@ function App() {
     return () => { unsubTx(); unsubAcc(); unsubCat(); unsubSup(); unsubSales(); };
   }, [donoUid]);
 
-  // Funções Utilitárias exigidas pelas páginas
   const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   
   const safeDateDisplay = (dateStr) => {
@@ -320,6 +319,7 @@ function App() {
                 <Route path="funcionarios" element={<GestaoFuncionarios {...erpProps} />} />
                 <Route path="logistica" element={<GestaoDelivery {...erpProps} />} />
                 <Route path="freelancer" element={<GestaoFreelancer {...erpProps} />} />
+                <Route path="custos-rh" element={<RelatorioRH {...erpProps} />} /> {/* <--- CORREÇÃO AQUI */}
 
                 {/* Rotas Mapeadas - Relatórios */}
                 <Route path="resultados" element={<Resultados {...erpProps} />} />
