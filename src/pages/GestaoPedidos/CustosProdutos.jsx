@@ -195,4 +195,101 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                             <div>
                                                 <label className="text-[9px] font-black uppercase text-orange-800 block mb-1">Peso (Kg)</label>
-                                                <input type
+                                                <input type="number" step="0.001" value={peso} onChange={e=>setPeso(e.target.value)} className="w-full p-2 bg-white border border-orange-200 rounded text-center font-black outline-none focus:border-orange-500 text-xs text-slate-700" placeholder="0.300" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-black uppercase text-orange-800 block mb-1">Comp. (cm)</label>
+                                                <input type="number" value={comprimento} onChange={e=>setComprimento(e.target.value)} className="w-full p-2 bg-white border border-orange-200 rounded text-center font-black outline-none focus:border-orange-500 text-xs text-slate-700" placeholder="20" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-black uppercase text-orange-800 block mb-1">Larg. (cm)</label>
+                                                <input type="number" value={largura} onChange={e=>setLargura(e.target.value)} className="w-full p-2 bg-white border border-orange-200 rounded text-center font-black outline-none focus:border-orange-500 text-xs text-slate-700" placeholder="15" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-black uppercase text-orange-800 block mb-1">Alt. (cm)</label>
+                                                <input type="number" value={altura} onChange={e=>setAltura(e.target.value)} className="w-full p-2 bg-white border border-orange-200 rounded text-center font-black outline-none focus:border-orange-500 text-xs text-slate-700" placeholder="10" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 flex flex-col h-full">
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col">
+                                        <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-3">
+                                            <h4 className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1.5"><Icon name="pie-chart" size={12}/> Ficha de Custos (Produção)</h4>
+                                            <button type="button" onClick={addComponente} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-2 py-1 rounded font-black text-[9px] uppercase border border-indigo-100 flex items-center gap-1 transition-colors">
+                                                <Icon name="plus" size={10}/> Add Componente
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+                                            {componentes.length === 0 ? (
+                                                <div className="text-center py-6 text-slate-400 font-bold text-[10px] border border-dashed rounded-lg">
+                                                    Nenhum custo adicionado. O lucro será de 100%.
+                                                </div>
+                                            ) : (
+                                                componentes.map((c, index) => (
+                                                    <div key={c.id} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-100 relative group">
+                                                        <div className="w-8 flex-shrink-0 text-center text-[10px] font-black text-slate-300">{index + 1}</div>
+                                                        <div className="flex-1">
+                                                            <input type="text" value={c.nome} onChange={e => updateComponente(c.id, 'nome', e.target.value)} className="w-full bg-transparent outline-none font-bold text-xs text-slate-700 placeholder-slate-300" placeholder="Item (Ex: Filamento PETG)" />
+                                                        </div>
+                                                        <div className="w-16">
+                                                            <label className="text-[7px] font-black text-slate-400 uppercase leading-none">Custo (R$)</label>
+                                                            <input type="number" step="0.01" value={c.custoUnitario} onChange={e => updateComponente(c.id, 'custoUnitario', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-1 text-center font-bold text-xs outline-none focus:border-indigo-400" placeholder="0.10" />
+                                                        </div>
+                                                        <div className="text-[10px] font-black text-slate-300">x</div>
+                                                        <div className="w-14">
+                                                            <label className="text-[7px] font-black text-slate-400 uppercase leading-none">Qtd</label>
+                                                            <input type="number" step="0.01" value={c.quantidade} onChange={e => updateComponente(c.id, 'quantidade', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-1 text-center font-bold text-xs outline-none focus:border-indigo-400" placeholder="100" />
+                                                        </div>
+                                                        <div className="w-16 text-right font-black text-red-500 text-xs flex-shrink-0 pt-3">
+                                                            {formatMoney(p(c.custoUnitario) * p(c.quantidade))}
+                                                        </div>
+                                                        <button type="button" onClick={() => removeComponente(c.id)} className="absolute -right-2 -top-2 bg-red-100 text-red-500 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border border-white shadow-sm">
+                                                            <Icon name="x" size={10} />
+                                                        </button>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+
+                                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 shadow-inner mt-auto">
+                                            <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase">Custo de Produção Base</span>
+                                                <span className="font-black text-red-400 text-sm">-{formatMoney(custoTotalProduto)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase">Venda Projetada</span>
+                                                <span className="font-black text-emerald-400 text-sm">{formatMoney(p(precoVenda))}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center pt-1">
+                                                <span className="text-[11px] font-black text-white uppercase">Margem de Lucro Bruto</span>
+                                                <div className="text-right flex flex-col items-end">
+                                                    <span className={`font-black text-xl leading-none ${margemLucro >= 40 ? 'text-indigo-400' : margemLucro > 0 ? 'text-amber-400' : 'text-red-500'}`}>
+                                                        {formatMoney(lucroReais)}
+                                                    </span>
+                                                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded mt-1 ${margemLucro >= 40 ? 'bg-indigo-500/20 text-indigo-300' : margemLucro > 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-400'}`}>
+                                                        {margemLucro.toFixed(1)}% LUCRO
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <div className="p-4 border-t bg-white flex justify-end gap-3 shrink-0">
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-xs font-black uppercase text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Cancelar</button>
+                            <button type="submit" form="costForm" className="px-6 py-2.5 bg-slate-900 hover:bg-black text-[#F8CC82] text-xs font-black uppercase rounded-xl shadow-md transition-all flex items-center gap-2">
+                                <Icon name="save" size={14} /> {editingId ? 'Atualizar' : 'Salvar'} Custos
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
