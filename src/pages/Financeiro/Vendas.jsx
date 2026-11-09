@@ -26,7 +26,8 @@ const DailyInput = React.memo(({ dateStr, field, initialValue, activeUid, classN
     );
 });
 
-function Vendas({ stats, newDayDate, setNewDayDate, user, salesDays, dailyRecords, columnTotals, openDailyLaunch, reopenDailyLaunch, paymentMethods, cmvSettings }) {
+// A propriedade 'stats' pode vir indefinida, logo fazemos um fallback para um objeto com zeros
+function Vendas({ stats = { rb: 0, autoCardFees: 0 }, newDayDate, setNewDayDate, user, salesDays = [], dailyRecords = {}, columnTotals = {}, openDailyLaunch, reopenDailyLaunch, paymentMethods = [], cmvSettings }) {
     
     const [filtroDiaSemana, setFiltroDiaSemana] = useState('todos');
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -261,15 +262,16 @@ function Vendas({ stats, newDayDate, setNewDayDate, user, salesDays, dailyRecord
             const wd = new Date(refYear, refMonth - 1, d).getDay();
             if (wDaysConfig.includes(wd)) totais++;
         }
-        const trabalhados = salesDays.length; 
+        const trabalhados = (salesDays || []).length; 
         const restantes = Math.max(0, totais - trabalhados);
         return { diasTrabalhados: trabalhados, diasRestantes: restantes, totalDiasOperacao: totais };
-    }, [refYear, refMonth, salesDays.length, wDaysConfig]);
+    }, [refYear, refMonth, salesDays, wDaysConfig]);
 
     const diasDaSemanaAbrev = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const diasLabel = wDaysConfig.length === 7 ? "(Todos os Dias)" : `(${[...wDaysConfig].sort().map(d => diasDaSemanaAbrev[d]).join(', ')})`;
 
     const diasFiltrados = useMemo(() => {
+        if (!salesDays) return [];
         if (filtroDiaSemana === 'todos') return salesDays;
         return salesDays.filter(d => {
             const [year, month, day] = d.split('-');
@@ -283,7 +285,7 @@ function Vendas({ stats, newDayDate, setNewDayDate, user, salesDays, dailyRecord
         (paymentMethods || []).forEach(m => totais[m.id] = 0);
 
         diasFiltrados.forEach(d => {
-            const r = dailyRecords[d] || {};
+            const r = (dailyRecords && dailyRecords[d]) ? dailyRecords[d] : {};
             let totalDia = 0;
             (paymentMethods || []).forEach(m => {
                 const val = p(r[m.id]);
@@ -368,7 +370,10 @@ function Vendas({ stats, newDayDate, setNewDayDate, user, salesDays, dailyRecord
 
                     <div className="flex w-full md:w-auto items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                         <input type="date" className="font-bold bg-transparent outline-none border-0 text-[10px] md:text-sm flex-1 md:flex-none text-slate-700" value={newDayDate} onChange={e=>setNewDayDate(e.target.value)} />
-                        <button type="button" onClick={()=>db.collection(`artifacts/tribo-burger-financeiro/users/${user.uid}/dailyRecords`).doc(newDayDate).set({initialized:true},{merge:true})} className="bg-slate-900 text-emerald-400 px-3 py-1.5 rounded-lg font-black uppercase text-[10px] md:text-sm whitespace-nowrap hover:bg-black transition-colors shadow-sm">Abrir Dia</button>
+                        <button type="button" onClick={()=>{
+                            if (!user) return alert("Usuário não autenticado.");
+                            db.collection(`artifacts/tribo-burger-financeiro/users/${user.uid}/dailyRecords`).doc(newDayDate).set({initialized:true},{merge:true})
+                        }} className="bg-slate-900 text-emerald-400 px-3 py-1.5 rounded-lg font-black uppercase text-[10px] md:text-sm whitespace-nowrap hover:bg-black transition-colors shadow-sm">Abrir Dia</button>
                     </div>
                 </div>
             </div>
@@ -390,7 +395,7 @@ function Vendas({ stats, newDayDate, setNewDayDate, user, salesDays, dailyRecord
                                     <div className="flex items-center justify-between">
                                         <button type="button" onClick={() => moveColumn(index, -1)} className={`p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-slate-800 rounded transition-all cursor-pointer ${index === 0 ? 'invisible' : 'opacity-30 group-hover:opacity-100'}`}><Icon name="chevron-left" size={14} /></button>
                                         <span className="truncate flex-1">{m.name}</span>
-                                        <button type="button" onClick={() => moveColumn(index, 1)} className={`p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-slate-800 rounded transition-all cursor-pointer ${index === paymentMethods.length - 1 ? 'invisible' : 'opacity-30 group-hover:opacity-100'}`}><Icon name="chevron-right" size={14} /></button>
+                                        <button type="button" onClick={() => moveColumn(index, 1)} className={`p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-slate-800 rounded transition-all cursor-pointer ${index === (paymentMethods || []).length - 1 ? 'invisible' : 'opacity-30 group-hover:opacity-100'}`}><Icon name="chevron-right" size={14} /></button>
                                     </div>
                                 </th>
                             ))}
@@ -404,7 +409,7 @@ function Vendas({ stats, newDayDate, setNewDayDate, user, salesDays, dailyRecord
                             </tr>
                         ) : (
                             diasFiltrados.map(d => {
-                                const r = dailyRecords[d] || {}; 
+                                const r = (dailyRecords && dailyRecords[d]) ? dailyRecords[d] : {}; 
                                 
                                 let totalDia = 0;
                                 let hasValuesToLaunch = false;
@@ -419,7 +424,7 @@ function Vendas({ stats, newDayDate, setNewDayDate, user, salesDays, dailyRecord
                                 const dataObj = new Date(year, month - 1, day);
                                 const diasDaSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
                                 const nomeDia = diasDaSemana[dataObj.getDay()];
-                                const dataFormatada = `${nomeDia} - ${day}/${month}/${year}`;
+                                const dataFormatada = `${nomeDia} ${day}/${month}/${year}`;
 
                                 return (
                                     <tr key={d} className="hover:bg-slate-50 md:table-row block mb-4 md:mb-0 border md:border-0 rounded-xl md:rounded-none overflow-hidden">
@@ -431,19 +436,19 @@ function Vendas({ stats, newDayDate, setNewDayDate, user, salesDays, dailyRecord
                                         </td>
                                         
                                         <td data-label="Total do Dia" className="p-2 md:bg-amber-50 font-black text-slate-900 text-right md:text-center border-b md:border-b-0 border-slate-100">{formatMoney(totalDia)}</td>
-                                        <td data-label="Total de Pedidos" className="p-0 border-b md:border-b-0 md:border-r border-slate-100 md:bg-blue-50/30"><DailyInput dateStr={d} field="qtdPedidos" initialValue={r.qtdPedidos} activeUid={user.uid} className="!text-blue-700" placeholder="0" /></td>
-                                        <td data-label="Clientes Novos" className="p-0 border-b md:border-b-0 md:border-r border-slate-100 md:bg-fuchsia-50/30"><DailyInput dateStr={d} field="clientesNovos" initialValue={r.clientesNovos} activeUid={user.uid} className="!text-fuchsia-700" placeholder="0" /></td>
+                                        <td data-label="Total de Pedidos" className="p-0 border-b md:border-b-0 md:border-r border-slate-100 md:bg-blue-50/30"><DailyInput dateStr={d} field="qtdPedidos" initialValue={r.qtdPedidos} activeUid={user?.uid} className="!text-blue-700" placeholder="0" /></td>
+                                        <td data-label="Clientes Novos" className="p-0 border-b md:border-b-0 md:border-r border-slate-100 md:bg-fuchsia-50/30"><DailyInput dateStr={d} field="clientesNovos" initialValue={r.clientesNovos} activeUid={user?.uid} className="!text-fuchsia-700" placeholder="0" /></td>
                                         <td data-label="Ticket Médio" className="p-2 border-b md:border-b-0 md:border-r border-slate-100 md:bg-blue-50/50 font-black text-blue-900 text-right md:text-center">{formatMoney(p(r.qtdPedidos) > 0 ? totalDia / p(r.qtdPedidos) : 0)}</td>
                                         
                                         {/* COLUNA DE AÇÕES COM BOTÃO DE ACERTO AUTOMÁTICO */}
                                         <td data-label="Status / Ação" className="p-2 md:p-1 border-b md:border-b-0 md:border-r border-slate-100 bg-white">
                                             <div className="flex flex-col gap-1">
                                                 {r.isLaunched ? (
-                                                    <button type="button" onClick={() => reopenDailyLaunch(d)} className="w-full py-1.5 bg-slate-100 text-slate-600 hover:bg-amber-100 hover:text-amber-700 font-black uppercase text-[8px] rounded border border-slate-200 cursor-pointer transition-colors" title="Clique para reabrir o caixa">
+                                                    <button type="button" onClick={() => reopenDailyLaunch && reopenDailyLaunch(d)} className="w-full py-1.5 bg-slate-100 text-slate-600 hover:bg-amber-100 hover:text-amber-700 font-black uppercase text-[8px] rounded border border-slate-200 cursor-pointer transition-colors" title="Clique para reabrir o caixa">
                                                         Fechado (Reabrir)
                                                     </button>
                                                 ) : hasValuesToLaunch ? (
-                                                    <button type="button" onClick={() => openDailyLaunch(d, r)} className="w-full py-1.5 px-2 bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase text-[8px] rounded shadow-sm transition-colors cursor-pointer">Lançar Caixa</button>
+                                                    <button type="button" onClick={() => openDailyLaunch && openDailyLaunch(d, r)} className="w-full py-1.5 px-2 bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase text-[8px] rounded shadow-sm transition-colors cursor-pointer">Lançar Caixa</button>
                                                 ) : (
                                                     <button disabled className="w-full py-1.5 bg-slate-50 text-slate-300 font-black uppercase text-[8px] rounded cursor-not-allowed border border-slate-100">Sem Valor</button>
                                                 )}
@@ -456,7 +461,7 @@ function Vendas({ stats, newDayDate, setNewDayDate, user, salesDays, dailyRecord
 
                                         {(paymentMethods || []).map(m => (
                                             <td key={m.id} data-label={m.name} className="p-0 border-b md:border-b-0 md:border-r border-slate-100 hover:bg-slate-50">
-                                                <DailyInput dateStr={d} field={m.id} initialValue={r[m.id]} activeUid={user.uid} placeholder="0,00" />
+                                                <DailyInput dateStr={d} field={m.id} initialValue={r[m.id]} activeUid={user?.uid} placeholder="0,00" />
                                             </td>
                                         ))}
                                     </tr>
