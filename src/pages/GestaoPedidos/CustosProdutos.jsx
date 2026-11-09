@@ -7,6 +7,7 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
     const p = (val) => Number(val || 0);
 
     const [produtos, setProdutos] = useState([]);
+    const [estoque, setEstoque] = useState([]); // NOVO: Guarda as matérias-primas
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -21,15 +22,28 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
 
     const [componentes, setComponentes] = useState([]);
 
+    // Busca Produtos e Estoque ao mesmo tempo
     useEffect(() => {
         if (!donoUid) return;
-        const unsub = db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`)
+        
+        const unsubProd = db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`)
             .onSnapshot(snap => {
                 setProdutos(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                 setLoading(false);
             });
-        return () => unsub();
+
+        const unsubEst = db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/estoque`)
+            .onSnapshot(snap => {
+                setEstoque(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            });
+
+        return () => { unsubProd(); unsubEst(); };
     }, [donoUid]);
+
+    // Separa apenas o que é matéria-prima para usar nas fichas
+    const materiasPrimas = useMemo(() => {
+        return estoque.filter(item => item.tipo === 'materia_prima').sort((a,b) => a.nome.localeCompare(b.nome));
+    }, [estoque]);
 
     const custoTotalProduto = useMemo(() => {
         return componentes.reduce((acc, comp) => acc + (p(comp.custoUnitario) * p(comp.quantidade)), 0);
@@ -38,12 +52,37 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
     const margemLucro = p(precoVenda) > 0 ? ((p(precoVenda) - custoTotalProduto) / p(precoVenda)) * 100 : 0;
     const lucroReais = p(precoVenda) - custoTotalProduto;
 
+    // ADICIONA NOVO COMPONENTE (AGORA COM ESTOQUE ID)
     const addComponente = () => {
-        setComponentes([...componentes, { id: Date.now(), nome: '', custoUnitario: '', quantidade: 1 }]);
+        setComponentes([...componentes, { id: Date.now(), estoqueId: '', nome: '', custoUnitario: '', quantidade: 1, unidade: 'un' }]);
     };
 
+    // ATUALIZA COMPONENTE COM INTELIGÊNCIA DO ESTOQUE
     const updateComponente = (id, field, value) => {
-        setComponentes(componentes.map(c => c.id === id ? { ...c, [field]: value } : c));
+        setComponentes(componentes.map(c => {
+            if (c.id === id) {
+                let updated = { ...c, [field]: value };
+                
+                // Se o usuário selecionou uma matéria-prima do estoque, puxa o preço e nome automaticamente
+                if (field === 'estoqueId') {
+                    if (value !== 'custom' && value !== '') {
+                        const selectedItem = estoque.find(i => i.id === value);
+                        if (selectedItem) {
+                            updated.nome = selectedItem.nome;
+                            updated.custoUnitario = selectedItem.custoUnitario;
+                            updated.unidade = selectedItem.unidade;
+                        }
+                    } else {
+                        // Se escolheu 'Item Manual', limpa os dados
+                        updated.nome = '';
+                        updated.custoUnitario = '';
+                        updated.unidade = 'un';
+                    }
+                }
+                return updated;
+            }
+            return c;
+        }));
     };
 
     const removeComponente = (id) => {
@@ -76,7 +115,7 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
             nome, 
             precoVenda: p(precoVenda),
             peso: p(peso), largura: p(largura), altura: p(altura), comprimento: p(comprimento),
-            componentes,
+            componentes, // Salva a lista de estoqueId para a baixa automática no futuro
             custoTotal: custoTotalProduto,
             updatedAt: new Date().toISOString()
         };
@@ -216,9 +255,9 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
                                 <div className="space-y-4 flex flex-col h-full">
                                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col">
                                         <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-3">
-                                            <h4 className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1.5"><Icon name="pie-chart" size={12}/> Ficha de Custos (Produção)</h4>
+                                            <h4 className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1.5"><Icon name="pie-chart" size={12}/> Ficha de Custos Integrada</h4>
                                             <button type="button" onClick={addComponente} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-2 py-1 rounded font-black text-[9px] uppercase border border-indigo-100 flex items-center gap-1 transition-colors">
-                                                <Icon name="plus" size={10}/> Add Componente
+                                                <Icon name="plus" size={10}/> Add Ingrediente
                                             </button>
                                         </div>
                                         
@@ -231,21 +270,49 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
                                                 componentes.map((c, index) => (
                                                     <div key={c.id} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-100 relative group">
                                                         <div className="w-8 flex-shrink-0 text-center text-[10px] font-black text-slate-300">{index + 1}</div>
-                                                        <div className="flex-1">
-                                                            <input type="text" value={c.nome} onChange={e => updateComponente(c.id, 'nome', e.target.value)} className="w-full bg-transparent outline-none font-bold text-xs text-slate-700 placeholder-slate-300" placeholder="Item (Ex: Filamento PETG)" />
+                                                        
+                                                        {/* SELETOR INTEGRADO COM ESTOQUE */}
+                                                        <div className="flex-1 flex flex-col gap-1">
+                                                            <select 
+                                                                value={c.estoqueId || ''} 
+                                                                onChange={e => updateComponente(c.id, 'estoqueId', e.target.value)}
+                                                                className="w-full bg-white border border-slate-200 rounded p-1 font-bold text-[11px] text-slate-700 outline-none focus:border-indigo-400"
+                                                            >
+                                                                <option value="">-- Vincular ao Estoque --</option>
+                                                                {materiasPrimas.map(mp => (
+                                                                    <option key={mp.id} value={mp.id}>{mp.nome} ({formatMoney(mp.custoUnitario)}/{mp.unidade})</option>
+                                                                ))}
+                                                                <option value="custom">✍️ Digitar Manual (Sem Baixa)</option>
+                                                            </select>
+                                                            
+                                                            {c.estoqueId === 'custom' && (
+                                                                <input type="text" value={c.nome} onChange={e => updateComponente(c.id, 'nome', e.target.value)} className="w-full bg-white border border-amber-200 rounded p-1 font-bold text-[11px] outline-none focus:border-amber-400" placeholder="Nome do item..." />
+                                                            )}
                                                         </div>
+                                                        
                                                         <div className="w-16">
-                                                            <label className="text-[7px] font-black text-slate-400 uppercase leading-none">Custo (R$)</label>
-                                                            <input type="number" step="0.01" value={c.custoUnitario} onChange={e => updateComponente(c.id, 'custoUnitario', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-1 text-center font-bold text-xs outline-none focus:border-indigo-400" placeholder="0.10" />
+                                                            <label className="text-[7px] font-black text-slate-400 uppercase leading-none">Custo {c.unidade ? `(p/ ${c.unidade})` : ''}</label>
+                                                            <input 
+                                                                type="number" step="0.0001" 
+                                                                value={c.custoUnitario} 
+                                                                onChange={e => updateComponente(c.id, 'custoUnitario', e.target.value)} 
+                                                                disabled={c.estoqueId !== 'custom' && c.estoqueId !== ''}
+                                                                className={`w-full border rounded p-1 text-center font-bold text-xs outline-none ${c.estoqueId !== 'custom' && c.estoqueId !== '' ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-300 focus:border-indigo-400'}`} 
+                                                                placeholder="0.00" 
+                                                            />
                                                         </div>
-                                                        <div className="text-[10px] font-black text-slate-300">x</div>
+                                                        
+                                                        <div className="text-[10px] font-black text-slate-300 mt-3">x</div>
+                                                        
                                                         <div className="w-14">
-                                                            <label className="text-[7px] font-black text-slate-400 uppercase leading-none">Qtd</label>
-                                                            <input type="number" step="0.01" value={c.quantidade} onChange={e => updateComponente(c.id, 'quantidade', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-1 text-center font-bold text-xs outline-none focus:border-indigo-400" placeholder="100" />
+                                                            <label className="text-[7px] font-black text-slate-400 uppercase leading-none">Qtd {c.unidade ? `(${c.unidade})` : ''}</label>
+                                                            <input type="number" step="0.01" value={c.quantidade} onChange={e => updateComponente(c.id, 'quantidade', e.target.value)} className="w-full bg-white border border-slate-300 rounded p-1 text-center font-bold text-xs outline-none focus:border-indigo-400" placeholder="1" />
                                                         </div>
+                                                        
                                                         <div className="w-16 text-right font-black text-red-500 text-xs flex-shrink-0 pt-3">
                                                             {formatMoney(p(c.custoUnitario) * p(c.quantidade))}
                                                         </div>
+                                                        
                                                         <button type="button" onClick={() => removeComponente(c.id)} className="absolute -right-2 -top-2 bg-red-100 text-red-500 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border border-white shadow-sm">
                                                             <Icon name="x" size={10} />
                                                         </button>
