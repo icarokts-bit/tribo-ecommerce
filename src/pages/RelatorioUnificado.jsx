@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Icon from '../components/Icon';
-import { getTxMonth, isInvoicePayment } from '../utils/finance';
+import { getTxMonth, isInvoicePayment, formatMoney as utilFormatMoney } from '../utils/finance'; // <-- CORREÇÃO: import do formatMoney
 
 // Função para limpar os IDs do banco de dados caso o nome original não seja passado
 const formatMethodName = (id, name) => {
@@ -13,7 +13,24 @@ const formatMethodName = (id, name) => {
         .replace('CREDITO', 'CRÉDITO');
 };
 
-function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, combos, dailyRecords, salesDays, stats, cmvSettings, formatMoney, p, calcItemCost, calcComboCost, transactions = [], filterMonth = '', paymentMethods = [] }) {
+function RelatorioUnificado({ 
+    metaVendas = 0, 
+    fixedCosts = [], 
+    recipes = [], 
+    complements = [], 
+    combos = [], 
+    dailyRecords = {}, 
+    salesDays = [], 
+    stats = {}, 
+    cmvSettings = {}, 
+    formatMoney = utilFormatMoney, 
+    p = (val) => Number(val || 0), 
+    calcItemCost = () => 0, 
+    calcComboCost = () => 0, 
+    transactions = [], 
+    filterMonth = '', 
+    paymentMethods = [] 
+}) {
     const [apenasLiquidados, setApenasLiquidados] = useState(false);
     
     // DETETA AUTOMATICAMENTE SE É CELULAR PARA ATIVAR O MODO APP
@@ -41,20 +58,20 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
     useEffect(() => { localStorage.setItem('tribo_selectedTaxMethods', JSON.stringify(selectedTaxMethods)); }, [selectedTaxMethods]);
     useEffect(() => { localStorage.setItem('tribo_manualTaxBaseValue', manualTaxBaseValue); }, [manualTaxBaseValue]);
 
-    // LIMITES DE GASTOS (%) DEFINIDOS
+    // LIMITES DE GASTOS (%) DEFINIDOS (COM FALLBACK SEGURO)
     const LIMITES = {
-        cmv: cmvSettings.targetCMV || 35,
+        cmv: cmvSettings?.targetCMV || 35,
         taxas: 3,
         motoboy: 12,
         embalagem: 5,
         gas: 2.5
     };
 
-    const totalFixedCosts = fixedCosts.reduce((s, c) => s + p(c.value), 0);
+    const totalFixedCosts = (fixedCosts || []).reduce((s, c) => s + p(c.value), 0);
     
     const cmvGeral = (() => { 
         let sumCmv = 0, count = 0; 
-        [...recipes, ...complements, ...combos].forEach(item => { 
+        [...(recipes || []), ...(complements || []), ...(combos || [])].forEach(item => { 
             if (!item.ignoreCMV) { 
                 const cost = item.ingredients ? calcItemCost(item.ingredients) : calcComboCost(item.items);
                 const sp = p(item.sellingPrice); 
@@ -72,8 +89,8 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
     const extractedMethods = useMemo(() => {
         if (paymentMethods && paymentMethods.length > 0) return paymentMethods;
         const uniqueKeys = new Set();
-        Object.values(dailyRecords).forEach(r => {
-            Object.keys(r).forEach(k => {
+        Object.values(dailyRecords || {}).forEach(r => {
+            Object.keys(r || {}).forEach(k => {
                 if (!ignoredKeys.includes(k) && !k.startsWith('_')) uniqueKeys.add(k);
             });
         });
@@ -86,14 +103,14 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
         if (!saved && selectedTaxMethods.length === 0 && extractedMethods.length > 0) {
             setSelectedTaxMethods(extractedMethods.map(m => m.id));
         }
-    }, [extractedMethods]);
+    }, [extractedMethods, selectedTaxMethods.length]);
 
     let mMotoboy = 0, mTaxaEntrega = 0, mClientesNovos = 0, mPedidos = 0, mFiado = 0;
     const methodTotals = {};
     extractedMethods.forEach(m => methodTotals[m.id] = 0);
     
-    salesDays.forEach(d => {
-        const r = dailyRecords[d] || {};
+    (salesDays || []).forEach(d => {
+        const r = (dailyRecords && dailyRecords[d]) ? dailyRecords[d] : {};
         extractedMethods.forEach(m => {
             const val = p(r[m.id]);
             methodTotals[m.id] += val;
@@ -109,23 +126,27 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
         mPedidos += p(r.qtdPedidos); 
     });
 
-    const [year, month] = filterMonth.split('-').map(Number);
+    // Proteção contra string de data malformada ou vazia
+    const validFilterMonth = filterMonth || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const [year, month] = validFilterMonth.split('-').map(Number);
     const today = new Date();
     let diasUteisRestantes = 0;
 
-    const wDays = cmvSettings.workingDays || [0, 3, 4, 5, 6]; 
+    const wDays = cmvSettings?.workingDays || [0, 1, 2, 3, 4, 5, 6]; 
 
-    if (today.getFullYear() < year || (today.getFullYear() === year && today.getMonth() + 1 < month)) {
-        const lastDay = new Date(year, month, 0).getDate();
-        for (let d = 1; d <= lastDay; d++) {
-            const wd = new Date(year, month - 1, d).getDay();
-            if (wDays.includes(wd)) diasUteisRestantes++;
-        }
-    } else if (today.getFullYear() === year && today.getMonth() + 1 === month) {
-        const lastDay = new Date(year, month, 0).getDate();
-        for (let d = today.getDate(); d <= lastDay; d++) {
-            const wd = new Date(year, month - 1, d).getDay();
-            if (wDays.includes(wd)) diasUteisRestantes++;
+    if (year && month) {
+        if (today.getFullYear() < year || (today.getFullYear() === year && today.getMonth() + 1 < month)) {
+            const lastDay = new Date(year, month, 0).getDate();
+            for (let d = 1; d <= lastDay; d++) {
+                const wd = new Date(year, month - 1, d).getDay();
+                if (wDays.includes(wd)) diasUteisRestantes++;
+            }
+        } else if (today.getFullYear() === year && today.getMonth() + 1 === month) {
+            const lastDay = new Date(year, month, 0).getDate();
+            for (let d = today.getDate(); d <= lastDay; d++) {
+                const wd = new Date(year, month - 1, d).getDay();
+                if (wDays.includes(wd)) diasUteisRestantes++;
+            }
         }
     }
 
@@ -134,7 +155,7 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
 
     if (transactions && transactions.length > 0) {
         transactions.forEach(t => {
-            if (getTxMonth(t) === filterMonth) {
+            if (getTxMonth(t) === validFilterMonth) {
                 if (t.category === 'Baixa Fatura' || t.category === 'Transferência') return;
 
                 const statusRaw = (t.status || 'pendente').toLowerCase().trim();
@@ -155,19 +176,20 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
                         activeCatCosts[t.category] = (activeCatCosts[t.category] || 0) + p(t.amount);
                     }
                 } else {
-                    activeCatCosts = stats.catCosts || {};
+                    activeCatCosts = stats?.catCosts || {};
                 }
             }
         });
     }
 
     if (apenasLiquidados) {
-        if (stats.autoCardFees > 0) activeCatCosts['Taxas de Cartão (Auto Vendas)'] = stats.autoCardFees;
+        if (stats?.autoCardFees > 0) activeCatCosts['Taxas de Cartão (Auto Vendas)'] = stats.autoCardFees;
     } else {
-        activeCatCosts = stats.catCosts || {};
+        activeCatCosts = stats?.catCosts || {};
     }
 
-    const dataPrev = new Date(year, month - 2, 1);
+    // Calcula as datas com segurança
+    const dataPrev = (year && month) ? new Date(year, month - 2, 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const prevMonthStr = `${dataPrev.getFullYear()}-${String(dataPrev.getMonth() + 1).padStart(2, '0')}`;
     
     let prevCatCosts = {};
@@ -197,11 +219,11 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
         });
     }
 
-    Object.keys(dailyRecords).forEach(d => {
+    Object.keys(dailyRecords || {}).forEach(d => {
         if (d.startsWith(prevMonthStr)) {
             const r = dailyRecords[d];
-            if (cmvSettings.autoFeeVendas !== false) {
-                prevAutoCardFees += (p(r.debito) * (p(cmvSettings.taxaDebito)/100)) + (p(r.credito) * (p(cmvSettings.taxaCredito)/100));
+            if (cmvSettings?.autoFeeVendas !== false) {
+                prevAutoCardFees += (p(r.debito) * (p(cmvSettings?.taxaDebito)/100)) + (p(r.credito) * (p(cmvSettings?.taxaCredito)/100));
             }
         }
     });
@@ -233,8 +255,8 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
         }
     });
 
-    const faturamentoTotal = apenasLiquidados ? (faturamentoManual + mFiadoPago) : p(stats.rb);
-    const diferencaCaixa = p(stats.rb) - faturamentoManual;
+    const faturamentoTotal = apenasLiquidados ? (faturamentoManual + mFiadoPago) : (stats?.rb ? p(stats.rb) : 0);
+    const diferencaCaixa = (stats?.rb ? p(stats.rb) : 0) - faturamentoManual;
 
     // LÓGICA DO IMPOSTO SIMPLES CUSTOMIZADO/MANUAL
     let baseApuradaImposto = 0;
@@ -250,7 +272,7 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
         });
     }
     const isCustomBase = taxBaseMode !== 'total';
-    const impostosEstimados = baseApuradaImposto * (p(cmvSettings.tax) / 100);
+    const impostosEstimados = baseApuradaImposto * (p(cmvSettings?.tax) / 100);
 
     const faltaParaMeta = Math.max(0, p(metaVendas) - faturamentoTotal);
     const metaDiariaRestante = diasUteisRestantes > 0 ? (faltaParaMeta / diasUteisRestantes) : 0;
@@ -304,8 +326,8 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
     
     let autoCartaoDin = 0;
     extractedMethods.forEach(m => {
-        if (m.name.toLowerCase().includes('débito') || m.name.toLowerCase().includes('debito')) autoCartaoDin += (methodTotals[m.id] * (p(cmvSettings.taxaDebito) / 100));
-        if (m.name.toLowerCase().includes('crédito') || m.name.toLowerCase().includes('credito')) autoCartaoDin += (methodTotals[m.id] * (p(cmvSettings.taxaCredito) / 100));
+        if (m.name.toLowerCase().includes('débito') || m.name.toLowerCase().includes('debito')) autoCartaoDin += (methodTotals[m.id] * (p(cmvSettings?.taxaDebito) / 100));
+        if (m.name.toLowerCase().includes('crédito') || m.name.toLowerCase().includes('credito')) autoCartaoDin += (methodTotals[m.id] * (p(cmvSettings?.taxaCredito) / 100));
     });
 
     const taxasCartaoAutomaticas = autoCartaoDin;
@@ -319,8 +341,11 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
     const margemContribuicaoPercentual = faturamentoTotal > 0 ? margemContribuicaoVal / faturamentoTotal : 0;
     const pontoEquilibrio = margemContribuicaoPercentual > 0 ? totalCustosFixosDRE / margemContribuicaoPercentual : 0;
     const margemSeguranca = faturamentoTotal - pontoEquilibrio;
-    const projecaoAtual = stats.ticketDiario > 0 ? stats.ticketDiario * (stats.diasAtivos + diasUteisRestantes) : 0;
-    const diasParaEmpatar = stats.ticketDiario > 0 ? Math.ceil(pontoEquilibrio / stats.ticketDiario) : 0;
+    
+    const ticketDiarioSafe = stats?.ticketDiario || 0;
+    const diasAtivosSafe = stats?.diasAtivos || 0;
+    const projecaoAtual = ticketDiarioSafe > 0 ? ticketDiarioSafe * (diasAtivosSafe + diasUteisRestantes) : 0;
+    const diasParaEmpatar = ticketDiarioSafe > 0 ? Math.ceil(pontoEquilibrio / ticketDiarioSafe) : 0;
     const lucratividade = faturamentoTotal > 0 ? (lucroLiquidoFinal / faturamentoTotal) * 100 : 0;
 
     const scoreFinanceiro = lucratividade >= 15 ? 100 : (lucratividade >= 5 ? 80 : (lucratividade > 0 ? 60 : 30));
@@ -373,12 +398,12 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
         return '⭐';
     };
 
-    const valMediaDiariaSimulada = simMediaDiaria !== '' ? p(simMediaDiaria) : stats.ticketDiario;
+    const valMediaDiariaSimulada = simMediaDiaria !== '' ? p(simMediaDiaria) : ticketDiarioSafe;
     const valCmvSimulado = simCmv !== '' ? p(simCmv) : LIMITES.cmv;
     
     const percCartoesSimulador = faturamentoTotal > 0 ? (taxasCartaoTotais / faturamentoTotal) * 100 : 2.9;
     const percEntregaSimulador = faturamentoTotal > 0 ? (totalMotoboy / faturamentoTotal) * 100 : 9;
-    const percImpostosSimulador = p(cmvSettings.tax);
+    const percImpostosSimulador = p(cmvSettings?.tax || 0);
     const percEmbalagemSimulador = faturamentoTotal > 0 ? (custoEmbalagem / faturamentoTotal) * 100 : 0;
     const percGasSimulador = faturamentoTotal > 0 ? (custoGas / faturamentoTotal) * 100 : 0;
     
@@ -387,7 +412,7 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
     
     const peSimulado = margemSimuladaDecimal > 0 ? totalCustosFixosDRE / margemSimuladaDecimal : 0;
     const diasEmpateSimulado = valMediaDiariaSimulada > 0 ? (peSimulado / valMediaDiariaSimulada).toFixed(1) : 0;
-    const projFinalSimulada = valMediaDiariaSimulada * (stats.diasAtivos + diasUteisRestantes);
+    const projFinalSimulada = valMediaDiariaSimulada * (diasAtivosSafe + diasUteisRestantes);
     const lucroFinalSimulado = (projFinalSimulada * margemSimuladaDecimal) - totalCustosFixosDRE;
 
     const AppCard = ({ label, value, perc, max, color = "text-slate-800", isAlert = false, subtext = "" }) => (
@@ -1013,7 +1038,7 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y text-[9px] font-bold text-slate-700 print:text-black">
-                                    {[...recipes.map(r=>({...r, _t:'Ficha'})), ...complements.map(c=>({...c, _t:'Extra'})), ...combos.map(c=>({...c, _t:'Combo'}))]
+                                    {[...(recipes || []).map(r=>({...r, _t:'Ficha'})), ...(complements || []).map(c=>({...c, _t:'Extra'})), ...(combos || []).map(c=>({...c, _t:'Combo'}))]
                                         .map(item => {
                                             const cost = item.ingredients ? calcItemCost(item.ingredients) : calcComboCost(item.items); 
                                             const sp = p(item.sellingPrice);
@@ -1033,7 +1058,7 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
                         </div>
                     ) : (
                         <div className="space-y-2 mt-2">
-                            {[...recipes.map(r=>({...r, _t:'Ficha'})), ...complements.map(c=>({...c, _t:'Extra'})), ...combos.map(c=>({...c, _t:'Combo'}))]
+                            {[...(recipes || []).map(r=>({...r, _t:'Ficha'})), ...(complements || []).map(c=>({...c, _t:'Extra'})), ...(combos || []).map(c=>({...c, _t:'Combo'}))]
                                 .map(item => {
                                     const cost = item.ingredients ? calcItemCost(item.ingredients) : calcComboCost(item.items); 
                                     const sp = p(item.sellingPrice);
@@ -1070,7 +1095,7 @@ function RelatorioUnificado({ metaVendas = 0, fixedCosts, recipes, complements, 
                 <div className={`flex ${viewMode === 'app' ? 'flex-col' : 'flex-row'} gap-4 items-start bg-white p-4 rounded-lg border border-emerald-100`}>
                     <div className="w-full md:w-1/2">
                         <label className="text-[9px] font-black uppercase text-slate-500 block mb-1">Média Diária Projetada (R$)</label>
-                        <input type="number" className="w-full p-2 border border-slate-300 rounded font-bold text-slate-700 outline-none" placeholder={stats.ticketDiario.toFixed(2)} value={simMediaDiaria} onChange={(e) => setSimMediaDiaria(e.target.value)} />
+                        <input type="number" className="w-full p-2 border border-slate-300 rounded font-bold text-slate-700 outline-none" placeholder={ticketDiarioSafe.toFixed(2)} value={simMediaDiaria} onChange={(e) => setSimMediaDiaria(e.target.value)} />
                     </div>
                     <div className="w-full md:w-1/2 relative">
                         <label className="text-[9px] font-black uppercase text-slate-500 block mb-1">CMV Operacional Estimado (%)</label>
