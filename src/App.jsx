@@ -21,6 +21,7 @@ import Cartoes from './pages/Financeiro/Cartoes';
 import Dre from './pages/Financeiro/Dre';
 import Fornecedores from './pages/Financeiro/Fornecedores';
 import Resultados from './pages/Financeiro/Resultados';
+import RelatorioUnificado from './pages/Financeiro/RelatorioUnificado';
 
 // Módulos E-commerce (Pasta GestaoPedidos)
 import Kanban from './pages/GestaoPedidos/Kanban'; 
@@ -35,7 +36,7 @@ import ExtratoDetalhado from './pages/ExtratoDetalhado';
 import GestaoFuncionarios from './pages/GestaoFuncionarios';
 import GestaoDelivery from './pages/GestaoDelivery';
 import GestaoFreelancer from './pages/GestaoFreelancer';
-import RelatorioRH from './pages/RelatorioRH'; // <--- CORREÇÃO AQUI
+import RelatorioRH from './pages/RelatorioRH';
 
 // ==========================================
 // CONFIGURAÇÃO DOS MÓDULOS (MENU)
@@ -319,10 +320,11 @@ function App() {
                 <Route path="funcionarios" element={<GestaoFuncionarios {...erpProps} />} />
                 <Route path="logistica" element={<GestaoDelivery {...erpProps} />} />
                 <Route path="freelancer" element={<GestaoFreelancer {...erpProps} />} />
-                <Route path="custos-rh" element={<RelatorioRH {...erpProps} />} /> {/* <--- CORREÇÃO AQUI */}
+                <Route path="custos-rh" element={<RelatorioRH {...erpProps} />} />
 
                 {/* Rotas Mapeadas - Relatórios */}
                 <Route path="resultados" element={<Resultados {...erpProps} />} />
+                <Route path="relatorios" element={<RelatorioUnificado {...erpProps} />} />
 
                 {/* Rotas Mapeadas - E-commerce */}
                 <Route path="pedidos" element={<Kanban {...erpProps} />} />
@@ -332,6 +334,7 @@ function App() {
                 <Route path="fidelidade" element={<Fidelidade {...erpProps} />} />
                 <Route path="ajustes" element={<AjustesImpressao {...erpProps} />} />
                 
+                {/* Rota de Fallback para módulos ausentes */}
                 <Route path="*" element={
                     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-100">
                         <Icon name="tool" size={48} className="text-slate-300 mb-4" />
