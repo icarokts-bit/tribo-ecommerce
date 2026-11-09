@@ -33,6 +33,7 @@ export const modulosSaaS = [
     { id: 'gestao_pedidos', label: 'Gestão de Pedidos', icon: 'shopping-bag', group: 'E-commerce Online', planos: ['completo', 'trial', 'master'] },
     { id: 'historico_pedidos', label: 'Histórico de Pedidos', icon: 'archive', group: 'E-commerce Online', planos: ['completo', 'trial', 'master'] },
     { id: 'catalogo_delivery', label: 'Catálogo de Produtos', icon: 'grid', group: 'E-commerce Online', planos: ['completo', 'trial', 'master'] },
+    { id: 'custos_produtos', label: 'Custos de Produtos', icon: 'pie-chart', group: 'E-commerce Online', path: '/admin/custos-produtos', planos: ['completo', 'trial', 'master'] }, // <--- NOVA LINHA
     { id: 'clientes_delivery', label: 'Clientes', icon: 'user', group: 'E-commerce Online', planos: ['completo', 'trial', 'master'] },
     { id: 'areas_entrega', label: 'Áreas de Entrega', icon: 'map-pin', group: 'E-commerce Online', planos: ['completo', 'trial', 'master'] },
     { id: 'fidelidade', label: 'Fidelidade', icon: 'award', group: 'E-commerce Online', planos: ['completo', 'trial', 'master'] },

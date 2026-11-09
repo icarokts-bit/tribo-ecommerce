@@ -21,10 +21,12 @@ import Cartoes from './pages/Financeiro/Cartoes';
 import Dre from './pages/Financeiro/Dre';
 import Fornecedores from './pages/Financeiro/Fornecedores';
 import Resultados from './pages/Financeiro/Resultados';
-import RelatorioUnificado from './pages/RelatorioUnificado';
+import RelatorioUnificado from './pages/Financeiro/RelatorioUnificado';
+
 // Módulos E-commerce (Pasta GestaoPedidos)
 import Kanban from './pages/GestaoPedidos/Kanban'; 
 import Produtos from './pages/GestaoPedidos/Produtos'; 
+import CustosProdutos from './pages/GestaoPedidos/CustosProdutos'; // <-- NOVA IMPORTAÇÃO
 import HistoricoPedidos from './pages/GestaoPedidos/HistoricoPedidos';
 import ClientesDelivery from './pages/GestaoPedidos/ClientesDelivery';
 import Fidelidade from './pages/GestaoPedidos/Fidelidade';
@@ -73,6 +75,7 @@ export const modulosSaaS = [
     { id: 'gestao_pedidos', label: 'Gestão de Pedidos', icon: 'shopping-bag', group: 'E-commerce Online', path: '/admin/pedidos', planos: ['completo', 'trial', 'master'] },
     { id: 'historico_pedidos', label: 'Histórico de Pedidos', icon: 'archive', group: 'E-commerce Online', path: '/admin/historico', planos: ['completo', 'trial', 'master'] },
     { id: 'catalogo_delivery', label: 'Catálogo de Produtos', icon: 'grid', group: 'E-commerce Online', path: '/admin/produtos', planos: ['completo', 'trial', 'master'] },
+    { id: 'custos_produtos', label: 'Custos de Produtos', icon: 'pie-chart', group: 'E-commerce Online', path: '/admin/custos-produtos', planos: ['completo', 'trial', 'master'] }, // <-- NOVO BOTÃO
     { id: 'clientes_delivery', label: 'Clientes', icon: 'user', group: 'E-commerce Online', path: '/admin/clientes', planos: ['completo', 'trial', 'master'] },
     { id: 'areas_entrega', label: 'Áreas de Entrega', icon: 'map-pin', group: 'E-commerce Online', path: '/admin/areas-entrega', planos: ['completo', 'trial', 'master'] },
     { id: 'fidelidade', label: 'Fidelidade', icon: 'award', group: 'E-commerce Online', path: '/admin/fidelidade', planos: ['completo', 'trial', 'master'] },
@@ -328,6 +331,7 @@ function App() {
                 {/* Rotas Mapeadas - E-commerce */}
                 <Route path="pedidos" element={<Kanban {...erpProps} />} />
                 <Route path="produtos" element={<Produtos {...erpProps} />} />
+                <Route path="custos-produtos" element={<CustosProdutos {...erpProps} />} /> {/* <-- NOVA ROTA */}
                 <Route path="historico" element={<HistoricoPedidos {...erpProps} />} />
                 <Route path="clientes" element={<ClientesDelivery {...erpProps} />} />
                 <Route path="fidelidade" element={<Fidelidade {...erpProps} />} />
