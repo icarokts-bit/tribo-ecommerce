@@ -275,7 +275,7 @@ export default function AjustesImpressao({ donoUid, accounts = [], categories = 
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                                     <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">Link Padrão Gratuito</label>
                                     <div className="flex items-center">
-                                        <span className="bg-slate-200 text-slate-500 px-3 py-3 rounded-l-xl font-bold text-xs border border-slate-300 border-r-0">tribosistemas.com.br/</span>
+                                        <span className="bg-slate-200 text-slate-500 px-3 py-3 rounded-l-xl font-bold text-xs border border-slate-300 border-r-0">tribo-ecommerce.vercel.app/</span>
                                         <input 
                                             type="text" name="linkPersonalizado" value={formData.linkPersonalizado} onChange={handleChangeSite} 
                                             className="flex-1 p-3 bg-white border border-slate-300 rounded-r-xl font-black text-sm text-slate-800 outline-none focus:border-blue-500" placeholder="sua-loja" required
