@@ -1,32 +1,51 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+const functions = require("firebase-functions");
+const admin = require("firebase-admin");
+const axios = require("axios");
 
-const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
-const logger = require("firebase-functions/logger");
+admin.initializeApp();
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+// Substitua as duas linhas antigas por estas:
+const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
+const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID;
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+exports.vincularDominio = functions.https.onCall(async (data, context) => {
+    // 1. Bloqueia acessos não autorizados
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Precisa estar logado para vincular domínios.");
+    }
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+    const { dominio } = data;
+    if (!dominio) {
+        throw new functions.https.HttpsError("invalid-argument", "O domínio é obrigatório.");
+    }
+
+    try {
+        // 2. Chama a API da Vercel para adicionar o domínio ao projeto
+        const response = await axios.post(
+            `https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/domains`,
+            { name: dominio },
+            {
+                headers: {
+                    Authorization: `Bearer ${VERCEL_TOKEN}`,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+
+        // 3. Salva no banco de dados do utilizador que o domínio foi registado na Vercel
+        await admin.firestore().doc(`artifacts/tribo-burger-financeiro/users/${context.auth.uid}/settings/storeProfile`).set({
+            dominioProprio: dominio,
+            dominioStatus: 'pendente_dns',
+            updatedAt: new Date().toISOString()
+        }, { merge: true });
+
+        return { success: true, data: response.data };
+
+    } catch (error) {
+        console.error("Erro na Vercel API:", error.response?.data || error.message);
+        throw new functions.https.HttpsError(
+            "internal", 
+            error.response?.data?.error?.message || "Falha ao vincular o domínio na Vercel."
+        );
+    }
+});
