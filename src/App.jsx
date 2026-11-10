@@ -21,7 +21,7 @@ import Cartoes from './pages/Financeiro/Cartoes';
 import Dre from './pages/Financeiro/Dre';
 import Fornecedores from './pages/Financeiro/Fornecedores';
 import Resultados from './pages/Financeiro/Resultados';
-import RelatorioUnificado from './pages/Financeiro/RelatorioUnificado';
+import RelatorioUnificado from './pages/RelatorioUnificado';
 
 // Módulos E-commerce (Pasta GestaoPedidos)
 import Kanban from './pages/GestaoPedidos/Kanban'; 
