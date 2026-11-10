@@ -1,0 +1,61 @@
+[debug] [2026-11-10T18:21:18.584Z] ----------------------------------------------------------------------
+[debug] [2026-11-10T18:21:18.588Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\icaro\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init functions
+[debug] [2026-11-10T18:21:18.589Z] CLI Version:   15.30.0
+[debug] [2026-11-10T18:21:18.589Z] Platform:      win32
+[debug] [2026-11-10T18:21:18.589Z] Node Version:  v24.19.0
+[debug] [2026-11-10T18:21:18.589Z] Detected Agent: unknown
+[debug] [2026-11-10T18:21:18.590Z] Time:          Tue Nov 10 2026 15:21:18 GMT-0300 (Horário Padrão de Brasília)
+[debug] [2026-11-10T18:21:18.590Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-11-10T18:21:18.627Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\icaro\OneDrive\Área de Trabalho\SISTEMAS\Sistema-ecommerce
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] 
+[debug] [2026-11-10T18:21:33.317Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-11-10T18:21:33.318Z] > authorizing via signed-in user (icaro.kts@gmail.com)
+[debug] [2026-11-10T18:21:33.320Z] Checked if tokens are valid: false, expires at: 1791497207526
+[debug] [2026-11-10T18:21:33.321Z] Checked if tokens are valid: false, expires at: 1791497207526
+[debug] [2026-11-10T18:21:33.321Z] > refreshing access token with scopes: []
+[debug] [2026-11-10T18:21:33.323Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-11-10T18:21:33.323Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-11-10T18:21:33.544Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-11-10T18:21:33.545Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-11-10T18:21:33.573Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/tribo-sistemas-saas [none]
+[debug] [2026-11-10T18:21:33.661Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-11-10T18:21:33.661Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-11-10T18:21:34.009Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/tribo-sistemas-saas 200
+[debug] [2026-11-10T18:21:34.009Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/tribo-sistemas-saas {"projectId":"tribo-sistemas-saas","projectNumber":"166031239689","displayName":"tribo-sistemas-saas","name":"projects/tribo-sistemas-saas","resources":{"hostingSite":"tribo-sistemas-saas"},"state":"ACTIVE","labels":{"firebase":"enabled","firebase/storage-default-bucket":"created"},"etag":"1_da7f9229-475f-4ade-9a9a-e744e59d6f14"}
+[info] i  Using project tribo-sistemas-saas (tribo-sistemas-saas) . 
+[info] 
+=== Functions Setup
+[debug] [2026-11-10T18:21:34.020Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-11-10T18:21:34.020Z] > authorizing via signed-in user (icaro.kts@gmail.com)
+[debug] [2026-11-10T18:21:34.021Z] [iam] checking project tribo-sistemas-saas for permissions ["firebase.projects.get"]
+[debug] [2026-11-10T18:21:34.022Z] Checked if tokens are valid: true, expires at: 1794338492545
+[debug] [2026-11-10T18:21:34.022Z] Checked if tokens are valid: true, expires at: 1794338492545
+[debug] [2026-11-10T18:21:34.022Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/tribo-sistemas-saas:testIamPermissions [none]
+[debug] [2026-11-10T18:21:34.022Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/tribo-sistemas-saas:testIamPermissions  x-goog-user-project=tribo-sistemas-saas
+[debug] [2026-11-10T18:21:34.022Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tribo-sistemas-saas:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2026-11-10T18:21:34.926Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/tribo-sistemas-saas:testIamPermissions 200
+[debug] [2026-11-10T18:21:34.926Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tribo-sistemas-saas:testIamPermissions {"permissions":["firebase.projects.get"]}
+[info] 
+Detected existing codebase(s): default
+
