@@ -21,13 +21,13 @@ import Cartoes from './pages/Financeiro/Cartoes';
 import Dre from './pages/Financeiro/Dre';
 import Fornecedores from './pages/Financeiro/Fornecedores';
 import Resultados from './pages/Financeiro/Resultados';
-import RelatorioUnificado from './pages/RelatorioUnificado';
+import RelatorioUnificado from './pages/Financeiro/RelatorioUnificado';
 
 // Módulos E-commerce (Pasta GestaoPedidos)
 import Kanban from './pages/GestaoPedidos/Kanban'; 
 import Produtos from './pages/GestaoPedidos/Produtos'; 
 import CustosProdutos from './pages/GestaoPedidos/CustosProdutos';
-import Estoque from './pages/GestaoPedidos/Estoque'; // <-- IMPORTAÇÃO DO ESTOQUE
+import Estoque from './pages/GestaoPedidos/Estoque';
 import HistoricoPedidos from './pages/GestaoPedidos/HistoricoPedidos';
 import ClientesDelivery from './pages/GestaoPedidos/ClientesDelivery';
 import Fidelidade from './pages/GestaoPedidos/Fidelidade';
@@ -77,7 +77,7 @@ export const modulosSaaS = [
     { id: 'historico_pedidos', label: 'Histórico de Pedidos', icon: 'archive', group: 'E-commerce Online', path: '/admin/historico', planos: ['completo', 'trial', 'master'] },
     { id: 'catalogo_delivery', label: 'Catálogo de Produtos', icon: 'grid', group: 'E-commerce Online', path: '/admin/produtos', planos: ['completo', 'trial', 'master'] },
     { id: 'custos_produtos', label: 'Custos de Produtos', icon: 'pie-chart', group: 'E-commerce Online', path: '/admin/custos-produtos', planos: ['completo', 'trial', 'master'] },
-    { id: 'estoque', label: 'Estoque', icon: 'layers', group: 'E-commerce Online', path: '/admin/estoque', planos: ['completo', 'trial', 'master'] }, // <-- BOTÃO DO ESTOQUE
+    { id: 'estoque', label: 'Estoque', icon: 'layers', group: 'E-commerce Online', path: '/admin/estoque', planos: ['completo', 'trial', 'master'] },
     { id: 'clientes_delivery', label: 'Clientes', icon: 'user', group: 'E-commerce Online', path: '/admin/clientes', planos: ['completo', 'trial', 'master'] },
     { id: 'areas_entrega', label: 'Áreas de Entrega', icon: 'map-pin', group: 'E-commerce Online', path: '/admin/areas-entrega', planos: ['completo', 'trial', 'master'] },
     { id: 'fidelidade', label: 'Fidelidade', icon: 'award', group: 'E-commerce Online', path: '/admin/fidelidade', planos: ['completo', 'trial', 'master'] },
@@ -222,7 +222,12 @@ function App() {
         setSales(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, err => console.log(err));
 
-    return () => { unsubTx(); unsubAcc(); unsubCat(); unsubSup(); unsubSales(); };
+    // NOVO ESCUTADOR: PUXA AS METAS E TAXAS GRAVADAS NA ABA "AJUSTES"
+    const unsubSettings = db.doc(`${basePath}/settings/cmvSettings`).onSnapshot(snap => {
+        if (snap.exists) setCmvSettings(snap.data());
+    }, err => console.log(err));
+
+    return () => { unsubTx(); unsubAcc(); unsubCat(); unsubSup(); unsubSales(); unsubSettings(); };
   }, [donoUid]);
 
   const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -285,6 +290,7 @@ function App() {
       user, permissoes, donoUid,
       transactions, setTransactions, accounts, setAccounts, categories, setCategories,
       suppliers, setSuppliers, sales, setSales, cmvSettings, setCmvSettings,
+      metaVendas: cmvSettings?.metaVendas || 0, // <-- Variável adicionada para alimentar a barra do Relatório!
       txForm, setTxForm, uniqueDescriptions, filteredDashboard,
       visibleTxCount, setVisibleTxCount, getEffectiveStatus, safeDateDisplay, formatMoney,
       searchQuery, setSearchQuery, typeFilter, setTypeFilter, statusFilter, setStatusFilter,
@@ -334,7 +340,7 @@ function App() {
                 <Route path="pedidos" element={<Kanban {...erpProps} />} />
                 <Route path="produtos" element={<Produtos {...erpProps} />} />
                 <Route path="custos-produtos" element={<CustosProdutos {...erpProps} />} />
-                <Route path="estoque" element={<Estoque {...erpProps} />} /> {/* <-- ROTA DO ESTOQUE */}
+                <Route path="estoque" element={<Estoque {...erpProps} />} />
                 <Route path="historico" element={<HistoricoPedidos {...erpProps} />} />
                 <Route path="clientes" element={<ClientesDelivery {...erpProps} />} />
                 <Route path="fidelidade" element={<Fidelidade {...erpProps} />} />
