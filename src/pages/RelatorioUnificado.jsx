@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Icon from '../components/Icon';
-import { getTxMonth, isInvoicePayment, formatMoney as utilFormatMoney } from '../utils/finance'; // <-- CORREÇÃO: import do formatMoney
+import { getTxMonth, isInvoicePayment, formatMoney as utilFormatMoney } from '../utils/finance';
 
 // Função para limpar os IDs do banco de dados caso o nome original não seja passado
 const formatMethodName = (id, name) => {
@@ -188,7 +188,6 @@ function RelatorioUnificado({
         activeCatCosts = stats?.catCosts || {};
     }
 
-    // Calcula as datas com segurança
     const dataPrev = (year && month) ? new Date(year, month - 2, 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const prevMonthStr = `${dataPrev.getFullYear()}-${String(dataPrev.getMonth() + 1).padStart(2, '0')}`;
     
@@ -244,8 +243,6 @@ function RelatorioUnificado({
         return { cat, atual, anterior, diferenca, variacao };
     }).sort((a, b) => b.atual - a.atual);
 
-    // =========================================================================
-
     let faturamentoManual = 0;
     extractedMethods.forEach(m => {
         if (m.name.toLowerCase().includes('fiado')) {
@@ -258,7 +255,6 @@ function RelatorioUnificado({
     const faturamentoTotal = apenasLiquidados ? (faturamentoManual + mFiadoPago) : (stats?.rb ? p(stats.rb) : 0);
     const diferencaCaixa = (stats?.rb ? p(stats.rb) : 0) - faturamentoManual;
 
-    // LÓGICA DO IMPOSTO SIMPLES CUSTOMIZADO/MANUAL
     let baseApuradaImposto = 0;
     if (taxBaseMode === 'total') {
         baseApuradaImposto = faturamentoTotal;
@@ -274,9 +270,16 @@ function RelatorioUnificado({
     const isCustomBase = taxBaseMode !== 'total';
     const impostosEstimados = baseApuradaImposto * (p(cmvSettings?.tax) / 100);
 
-    const faltaParaMeta = Math.max(0, p(metaVendas) - faturamentoTotal);
+    // =========================================================================
+    // NOVA LÓGICA DA META BLINDADA (IGUAL À IMAGEM)
+    // =========================================================================
+    // Puxa a meta tanto se vier por props diretas ou por dentro do cmvSettings
+    const metaAtual = p(metaVendas) > 0 ? p(metaVendas) : (p(cmvSettings?.metaVendas) || 0);
+
+    const faltaParaMeta = Math.max(0, metaAtual - faturamentoTotal);
     const metaDiariaRestante = diasUteisRestantes > 0 ? (faltaParaMeta / diasUteisRestantes) : 0;
-    const progressoMeta = p(metaVendas) > 0 ? (faturamentoTotal / p(metaVendas)) * 100 : 0;
+    const progressoMeta = metaAtual > 0 ? (faturamentoTotal / metaAtual) * 100 : 0;
+    // =========================================================================
 
     let custoRealInsumosFinanceiro = 0;
     let taxasFinanceiroManuais = 0;
@@ -522,22 +525,22 @@ function RelatorioUnificado({
                 </div>
             </div>
 
-            {/* PROGRESSO DA META MENSAL */}
-            {p(metaVendas) > 0 && (
-                <div className="glass-card p-4 rounded-xl border border-slate-200 bg-white mt-4 print:hidden">
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-black uppercase text-slate-500">Progresso da Meta Mensal</span>
-                        <span className="text-[10px] font-black text-slate-700">{formatMoney(faturamentoTotal)} / {formatMoney(metaVendas)}</span>
+            {/* PROGRESSO DA META MENSAL (EXATAMENTE COMO NA IMAGEM) */}
+            {metaAtual > 0 && (
+                <div className="glass-card p-5 rounded-xl border border-slate-200 bg-white mt-4 print:hidden shadow-sm">
+                    <div className="flex justify-between items-end mb-3 border-b border-slate-100 pb-2">
+                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Progresso da Meta Mensal</span>
+                        <span className="text-[13px] font-black text-slate-800">{formatMoney(faturamentoTotal)} / {formatMoney(metaAtual)}</span>
                     </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                        <div className={`h-2.5 rounded-full ${progressoMeta >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(progressoMeta, 100)}%` }}></div>
+                    <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
+                        <div className={`h-3 rounded-full transition-all duration-1000 ${progressoMeta >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(progressoMeta, 100)}%` }}></div>
                     </div>
-                    <div className="flex justify-between items-center mt-2">
-                        <span className="text-[9px] font-bold text-slate-400">{progressoMeta.toFixed(1)}% Alcançado</span>
+                    <div className="flex justify-between items-center mt-2.5">
+                        <span className="text-[11px] font-bold text-slate-400">{progressoMeta.toFixed(1)}% Alcançado</span>
                         {faltaParaMeta > 0 ? (
-                            <span className="text-[9px] font-bold text-slate-400">Faltam {formatMoney(faltaParaMeta)} ({formatMoney(metaDiariaRestante)}/dia)</span>
+                            <span className="text-[11px] font-bold text-slate-400">Faltam {formatMoney(faltaParaMeta)} <span className="opacity-75">({formatMoney(metaDiariaRestante)}/dia)</span></span>
                         ) : (
-                            <span className="text-[9px] font-bold text-emerald-500">Meta Atingida! 🎉</span>
+                            <span className="text-[11px] font-black text-emerald-500 flex items-center gap-1"><Icon name="check-circle" size={12}/> Meta Atingida!</span>
                         )}
                     </div>
                 </div>
