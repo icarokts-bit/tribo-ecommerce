@@ -7,7 +7,7 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
     const p = (val) => Number(val || 0);
 
     const [produtos, setProdutos] = useState([]);
-    const [estoque, setEstoque] = useState([]); // NOVO: Guarda as matérias-primas
+    const [estoque, setEstoque] = useState([]); // Guarda as matérias-primas
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,7 +52,7 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
     const margemLucro = p(precoVenda) > 0 ? ((p(precoVenda) - custoTotalProduto) / p(precoVenda)) * 100 : 0;
     const lucroReais = p(precoVenda) - custoTotalProduto;
 
-    // ADICIONA NOVO COMPONENTE (AGORA COM ESTOQUE ID)
+    // ADICIONA NOVO COMPONENTE
     const addComponente = () => {
         setComponentes([...componentes, { id: Date.now(), estoqueId: '', nome: '', custoUnitario: '', quantidade: 1, unidade: 'un' }]);
     };
@@ -261,67 +261,76 @@ export default function CustosProdutos({ donoUid, formatMoney: globalFormatMoney
                                             </button>
                                         </div>
                                         
-                                        <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+                                        <div className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1 custom-scrollbar">
                                             {componentes.length === 0 ? (
                                                 <div className="text-center py-6 text-slate-400 font-bold text-[10px] border border-dashed rounded-lg">
                                                     Nenhum custo adicionado. O lucro será de 100%.
                                                 </div>
                                             ) : (
                                                 componentes.map((c, index) => (
-                                                    <div key={c.id} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-100 relative group">
-                                                        <div className="w-8 flex-shrink-0 text-center text-[10px] font-black text-slate-300">{index + 1}</div>
+                                                    <div key={c.id} className="flex flex-col gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 relative group transition-colors hover:border-indigo-200">
                                                         
-                                                        {/* SELETOR INTEGRADO COM ESTOQUE */}
-                                                        <div className="flex-1 flex flex-col gap-1">
-                                                            <select 
-                                                                value={c.estoqueId || ''} 
-                                                                onChange={e => updateComponente(c.id, 'estoqueId', e.target.value)}
-                                                                className="w-full bg-white border border-slate-200 rounded p-1 font-bold text-[11px] text-slate-700 outline-none focus:border-indigo-400"
-                                                            >
-                                                                <option value="">-- Vincular ao Estoque --</option>
-                                                                {materiasPrimas.map(mp => (
-                                                                    <option key={mp.id} value={mp.id}>{mp.nome} ({formatMoney(mp.custoUnitario)}/{mp.unidade})</option>
-                                                                ))}
-                                                                <option value="custom">✍️ Digitar Manual (Sem Baixa)</option>
-                                                            </select>
+                                                        {/* LINHA 1: NOME / ESTOQUE */}
+                                                        <div className="flex items-start gap-2 pr-4">
+                                                            <div className="w-5 flex-shrink-0 text-center text-[10px] font-black text-slate-400 pt-1.5">{index + 1}.</div>
                                                             
-                                                            {c.estoqueId === 'custom' && (
-                                                                <input type="text" value={c.nome} onChange={e => updateComponente(c.id, 'nome', e.target.value)} className="w-full bg-white border border-amber-200 rounded p-1 font-bold text-[11px] outline-none focus:border-amber-400" placeholder="Nome do item..." />
-                                                            )}
+                                                            <div className="flex-1 flex flex-col gap-1.5">
+                                                                <select 
+                                                                    value={c.estoqueId || ''} 
+                                                                    onChange={e => updateComponente(c.id, 'estoqueId', e.target.value)}
+                                                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 font-bold text-xs text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-colors"
+                                                                >
+                                                                    <option value="">-- Vincular material ao Estoque --</option>
+                                                                    {materiasPrimas.map(mp => (
+                                                                        <option key={mp.id} value={mp.id}>{mp.nome} ({formatMoney(mp.custoUnitario)}/{mp.unidade})</option>
+                                                                    ))}
+                                                                    <option value="custom">✍️ Digitar Item Manualmente (Sem Baixa)</option>
+                                                                </select>
+                                                                
+                                                                {c.estoqueId === 'custom' && (
+                                                                    <input type="text" value={c.nome} onChange={e => updateComponente(c.id, 'nome', e.target.value)} className="w-full bg-white border border-amber-300 rounded-lg p-2 font-bold text-xs outline-none focus:border-amber-500 shadow-sm" placeholder="Nome do item manual..." />
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* LINHA 2: CALCULADORA (CUSTO x QTD = TOTAL) */}
+                                                        <div className="flex items-center justify-between pl-7">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-24">
+                                                                    <label className="text-[8px] font-black text-slate-500 uppercase leading-none block mb-1">Custo {c.unidade ? `(p/ ${c.unidade})` : ''}</label>
+                                                                    <input 
+                                                                        type="number" step="0.0001" 
+                                                                        value={c.custoUnitario} 
+                                                                        onChange={e => updateComponente(c.id, 'custoUnitario', e.target.value)} 
+                                                                        disabled={c.estoqueId !== 'custom' && c.estoqueId !== ''}
+                                                                        className={`w-full border rounded-lg p-2 text-center font-black text-xs outline-none shadow-sm ${c.estoqueId !== 'custom' && c.estoqueId !== '' ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-white border-slate-300 focus:border-indigo-500 text-slate-700'}`} 
+                                                                        placeholder="0.00" 
+                                                                    />
+                                                                </div>
+                                                                <div className="text-[10px] font-black text-slate-300 mt-3">x</div>
+                                                                <div className="w-20">
+                                                                    <label className="text-[8px] font-black text-slate-500 uppercase leading-none block mb-1">Qtd Usada</label>
+                                                                    <input type="number" step="0.01" value={c.quantidade} onChange={e => updateComponente(c.id, 'quantidade', e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-center font-black text-xs outline-none focus:border-indigo-500 shadow-sm text-slate-700" placeholder="1" />
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <div className="text-right">
+                                                                <label className="text-[8px] font-black text-slate-400 uppercase leading-none block mb-1">Subtotal</label>
+                                                                <div className="font-black text-red-500 text-[13px]">
+                                                                    {formatMoney(p(c.custoUnitario) * p(c.quantidade))}
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         
-                                                        <div className="w-16">
-                                                            <label className="text-[7px] font-black text-slate-400 uppercase leading-none">Custo {c.unidade ? `(p/ ${c.unidade})` : ''}</label>
-                                                            <input 
-                                                                type="number" step="0.0001" 
-                                                                value={c.custoUnitario} 
-                                                                onChange={e => updateComponente(c.id, 'custoUnitario', e.target.value)} 
-                                                                disabled={c.estoqueId !== 'custom' && c.estoqueId !== ''}
-                                                                className={`w-full border rounded p-1 text-center font-bold text-xs outline-none ${c.estoqueId !== 'custom' && c.estoqueId !== '' ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-300 focus:border-indigo-400'}`} 
-                                                                placeholder="0.00" 
-                                                            />
-                                                        </div>
-                                                        
-                                                        <div className="text-[10px] font-black text-slate-300 mt-3">x</div>
-                                                        
-                                                        <div className="w-14">
-                                                            <label className="text-[7px] font-black text-slate-400 uppercase leading-none">Qtd {c.unidade ? `(${c.unidade})` : ''}</label>
-                                                            <input type="number" step="0.01" value={c.quantidade} onChange={e => updateComponente(c.id, 'quantidade', e.target.value)} className="w-full bg-white border border-slate-300 rounded p-1 text-center font-bold text-xs outline-none focus:border-indigo-400" placeholder="1" />
-                                                        </div>
-                                                        
-                                                        <div className="w-16 text-right font-black text-red-500 text-xs flex-shrink-0 pt-3">
-                                                            {formatMoney(p(c.custoUnitario) * p(c.quantidade))}
-                                                        </div>
-                                                        
-                                                        <button type="button" onClick={() => removeComponente(c.id)} className="absolute -right-2 -top-2 bg-red-100 text-red-500 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border border-white shadow-sm">
-                                                            <Icon name="x" size={10} />
+                                                        <button type="button" onClick={() => removeComponente(c.id)} className="absolute -right-2 -top-2 bg-white text-red-500 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all border border-slate-200 shadow-md hover:bg-red-500 hover:text-white hover:border-red-500">
+                                                            <Icon name="trash-2" size={12} />
                                                         </button>
                                                     </div>
                                                 ))
                                             )}
                                         </div>
 
-                                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 shadow-inner mt-auto">
+                                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 shadow-inner mt-auto shrink-0">
                                             <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2">
                                                 <span className="text-[10px] font-black text-slate-400 uppercase">Custo de Produção Base</span>
                                                 <span className="font-black text-red-400 text-sm">-{formatMoney(custoTotalProduto)}</span>
