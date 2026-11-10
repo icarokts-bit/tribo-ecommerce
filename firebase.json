@@ -6,10 +6,16 @@
   "functions": [
     {
       "codebase": "default",
-      "source": "functions"
+      "source": "functions",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
     },
     {
-      "source": "n",
       "codebase": "n",
       "disallowLegacyRuntimeConfig": true,
       "ignore": [
@@ -18,7 +24,8 @@
         "firebase-debug.log",
         "firebase-debug.*.log",
         "*.local"
-      ]
+      ],
+      "source": "n"
     }
   ],
   "hosting": {
