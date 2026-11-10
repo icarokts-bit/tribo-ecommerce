@@ -23,7 +23,9 @@ export default function AjustesImpressao({ donoUid, accounts = [], categories = 
         bannerUrl: '',
         totemUrl: '',
         dominioProprio: '',
-        dominioStatus: ''
+        dominioStatus: '',
+        corPrincipal: '#3b82f6', // NOVO CAMPO DE COR
+        templateSelecionado: 'minimalista' // NOVO CAMPO DE TEMPLATE
     });
 
     // ==========================================
@@ -54,7 +56,13 @@ export default function AjustesImpressao({ donoUid, accounts = [], categories = 
             try {
                 const siteDoc = await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings`).doc('storeProfile').get();
                 if (siteDoc.exists) {
-                    setFormData(prev => ({ ...prev, ...siteDoc.data() }));
+                    setFormData(prev => ({ 
+                        ...prev, 
+                        ...siteDoc.data(),
+                        // Garante que se o firebase não tiver cor, carrega um padrão azul
+                        corPrincipal: siteDoc.data().corPrincipal || '#3b82f6',
+                        templateSelecionado: siteDoc.data().templateSelecionado || 'minimalista'
+                    }));
                     setDominioInput(siteDoc.data().dominioProprio || '');
                 }
                 const printDoc = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery_settings/printer_rules`).get();
@@ -200,6 +208,14 @@ export default function AjustesImpressao({ donoUid, accounts = [], categories = 
     ];
     const daysOfWeek = [ { id: 1, name: 'SEGUNDA' }, { id: 2, name: 'TERÇA' }, { id: 3, name: 'QUARTA' }, { id: 4, name: 'QUINTA' }, { id: 5, name: 'SEXTA' }, { id: 6, name: 'SÁBADO' }, { id: 0, name: 'DOMINGO' } ];
 
+    const templatesOpc = [
+        { id: 'minimalista', nome: 'Minimalista (Premium)', icon: 'image' },
+        { id: 'marketplace', nome: 'Marketplace (Lateral)', icon: 'sidebar' },
+        { id: 'vibrante', nome: 'Vibrante (Fast Food)', icon: 'zap' },
+        { id: 'classico', nome: 'Clássico (Varejo)', icon: 'layout' },
+        { id: 'app', nome: 'App Mobile (Delivery)', icon: 'smartphone' }
+    ];
+
     return (
         <div className="flex flex-col lg:flex-row gap-6 p-2 md:p-4 fade-in max-w-[1400px] mx-auto h-[calc(100vh-2rem)]">
             
@@ -233,6 +249,31 @@ export default function AjustesImpressao({ donoUid, accounts = [], categories = 
                             <button type="submit" disabled={savingSite} className="bg-slate-900 hover:bg-black text-[#F8CC82] px-6 py-2.5 rounded-xl font-black uppercase text-xs shadow-md transition-colors flex items-center gap-2">
                                 {savingSite ? <Icon name="loader" size={14} className="animate-spin" /> : <Icon name="save" size={14} />} Salvar Alterações
                             </button>
+                        </div>
+
+                        {/* NOVO BLOCO: CORES E TEMAS */}
+                        <div className="bg-fuchsia-50/50 p-6 rounded-2xl border border-fuchsia-100">
+                            <h3 className="text-sm font-black text-fuchsia-800 uppercase flex items-center gap-2 mb-6"><Icon name="layout" size={16}/> Aparência e Tema da Vitrine</h3>
+                            <div className="flex flex-col xl:flex-row gap-8">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black uppercase text-slate-500 block">Cor Principal da Marca</label>
+                                    <div className="flex items-center gap-4 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-fit">
+                                        <input type="color" name="corPrincipal" value={formData.corPrincipal} onChange={handleChangeSite} className="w-12 h-12 rounded-lg cursor-pointer border-0 p-0" />
+                                        <span className="font-mono text-sm font-bold text-slate-600 uppercase pr-3">{formData.corPrincipal}</span>
+                                    </div>
+                                </div>
+                                <div className="flex-1 space-y-3">
+                                    <label className="text-[10px] font-black uppercase text-slate-500 block">Layout do Site (Template)</label>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+                                        {templatesOpc.map(tpl => (
+                                            <div key={tpl.id} onClick={() => setFormData({...formData, templateSelecionado: tpl.id})} className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col items-center gap-3 text-center ${formData.templateSelecionado === tpl.id ? 'border-fuchsia-500 bg-white shadow-md' : 'border-slate-200 bg-white/60 hover:border-fuchsia-300'}`}>
+                                                <Icon name={tpl.icon} size={24} className={formData.templateSelecionado === tpl.id ? 'text-fuchsia-600' : 'text-slate-400'} />
+                                                <span className={`text-[10px] font-black uppercase leading-tight ${formData.templateSelecionado === tpl.id ? 'text-fuchsia-900' : 'text-slate-500'}`}>{tpl.nome}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
