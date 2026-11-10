@@ -271,10 +271,9 @@ function RelatorioUnificado({
     const impostosEstimados = baseApuradaImposto * (p(cmvSettings?.tax) / 100);
 
     // =========================================================================
-    // NOVA LÓGICA DA META BLINDADA (IGUAL À IMAGEM)
+    // NOVA LÓGICA DA META (BLINDADA E SEMPRE VISÍVEL)
     // =========================================================================
-    // Puxa a meta tanto se vier por props diretas ou por dentro do cmvSettings
-    const metaAtual = p(metaVendas) > 0 ? p(metaVendas) : (p(cmvSettings?.metaVendas) || 0);
+    const metaAtual = p(metaVendas) > 0 ? p(metaVendas) : (p(cmvSettings?.metaVendas) > 0 ? p(cmvSettings.metaVendas) : 30000);
 
     const faltaParaMeta = Math.max(0, metaAtual - faturamentoTotal);
     const metaDiariaRestante = diasUteisRestantes > 0 ? (faltaParaMeta / diasUteisRestantes) : 0;
@@ -525,26 +524,24 @@ function RelatorioUnificado({
                 </div>
             </div>
 
-            {/* PROGRESSO DA META MENSAL (EXATAMENTE COMO NA IMAGEM) */}
-            {metaAtual > 0 && (
-                <div className="glass-card p-5 rounded-xl border border-slate-200 bg-white mt-4 print:hidden shadow-sm">
-                    <div className="flex justify-between items-end mb-3 border-b border-slate-100 pb-2">
-                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Progresso da Meta Mensal</span>
-                        <span className="text-[13px] font-black text-slate-800">{formatMoney(faturamentoTotal)} / {formatMoney(metaAtual)}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
-                        <div className={`h-3 rounded-full transition-all duration-1000 ${progressoMeta >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(progressoMeta, 100)}%` }}></div>
-                    </div>
-                    <div className="flex justify-between items-center mt-2.5">
-                        <span className="text-[11px] font-bold text-slate-400">{progressoMeta.toFixed(1)}% Alcançado</span>
-                        {faltaParaMeta > 0 ? (
-                            <span className="text-[11px] font-bold text-slate-400">Faltam {formatMoney(faltaParaMeta)} <span className="opacity-75">({formatMoney(metaDiariaRestante)}/dia)</span></span>
-                        ) : (
-                            <span className="text-[11px] font-black text-emerald-500 flex items-center gap-1"><Icon name="check-circle" size={12}/> Meta Atingida!</span>
-                        )}
-                    </div>
+            {/* PROGRESSO DA META MENSAL (EXATAMENTE COMO NA IMAGEM - SEMPRE VISÍVEL) */}
+            <div className="glass-card p-5 rounded-xl border border-slate-200 bg-white mt-4 print:hidden shadow-sm">
+                <div className="flex justify-between items-end mb-3 border-b border-slate-100 pb-2">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Progresso da Meta Mensal</span>
+                    <span className="text-[13px] font-black text-slate-800">{formatMoney(faturamentoTotal)} / {formatMoney(metaAtual)}</span>
                 </div>
-            )}
+                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
+                    <div className={`h-3 rounded-full transition-all duration-1000 ${progressoMeta >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(progressoMeta, 100)}%` }}></div>
+                </div>
+                <div className="flex justify-between items-center mt-2.5">
+                    <span className="text-[11px] font-bold text-slate-400">{progressoMeta.toFixed(1)}% Alcançado</span>
+                    {faltaParaMeta > 0 ? (
+                        <span className="text-[11px] font-bold text-slate-400">Faltam {formatMoney(faltaParaMeta)} <span className="opacity-75">({formatMoney(metaDiariaRestante)}/dia)</span></span>
+                    ) : (
+                        <span className="text-[11px] font-black text-emerald-500 flex items-center gap-1"><Icon name="check-circle" size={12}/> Meta Atingida!</span>
+                    )}
+                </div>
+            </div>
 
             {/* METAS DE GASTOS */}
             <div className="glass-card p-4 rounded-xl border border-slate-200 bg-white mt-4 print:hidden">
