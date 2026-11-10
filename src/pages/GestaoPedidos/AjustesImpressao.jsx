@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { auth, db } from '../../firebase';
 import Icon from '../../components/Icon';
 
-export default function AjustesImpressao({ donoUid }) {
-    const [activeTab, setActiveTab] = useState('personalizar_site');
+export default function AjustesImpressao({ donoUid, accounts = [], categories = [], cmvSettings = {} }) {
+    const [activeTab, setActiveTab] = useState('financeiros');
     const [loading, setLoading] = useState(true);
     
     // ==========================================
@@ -36,6 +36,23 @@ export default function AjustesImpressao({ donoUid }) {
         vias: 1
     });
 
+    // ==========================================
+    // ESTADOS: DADOS FINANCEIROS
+    // ==========================================
+    const [savingFin, setSavingFin] = useState(false);
+    const [metasForm, setMetasForm] = useState({
+        metaVendas: 30000,
+        targetCMV: 35,
+        tax: 4.8,
+        taxaDebito: 1.61,
+        taxaCredito: 3.51,
+        taxaIfood: 17.19,
+        workingDays: [0, 1, 2, 3, 4, 5, 6] // 0=Dom, 1=Seg...
+    });
+    const [newAccName, setNewAccName] = useState('');
+    const [newAccType, setNewAccType] = useState('Conta Corrente');
+    const [newCatName, setNewCatName] = useState('');
+
     // CARREGAMENTO INICIAL DE TODOS OS DADOS
     useEffect(() => {
         if (!donoUid) return;
@@ -61,6 +78,21 @@ export default function AjustesImpressao({ donoUid }) {
         
         loadAllSettings();
     }, [donoUid]);
+
+    // Sincroniza props financeiras
+    useEffect(() => {
+        if (cmvSettings && Object.keys(cmvSettings).length > 0) {
+            setMetasForm({
+                metaVendas: cmvSettings.metaVendas || 30000,
+                targetCMV: cmvSettings.targetCMV || 35,
+                tax: cmvSettings.tax || 4.8,
+                taxaDebito: cmvSettings.taxaDebito || 1.61,
+                taxaCredito: cmvSettings.taxaCredito || 3.51,
+                taxaIfood: cmvSettings.taxaIfood || 17.19,
+                workingDays: cmvSettings.workingDays || [0, 1, 2, 3, 4, 5, 6]
+            });
+        }
+    }, [cmvSettings]);
 
     // ==========================================
     // FUNÇÕES: PERSONALIZAR SITE
@@ -146,6 +178,74 @@ export default function AjustesImpressao({ donoUid }) {
     };
 
     // ==========================================
+    // FUNÇÕES: DADOS FINANCEIROS
+    // ==========================================
+    const handleSaveMetas = async (e) => {
+        e.preventDefault();
+        setSavingFin(true);
+        try {
+            // Converte os valores para número antes de salvar
+            const payload = {
+                metaVendas: Number(metasForm.metaVendas),
+                targetCMV: Number(metasForm.targetCMV),
+                tax: Number(metasForm.tax),
+                taxaDebito: Number(metasForm.taxaDebito),
+                taxaCredito: Number(metasForm.taxaCredito),
+                taxaIfood: Number(metasForm.taxaIfood),
+                workingDays: metasForm.workingDays
+            };
+            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/cmvSettings`).set(payload, { merge: true });
+            alert("Metas e Taxas atualizadas com sucesso!");
+        } catch (error) {
+            alert("Erro ao salvar: " + error.message);
+        }
+        setSavingFin(false);
+    };
+
+    const toggleDay = (dayInt) => {
+        setMetasForm(prev => {
+            const days = prev.workingDays || [];
+            if (days.includes(dayInt)) return { ...prev, workingDays: days.filter(d => d !== dayInt) };
+            return { ...prev, workingDays: [...days, dayInt] };
+        });
+    };
+
+    const handleAddAccount = async (e) => {
+        e.preventDefault();
+        if (!newAccName) return;
+        try {
+            await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/accounts`).add({
+                name: newAccName.toUpperCase(),
+                type: newAccType
+            });
+            setNewAccName('');
+        } catch (err) { alert(err.message); }
+    };
+
+    const handleDeleteAccount = async (id) => {
+        if (window.confirm("Excluir esta conta?")) {
+            await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/accounts`).doc(id).delete();
+        }
+    };
+
+    const handleAddCategory = async (e) => {
+        e.preventDefault();
+        if (!newCatName) return;
+        try {
+            await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/categories`).add({
+                name: newCatName.toUpperCase()
+            });
+            setNewCatName('');
+        } catch (err) { alert(err.message); }
+    };
+
+    const handleDeleteCategory = async (id) => {
+        if (window.confirm("Excluir esta categoria?")) {
+            await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/categories`).doc(id).delete();
+        }
+    };
+
+    // ==========================================
     // RENDERIZAÇÃO GERAL
     // ==========================================
     if (loading) {
@@ -162,8 +262,13 @@ export default function AjustesImpressao({ donoUid }) {
         { id: 'financeiros', label: 'Dados Financeiros', icon: 'dollar-sign' }
     ];
 
+    const daysOfWeek = [
+        { id: 1, name: 'SEGUNDA' }, { id: 2, name: 'TERÇA' }, { id: 3, name: 'QUARTA' },
+        { id: 4, name: 'QUINTA' }, { id: 5, name: 'SEXTA' }, { id: 6, name: 'SÁBADO' }, { id: 0, name: 'DOMINGO' }
+    ];
+
     return (
-        <div className="flex flex-col lg:flex-row gap-6 p-2 md:p-4 fade-in max-w-7xl mx-auto h-[calc(100vh-2rem)]">
+        <div className="flex flex-col lg:flex-row gap-6 p-2 md:p-4 fade-in max-w-[1400px] mx-auto h-[calc(100vh-2rem)]">
             
             {/* MENU LATERAL DE ABAS */}
             <div className="w-full lg:w-64 shrink-0 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-y-auto custom-scrollbar h-fit max-h-full">
@@ -295,6 +400,185 @@ export default function AjustesImpressao({ donoUid }) {
                     </form>
                 ) 
                 
+                /* ABA: DADOS FINANCEIROS */
+                : activeTab === 'financeiros' ? (
+                    <div className="space-y-8 fade-in">
+                        
+                        {/* BLOCOS SUPERIORES: METAS E DIAS */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            
+                            {/* METAS E TAXAS */}
+                            <form onSubmit={handleSaveMetas} className="border border-slate-200 rounded-2xl p-5 shadow-sm bg-white">
+                                <h3 className="flex items-center gap-2 text-emerald-600 font-black uppercase text-sm border-b border-slate-100 pb-3 mb-4">
+                                    <Icon name="info" size={16} /> Metas e Taxas Base
+                                </h3>
+                                
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Meta de Vendas Mensal (R$)</label>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="number" value={metasForm.metaVendas} onChange={e => setMetasForm({...metasForm, metaVendas: e.target.value})}
+                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-emerald-500 text-slate-800"
+                                            />
+                                            <button type="submit" disabled={savingFin} className="bg-slate-900 hover:bg-black text-[#F8CC82] px-5 rounded-lg font-black uppercase text-[10px] transition-colors whitespace-nowrap">
+                                                {savingFin ? '...' : 'Salvar'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">CMV Alvo (%)</label>
+                                        <input 
+                                            type="number" value={metasForm.targetCMV} onChange={e => setMetasForm({...metasForm, targetCMV: e.target.value})}
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-emerald-500 text-slate-800"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-emerald-600 block mb-1">Imposto (%)</label>
+                                        <input 
+                                            type="number" step="0.01" value={metasForm.tax} onChange={e => setMetasForm({...metasForm, tax: e.target.value})}
+                                            className="w-full p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg font-bold text-sm outline-none focus:border-emerald-500 text-emerald-800"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Taxa Débito (%)</label>
+                                        <input 
+                                            type="number" step="0.01" value={metasForm.taxaDebito} onChange={e => setMetasForm({...metasForm, taxaDebito: e.target.value})}
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-emerald-500 text-slate-800"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Taxa Crédito (%)</label>
+                                        <input 
+                                            type="number" step="0.01" value={metasForm.taxaCredito} onChange={e => setMetasForm({...metasForm, taxaCredito: e.target.value})}
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-emerald-500 text-slate-800"
+                                        />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-orange-600 block mb-1">Taxa iFood (%)</label>
+                                        <input 
+                                            type="number" step="0.01" value={metasForm.taxaIfood} onChange={e => setMetasForm({...metasForm, taxaIfood: e.target.value})}
+                                            className="w-full p-2.5 bg-orange-50 border border-orange-200 rounded-lg font-bold text-sm outline-none focus:border-orange-500 text-orange-800"
+                                        />
+                                    </div>
+                                </div>
+                            </form>
+
+                            {/* DIAS FINANCEIROS */}
+                            <div className="border border-slate-200 rounded-2xl p-5 shadow-sm bg-white">
+                                <h3 className="flex items-center gap-2 text-emerald-600 font-black uppercase text-sm border-b border-slate-100 pb-3 mb-4">
+                                    <Icon name="info" size={16} /> Dias Financeiros (Projeções)
+                                </h3>
+                                <p className="text-xs font-bold text-slate-500 mb-4 leading-relaxed">
+                                    Dias que a loja abre para cálculo de metas de faturamento mensal e Dashboard.
+                                </p>
+                                
+                                <div className="flex flex-wrap gap-2">
+                                    {daysOfWeek.map(day => {
+                                        const isSelected = (metasForm.workingDays || []).includes(day.id);
+                                        return (
+                                            <button 
+                                                key={day.id}
+                                                type="button"
+                                                onClick={() => toggleDay(day.id)}
+                                                className={`px-3 py-2 rounded-lg font-black text-[10px] uppercase transition-colors border ${
+                                                    isSelected 
+                                                    ? 'bg-orange-500 text-white border-orange-600 shadow-sm' 
+                                                    : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                {day.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                        </div>
+
+                        {/* BLOCOS INFERIORES: CONTAS E CATEGORIAS */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            
+                            {/* CONTAS E CARTÕES */}
+                            <div className="border border-slate-200 rounded-2xl p-5 shadow-sm bg-white">
+                                <h3 className="flex items-center gap-2 text-blue-600 font-black uppercase text-sm border-b border-slate-100 pb-3 mb-4">
+                                    <Icon name="info" size={16} /> Contas e Cartões
+                                </h3>
+                                
+                                <form onSubmit={handleAddAccount} className="bg-slate-50 border border-slate-100 p-4 rounded-xl mb-4">
+                                    <div className="flex gap-2 mb-3">
+                                        <input 
+                                            type="text" value={newAccName} onChange={e => setNewAccName(e.target.value)} required
+                                            className="flex-1 p-2.5 border border-slate-200 rounded-lg text-sm font-bold outline-none"
+                                            placeholder="Nome da Conta/Cartão"
+                                        />
+                                        <select 
+                                            value={newAccType} onChange={e => setNewAccType(e.target.value)}
+                                            className="w-1/3 p-2.5 border border-slate-200 rounded-lg text-sm font-bold outline-none bg-white"
+                                        >
+                                            <option value="Conta Corrente">Conta Corrente</option>
+                                            <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                            <option value="Caixinha/Cofre">Caixinha/Cofre</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] py-2.5 rounded-lg shadow-sm transition-colors">
+                                        Adicionar Conta
+                                    </button>
+                                </form>
+
+                                <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                                    {accounts.map(acc => (
+                                        <div key={acc.id} className="flex justify-between items-center border border-slate-200 p-3 rounded-xl bg-white shadow-sm">
+                                            <div>
+                                                <p className="font-black text-slate-800 text-sm leading-tight">{acc.name}</p>
+                                                <span className="text-[9px] font-black uppercase bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded mt-1 inline-block">
+                                                    {acc.type === 'Cartão de Crédito' ? 'CRÉDITO' : 'CORRENTE'}
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleDeleteAccount(acc.id)} className="text-red-400 hover:bg-red-50 p-1.5 rounded transition-colors">
+                                                    <Icon name="trash" size={16} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* CATEGORIAS FINANCEIROS */}
+                            <div className="border border-slate-200 rounded-2xl p-5 shadow-sm bg-white">
+                                <h3 className="flex items-center gap-2 text-blue-600 font-black uppercase text-sm border-b border-slate-100 pb-3 mb-4">
+                                    <Icon name="info" size={16} /> Categorias Financeiras
+                                </h3>
+                                
+                                <form onSubmit={handleAddCategory} className="bg-slate-50 border border-slate-100 p-4 rounded-xl mb-4 flex gap-2">
+                                    <input 
+                                        type="text" value={newCatName} onChange={e => setNewCatName(e.target.value)} required
+                                        className="flex-1 p-2.5 border border-slate-200 rounded-lg text-sm font-bold outline-none"
+                                        placeholder="Nova Categoria"
+                                    />
+                                    <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 font-black uppercase text-[10px] rounded-lg shadow-sm transition-colors">
+                                        ADD
+                                    </button>
+                                </form>
+
+                                <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                                    {categories.map(cat => (
+                                        <div key={cat.id} className="flex justify-between items-center border border-slate-200 p-3 rounded-xl bg-white shadow-sm hover:border-slate-300">
+                                            <p className="font-black text-slate-800 text-xs uppercase">{cat.name}</p>
+                                            <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-400 hover:bg-red-50 p-1.5 rounded transition-colors">
+                                                <Icon name="trash" size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                )
+
                 /* ABA: IMPRESSÃO (Agente Local Preservado) */
                 : activeTab === 'impressao' ? (
                     <div className="space-y-6">
