@@ -76,7 +76,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const produtosDestaque = produtos.filter(p => p.destaque === true);
     const listaCarrosselDestaque = produtosDestaque.length > 0 ? produtosDestaque : produtos.slice(0, 5);
 
-    // SOMENTE produtos marcados com isPromo === true no cadastro aparecem no Carrossel de Promoções
     const listaCarrosselPromo = produtos.filter(p => p.isPromo === true);
 
     // Dados dinâmicos do Banner Secundário
@@ -644,16 +643,18 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             {/* CONTEÚDO PRINCIPAL EM TELA INTEIRA */}
             <main className="w-full px-4 md:px-10 xl:px-16 py-8 space-y-12 flex-1">
                 
-                {/* 5. MENU MOSAICO BENTO GRID COM FOTOS DE CADA CATEGORIA + SETAS CARROSSEL */}
+                {/* ========================================================================= */}
+                {/* 5. MENU MOSAICO BENTO GRID COM FOTOS OCUPANDO 100% DO QUADRADO + SETAS    */}
+                {/* ========================================================================= */}
                 {categorias.length > 0 && (
                     <section className="relative py-2">
                         <button 
                             type="button"
                             onClick={anteriorSlideCategorias}
                             title="Categorias Anteriores"
-                            className="flex absolute -left-2 md:-left-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-300 hover:text-slate-700 bg-white/80 hover:bg-white rounded-xl shadow-sm border border-slate-100 transition-all cursor-pointer"
+                            className="flex absolute -left-2 md:-left-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-500 hover:text-slate-900 bg-white/90 hover:bg-white rounded-xl shadow-md border border-slate-200 transition-all cursor-pointer"
                         >
-                            <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                             </svg>
                         </button>
@@ -662,109 +663,125 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             type="button"
                             onClick={proximoSlideCategorias}
                             title="Próximas Categorias"
-                            className="flex absolute -right-2 md:-right-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-300 hover:text-slate-700 bg-white/80 hover:bg-white rounded-xl shadow-sm border border-slate-100 transition-all cursor-pointer"
+                            className="flex absolute -right-2 md:-right-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-500 hover:text-slate-900 bg-white/90 hover:bg-white rounded-xl shadow-md border border-slate-200 transition-all cursor-pointer"
                         >
-                            <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                             </svg>
                         </button>
 
                         <div className="space-y-5">
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                                
+                                {/* SLOT 0: Card Vertical Grande Esquerdo (Foto 100% do quadrado) */}
                                 {categoriasMosaicoAtual[0] && (
                                     <div 
                                         onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[0].name)}
-                                        className={`md:col-span-3 bg-[#f5f6f8] hover:bg-[#eceef2] rounded-sm p-6 flex flex-col items-center justify-between text-center cursor-pointer transition-all min-h-[340px] group border-2 ${
-                                            categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[0].name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                        className={`md:col-span-3 relative rounded-2xl overflow-hidden cursor-pointer transition-all min-h-[340px] group border-2 bg-slate-100 ${
+                                            categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[0].name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
                                         }`}
                                     >
-                                        <h3 className="text-xl font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] tracking-tight mt-1">
-                                            {categoriasMosaicoAtual[0].name}
-                                        </h3>
-                                        <div className="w-full h-60 flex items-center justify-center p-2">
-                                            {categoriasMosaicoAtual[0].imageUrl ? (
-                                                <img 
-                                                    src={categoriasMosaicoAtual[0].imageUrl} 
-                                                    alt={categoriasMosaicoAtual[0].name} 
-                                                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-md" 
-                                                />
-                                            ) : (
-                                                <Icon name="box" size={64} className="text-slate-300" />
-                                            )}
+                                        {categoriasMosaicoAtual[0].imageUrl ? (
+                                            <img 
+                                                src={categoriasMosaicoAtual[0].imageUrl} 
+                                                alt={categoriasMosaicoAtual[0].name} 
+                                                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                            />
+                                        ) : (
+                                            <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                                                <Icon name="box" size={64} />
+                                            </div>
+                                        )}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                        <div className="absolute bottom-4 left-4 right-4 z-10 text-left">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block">Departamento</span>
+                                            <h3 className="text-xl font-black text-white tracking-tight leading-tight drop-shadow-sm">
+                                                {categoriasMosaicoAtual[0].name}
+                                            </h3>
                                         </div>
                                     </div>
                                 )}
 
+                                {/* SLOTS 1 e 2: Coluna Central com 2 Cards Empilhados (Foto 100% do quadrado) */}
                                 <div className="md:col-span-3 flex flex-col gap-5 justify-between">
                                     {categoriasMosaicoAtual[1] && (
                                         <div 
                                             onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[1].name)}
-                                            className={`flex-1 bg-[#eaf4fc] hover:bg-[#dcebfb] rounded-sm p-5 flex items-center justify-between gap-4 cursor-pointer transition-all min-h-[160px] group border-2 ${
-                                                categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[1].name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                            className={`flex-1 relative rounded-2xl overflow-hidden cursor-pointer transition-all min-h-[160px] group border-2 bg-slate-100 ${
+                                                categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[1].name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
                                             }`}
                                         >
-                                            <div className="w-28 h-28 flex items-center justify-center shrink-0">
-                                                {categoriasMosaicoAtual[1].imageUrl ? (
-                                                    <img 
-                                                        src={categoriasMosaicoAtual[1].imageUrl} 
-                                                        alt={categoriasMosaicoAtual[1].name} 
-                                                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-sm" 
-                                                    />
-                                                ) : (
-                                                    <Icon name="box" size={44} className="text-blue-300" />
-                                                )}
+                                            {categoriasMosaicoAtual[1].imageUrl ? (
+                                                <img 
+                                                    src={categoriasMosaicoAtual[1].imageUrl} 
+                                                    alt={categoriasMosaicoAtual[1].name} 
+                                                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                                />
+                                            ) : (
+                                                <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                                                    <Icon name="box" size={44} />
+                                                </div>
+                                            )}
+                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                            <div className="absolute bottom-3.5 left-4 right-4 z-10">
+                                                <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
+                                                    {categoriasMosaicoAtual[1].name}
+                                                </h3>
                                             </div>
-                                            <h3 className="text-lg font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] text-right leading-snug">
-                                                {categoriasMosaicoAtual[1].name}
-                                            </h3>
                                         </div>
                                     )}
 
                                     {categoriasMosaicoAtual[2] && (
                                         <div 
                                             onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[2].name)}
-                                            className={`flex-1 bg-[#eaf4fc] hover:bg-[#dcebfb] rounded-sm p-5 flex items-center justify-between gap-4 cursor-pointer transition-all min-h-[160px] group border-2 ${
-                                                categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[2].name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                            className={`flex-1 relative rounded-2xl overflow-hidden cursor-pointer transition-all min-h-[160px] group border-2 bg-slate-100 ${
+                                                categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[2].name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
                                             }`}
                                         >
-                                            <div className="w-28 h-28 flex items-center justify-center shrink-0">
-                                                {categoriasMosaicoAtual[2].imageUrl ? (
-                                                    <img 
-                                                        src={categoriasMosaicoAtual[2].imageUrl} 
-                                                        alt={categoriasMosaicoAtual[2].name} 
-                                                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-sm" 
-                                                    />
-                                                ) : (
-                                                    <Icon name="box" size={44} className="text-blue-300" />
-                                                )}
+                                            {categoriasMosaicoAtual[2].imageUrl ? (
+                                                <img 
+                                                    src={categoriasMosaicoAtual[2].imageUrl} 
+                                                    alt={categoriasMosaicoAtual[2].name} 
+                                                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                                />
+                                            ) : (
+                                                <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                                                    <Icon name="box" size={44} />
+                                                </div>
+                                            )}
+                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                            <div className="absolute bottom-3.5 left-4 right-4 z-10">
+                                                <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
+                                                    {categoriasMosaicoAtual[2].name}
+                                                </h3>
                                             </div>
-                                            <h3 className="text-lg font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] text-right leading-snug">
-                                                {categoriasMosaicoAtual[2].name}
-                                            </h3>
                                         </div>
                                     )}
                                 </div>
 
+                                {/* SLOT 3: Card Largo Direito (Foto 100% do quadrado) */}
                                 {categoriasMosaicoAtual[3] && (
                                     <div 
                                         onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[3].name)}
-                                        className={`md:col-span-6 bg-[#f5f6f8] hover:bg-[#eceef2] rounded-sm p-8 flex flex-col sm:flex-row items-center justify-between gap-6 cursor-pointer transition-all min-h-[340px] group border-2 ${
-                                            categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[3].name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                        className={`md:col-span-6 relative rounded-2xl overflow-hidden cursor-pointer transition-all min-h-[340px] group border-2 bg-slate-100 ${
+                                            categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[3].name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
                                         }`}
                                     >
-                                        <div className="w-full sm:w-3/5 h-64 flex items-center justify-center">
-                                            {categoriasMosaicoAtual[3].imageUrl ? (
-                                                <img 
-                                                    src={categoriasMosaicoAtual[3].imageUrl} 
-                                                    alt={categoriasMosaicoAtual[3].name} 
-                                                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-lg" 
-                                                />
-                                            ) : (
-                                                <Icon name="box" size={80} className="text-slate-300" />
-                                            )}
-                                        </div>
-                                        <div className="w-full sm:w-2/5 text-center sm:text-center">
-                                            <h3 className="text-2xl font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] leading-snug">
+                                        {categoriasMosaicoAtual[3].imageUrl ? (
+                                            <img 
+                                                src={categoriasMosaicoAtual[3].imageUrl} 
+                                                alt={categoriasMosaicoAtual[3].name} 
+                                                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                            />
+                                        ) : (
+                                            <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                                                <Icon name="box" size={80} />
+                                            </div>
+                                        )}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                        <div className="absolute bottom-5 left-6 right-6 z-10">
+                                            <span className="text-xs font-black uppercase tracking-widest text-orange-400 block">Destaque</span>
+                                            <h3 className="text-2xl md:text-3xl font-black text-white leading-snug drop-shadow-sm">
                                                 {categoriasMosaicoAtual[3].name}
                                             </h3>
                                         </div>
@@ -772,30 +789,34 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 )}
                             </div>
 
+                            {/* LINHA INFERIOR DO MOSAICO: 4 Cards Horizontais (Foto 100% do quadrado) */}
                             {categoriasMosaicoAtual.length > 4 && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                                     {categoriasMosaicoAtual.slice(4, 8).map((cat, idx) => (
                                         <div 
                                             key={`${cat.id}-${idx}`}
                                             onClick={() => selecionarCategoriaMosaico(cat.name)}
-                                            className={`bg-[#eaf4fc] hover:bg-[#dcebfb] rounded-sm p-5 flex items-center justify-between gap-4 cursor-pointer transition-all h-40 group border-2 ${
-                                                categoriaFiltro.toLowerCase() === cat.name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                            className={`relative rounded-2xl overflow-hidden cursor-pointer transition-all h-44 group border-2 bg-slate-100 ${
+                                                categoriaFiltro.toLowerCase() === cat.name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
                                             }`}
                                         >
-                                            <div className="w-28 h-28 flex items-center justify-center shrink-0">
-                                                {cat.imageUrl ? (
-                                                    <img 
-                                                        src={cat.imageUrl} 
-                                                        alt={cat.name} 
-                                                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-sm" 
-                                                    />
-                                                ) : (
-                                                    <Icon name="box" size={44} className="text-blue-300" />
-                                                )}
+                                            {cat.imageUrl ? (
+                                                <img 
+                                                    src={cat.imageUrl} 
+                                                    alt={cat.name} 
+                                                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                                />
+                                            ) : (
+                                                <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                                                    <Icon name="box" size={44} />
+                                                </div>
+                            )}
+                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                            <div className="absolute bottom-3.5 left-4 right-4 z-10">
+                                                <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
+                                                    {cat.name}
+                                                </h3>
                                             </div>
-                                            <h3 className="text-lg font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] text-right leading-snug pr-2">
-                                                {cat.name}
-                                            </h3>
                                         </div>
                                     ))}
                                 </div>
@@ -808,8 +829,8 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     <button
                                         key={i}
                                         onClick={() => setCatSlidePage(i % Math.max(1, totalPaginasMosaico))}
-                                        className={`h-1 rounded-full transition-all cursor-pointer ${
-                                            catSlidePage === (i % Math.max(1, totalPaginasMosaico)) ? 'w-6 bg-[#234794]' : 'w-4 bg-slate-200 hover:bg-slate-400'
+                                        className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                                            catSlidePage === (i % Math.max(1, totalPaginasMosaico)) ? 'w-7 bg-[#234794]' : 'w-4 bg-slate-200 hover:bg-slate-400'
                                         }`}
                                         aria-label={`Página ${i + 1}`}
                                     />
@@ -828,9 +849,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </section>
                 )}
 
-                {/* ========================================================================= */}
                 {/* 6. HERO BANNER PRINCIPAL + BANNER PROMOCIONAL LATERAL COM FOTO PREENCHIDA */}
-                {/* ========================================================================= */}
                 {categoriaFiltro === 'todas' && !busca && (
                     <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                         
@@ -859,7 +878,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 </h3>
                             </div>
 
-                            {/* Imagem ocupando 100% do espaço livre entre o título e o texto de baixo */}
                             <div className="flex-1 w-full min-h-[210px] md:min-h-[250px] rounded-xl overflow-hidden relative shadow-sm bg-slate-200">
                                 <img 
                                     src={fotoBannerSecundario} 
@@ -868,7 +886,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 />
                             </div>
 
-                            {/* Texto explicativo abaixo da imagem + Botão */}
                             <div className="space-y-2.5 z-10 shrink-0 pt-1">
                                 <p className="text-xs md:text-sm text-slate-700 font-bold leading-snug">
                                     {textoBannerSecundario}
@@ -886,9 +903,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </section>
                 )}
 
-                {/* ========================================================================= */}
                 {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES (SÓ EXIBE ITENS COM isPromo === true) */}
-                {/* ========================================================================= */}
                 {(listaCarrosselDestaque.length > 0 || listaCarrosselPromo.length > 0) && categoriaFiltro === 'todas' && !busca && (
                     <section className={`grid grid-cols-1 ${listaCarrosselDestaque.length > 0 && listaCarrosselPromo.length > 0 ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
                         
