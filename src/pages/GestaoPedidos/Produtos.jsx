@@ -4,12 +4,16 @@ import Icon from '../../components/Icon';
 
 export default function Produtos({ user, permissoes }) {
     const [products, setProducts] = useState([]);
+    const [categoriesList, setCategoriesList] = useState([]); // Categorias com foto
     const [produtosDoCusto, setProdutosDoCusto] = useState([]); 
     const [loading, setLoading] = useState(true);
+    
+    // Modais
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isCatModalOpen, setIsCatModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     
-    // Estado do formulário
+    // Estado do formulário de Produto
     const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({
         name: '', sku: '', description: '', category: '', imageUrl: '',
@@ -18,6 +22,9 @@ export default function Produtos({ user, permissoes }) {
         weight: 0, dimensions: { length: 0, width: 0, height: 0 },
         variations: []
     });
+
+    // Estado do formulário de Categoria com Foto
+    const [catForm, setCatForm] = useState({ id: '', name: '', imageUrl: '' });
 
     const [newVarName, setNewVarName] = useState('');
     const [newVarOptions, setNewVarOptions] = useState('');
@@ -28,17 +35,15 @@ export default function Produtos({ user, permissoes }) {
         if (!donoUid) return;
         const fetchData = async () => {
             try {
-                // 1. Busca os Produtos da Vitrine
                 const docRef = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get();
                 if (docRef.exists) {
                     setProducts(docRef.data().products || []);
+                    setCategoriesList(docRef.data().categories || []);
                 }
 
-                // 2. Busca os Custos na coleção CORRETA (ecommerce_products)
                 const recSnap = await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`).get();
                 const custos = recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setProdutosDoCusto(custos);
-
             } catch (error) {
                 console.error("Erro ao buscar dados:", error);
             }
@@ -47,6 +52,86 @@ export default function Produtos({ user, permissoes }) {
         fetchData();
     }, [donoUid]);
 
+    // COMPRESSOR DE IMAGEM INTELIGENTE (Serve para Produto e Categoria)
+    const compressImage = (file, maxWidth = 800, callback) => {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width > height) {
+                    if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+                } else {
+                    if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                callback(canvas.toDataURL('image/webp', 0.75));
+            };
+        };
+    };
+
+    const handleImageUpload = (e) => {
+        compressImage(e.target.files[0], 800, (compressedUrl) => {
+            setFormData(prev => ({ ...prev, imageUrl: compressedUrl }));
+        });
+    };
+
+    const handleCatImageUpload = (e) => {
+        compressImage(e.target.files[0], 600, (compressedUrl) => {
+            setCatForm(prev => ({ ...prev, imageUrl: compressedUrl }));
+        });
+    };
+
+    // ==========================================
+    // GESTÃO DE CATEGORIAS COM FOTO
+    // ==========================================
+    const handleSaveCategory = async (e) => {
+        e.preventDefault();
+        if (!catForm.name.trim()) return;
+        setSaving(true);
+
+        const newCat = {
+            id: catForm.id || crypto.randomUUID(),
+            name: catForm.name.trim(),
+            imageUrl: catForm.imageUrl || ''
+        };
+
+        const updatedCats = catForm.id
+            ? categoriesList.map(c => c.id === catForm.id ? newCat : c)
+            : [...categoriesList, newCat];
+
+        try {
+            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
+                categories: updatedCats
+            }, { merge: true });
+            setCategoriesList(updatedCats);
+            setCatForm({ id: '', name: '', imageUrl: '' });
+        } catch (error) {
+            alert("Erro ao salvar categoria.");
+        }
+        setSaving(false);
+    };
+
+    const handleDeleteCategory = async (id) => {
+        if (!window.confirm("Excluir esta categoria?")) return;
+        const updatedCats = categoriesList.filter(c => c.id !== id);
+        await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
+            categories: updatedCats
+        }, { merge: true });
+        setCategoriesList(updatedCats);
+    };
+
+    // ==========================================
+    // GESTÃO DE PRODUTOS
+    // ==========================================
     const openModal = (product = null) => {
         if (product) {
             setEditingId(product.id);
@@ -61,7 +146,7 @@ export default function Produtos({ user, permissoes }) {
         } else {
             setEditingId(null);
             setFormData({
-                name: '', sku: '', description: '', category: '', imageUrl: '',
+                name: '', sku: '', description: '', category: categoriesList[0]?.name || '', imageUrl: '',
                 price: 0, promoPrice: 0, isPromo: false, isActive: true, destaque: false,
                 weight: 0, dimensions: { length: 0, width: 0, height: 0 }, variations: []
             });
@@ -74,9 +159,7 @@ export default function Produtos({ user, permissoes }) {
     const handleImportarDoCusto = (e) => {
         const idEscolhido = e.target.value;
         if (!idEscolhido) return;
-
         const prodCusto = produtosDoCusto.find(p => p.id === idEscolhido);
-        
         if (prodCusto) {
             setFormData(prev => ({
                 ...prev,
@@ -90,54 +173,6 @@ export default function Produtos({ user, permissoes }) {
                 }
             }));
         }
-    };
-
-    // COMPRESSOR DE IMAGEM INTELIGENTE
-    const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target.result;
-            
-            img.onload = () => {
-                // Define o tamanho máximo padrão para não sobrecarregar o banco
-                const MAX_WIDTH = 800;
-                const MAX_HEIGHT = 800;
-                let width = img.width;
-                let height = img.height;
-
-                // Calcula a nova proporção
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height = Math.round((height * MAX_WIDTH) / width);
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width = Math.round((width * MAX_HEIGHT) / height);
-                        height = MAX_HEIGHT;
-                    }
-                }
-
-                // Desenha a imagem redimensionada num canvas invisível
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // Converte para WEBP comprimido (qualidade 70%)
-                const compressedDataUrl = canvas.toDataURL('image/webp', 0.7);
-                
-                // Salva a imagem comprimida no formulário
-                setFormData(prev => ({ ...prev, imageUrl: compressedDataUrl }));
-            };
-        };
     };
 
     const handleAddVariation = () => {
@@ -175,39 +210,29 @@ export default function Produtos({ user, permissoes }) {
             }
         };
 
-        let updatedProducts;
-        if (editingId) {
-            updatedProducts = products.map(p => p.id === editingId ? newProduct : p);
-        } else {
-            updatedProducts = [...products, newProduct];
-        }
+        const updatedProducts = editingId
+            ? products.map(p => p.id === editingId ? newProduct : p)
+            : [...products, newProduct];
 
         try {
             await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
                 products: updatedProducts
             }, { merge: true });
-            
             setProducts(updatedProducts);
             setIsModalOpen(false);
         } catch (error) {
-            console.error("Erro ao salvar produto:", error);
-            alert("Erro ao salvar. Verifique a consola.");
+            alert("Erro ao salvar.");
         }
         setSaving(false);
     };
 
     const handleDelete = async (id) => {
         if (!window.confirm("Tem a certeza que deseja remover este produto do catálogo?")) return;
-        
         const updatedProducts = products.filter(p => p.id !== id);
-        try {
-            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
-                products: updatedProducts
-            }, { merge: true });
-            setProducts(updatedProducts);
-        } catch (error) {
-            console.error("Erro ao remover:", error);
-        }
+        await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
+            products: updatedProducts
+        }, { merge: true });
+        setProducts(updatedProducts);
     };
 
     const formatMoney = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -216,17 +241,22 @@ export default function Produtos({ user, permissoes }) {
 
     return (
         <div className="h-screen bg-slate-100 flex flex-col font-sans overflow-hidden">
-            <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0">
+            <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center text-white"><Icon name="box" size={20}/></div>
                     <div>
                         <h1 className="font-black text-slate-800 text-lg uppercase tracking-widest leading-none">Meus Produtos</h1>
-                        <span className="text-xs font-bold text-slate-500">Gestão de Catálogo e SKUs</span>
+                        <span className="text-xs font-bold text-slate-500">Gestão de Catálogo, Categorias e SKUs</span>
                     </div>
                 </div>
-                <button onClick={() => openModal()} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-black uppercase text-xs tracking-widest flex items-center gap-2 transition-colors">
-                    <Icon name="plus" size={16}/> Novo Produto
-                </button>
+                <div className="flex items-center gap-3">
+                    <button onClick={() => setIsCatModalOpen(true)} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg font-black uppercase text-xs tracking-widest flex items-center gap-2 transition-colors">
+                        <Icon name="grid" size={16}/> Categorias e Fotos ({categoriesList.length})
+                    </button>
+                    <button onClick={() => openModal()} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-black uppercase text-xs tracking-widest flex items-center gap-2 transition-colors">
+                        <Icon name="plus" size={16}/> Novo Produto
+                    </button>
+                </div>
             </header>
 
             <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
@@ -249,10 +279,10 @@ export default function Produtos({ user, permissoes }) {
                                 products.map(product => (
                                     <tr key={product.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                                         <td className="p-4 flex items-center gap-3">
-                                            <img src={product.imageUrl || 'https://via.placeholder.com/150?text=3D'} alt={product.name} className="w-12 h-12 rounded-lg object-cover border border-slate-200" />
+                                            <img src={product.imageUrl || 'https://via.placeholder.com/150?text=3D'} alt={product.name} className="w-12 h-12 rounded-lg object-cover border border-slate-200 bg-white" />
                                             <div>
                                                 <p className="font-black text-slate-800 text-sm">{product.name}</p>
-                                                {product.destaque && <span className="text-[9px] bg-amber-100 text-amber-700 font-black px-1.5 py-0.5 rounded uppercase mt-1 inline-block">Destaque</span>}
+                                                {product.destaque && <span className="text-[9px] bg-amber-100 text-amber-700 font-black px-1.5 py-0.5 rounded uppercase mt-1 inline-block">Top / Destaque</span>}
                                             </div>
                                         </td>
                                         <td className="p-4">
@@ -286,6 +316,74 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             </main>
 
+            {/* MODAL DE CATEGORIAS COM FOTO (ESTILO MARKETOP) */}
+            {isCatModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+                        <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h3 className="font-black text-slate-800 text-lg uppercase">Categorias da Vitrine</h3>
+                                <p className="text-xs font-bold text-slate-400">Adicione fotos para criar os blocos visuais no topo da loja</p>
+                            </div>
+                            <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-black"><Icon name="x" size={24} /></button>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
+                            <form onSubmit={handleSaveCategory} className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-4 items-center">
+                                <div className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-300 bg-white flex items-center justify-center relative overflow-hidden shrink-0 cursor-pointer group">
+                                    {catForm.imageUrl ? (
+                                        <img src={catForm.imageUrl} alt="Cat" className="w-full h-full object-contain p-1" />
+                                    ) : (
+                                        <div className="text-center">
+                                            <Icon name="camera" size={20} className="text-slate-300 mx-auto group-hover:text-indigo-500"/>
+                                            <span className="text-[8px] font-black uppercase text-slate-400 block">Foto</span>
+                                        </div>
+                                    )}
+                                    <input type="file" accept="image/*" onChange={handleCatImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                </div>
+
+                                <div className="flex-1 w-full space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-slate-500">Nome do Departamento / Categoria</label>
+                                    <input 
+                                        type="text" required value={catForm.name} 
+                                        onChange={e => setCatForm({...catForm, name: e.target.value})} 
+                                        placeholder="Ex: Chaveiros, Displays NFC, Luminárias..."
+                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-indigo-500"
+                                    />
+                                </div>
+
+                                <div className="flex gap-2 w-full md:w-auto mt-auto">
+                                    {catForm.id && (
+                                        <button type="button" onClick={() => setCatForm({ id: '', name: '', imageUrl: '' })} className="px-3 py-2.5 bg-slate-200 text-slate-600 rounded-lg font-black text-xs uppercase">Cancelar</button>
+                                    )}
+                                    <button type="submit" disabled={saving} className="w-full md:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-xs uppercase whitespace-nowrap">
+                                        {catForm.id ? 'Atualizar' : 'Adicionar'}
+                                    </button>
+                                </div>
+                            </form>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {categoriesList.map(cat => (
+                                    <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
+                                                {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-contain p-1" /> : <Icon name="image" size={18} className="text-slate-300" />}
+                                            </div>
+                                            <span className="font-black text-slate-800 text-sm">{cat.name}</span>
+                                        </div>
+                                        <div className="flex gap-1">
+                                            <button onClick={() => setCatForm(cat)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"><Icon name="edit-2" size={15}/></button>
+                                            <button onClick={() => handleDeleteCategory(cat.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Icon name="trash" size={15}/></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE EDIÇÃO DE PRODUTO */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
@@ -295,7 +393,6 @@ export default function Produtos({ user, permissoes }) {
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                            
                             {!editingId && (
                                 <div className="mb-2 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
                                     <label className="text-[10px] font-black uppercase text-emerald-800 block mb-2 flex items-center gap-1">
@@ -319,11 +416,10 @@ export default function Produtos({ user, permissoes }) {
                                 </div>
                             )}
 
-                            {/* ÁREA DE UPLOAD DE IMAGEM */}
                             <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors group cursor-pointer relative overflow-hidden">
                                 {formData.imageUrl ? (
                                     <div className="flex flex-col items-center">
-                                        <img src={formData.imageUrl} alt="Preview" className="h-40 w-auto object-cover rounded-lg shadow-sm border border-slate-200" />
+                                        <img src={formData.imageUrl} alt="Preview" className="h-40 w-auto object-contain rounded-lg shadow-sm border border-slate-200 bg-white p-2" />
                                         <span className="text-[10px] font-black uppercase text-slate-500 mt-3 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm group-hover:text-emerald-500 transition-colors">Alterar Foto</span>
                                     </div>
                                 ) : (
@@ -333,7 +429,7 @@ export default function Produtos({ user, permissoes }) {
                                         <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">A foto será redimensionada e otimizada automaticamente</p>
                                     </div>
                                 )}
-                                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" title="Selecione uma imagem" />
+                                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -348,8 +444,18 @@ export default function Produtos({ user, permissoes }) {
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Categoria *</label>
-                                <input type="text" required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black" placeholder="Ex: Displays, Decoração..." />
+                                <label className="text-[10px] font-black uppercase text-slate-500 ml-1 flex justify-between">
+                                    <span>Categoria *</span>
+                                    <button type="button" onClick={() => setIsCatModalOpen(true)} className="text-indigo-600 hover:underline">+ Gerenciar Categorias com Fotos</button>
+                                </label>
+                                {categoriesList.length > 0 ? (
+                                    <select required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black">
+                                        <option value="">Selecione uma categoria...</option>
+                                        {categoriesList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                    </select>
+                                ) : (
+                                    <input type="text" required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black" placeholder="Ex: Displays, Chaveiros..." />
+                                )}
                             </div>
 
                             <div className="space-y-1">
@@ -371,11 +477,11 @@ export default function Produtos({ user, permissoes }) {
                                 <div className="flex items-center gap-2 md:col-span-2 pt-5">
                                     <label className="flex items-center gap-2 cursor-pointer bg-white p-3 rounded-xl border border-slate-200 flex-1">
                                         <input type="checkbox" checked={formData.isActive} onChange={e => setFormData({...formData, isActive: e.target.checked})} className="w-4 h-4 accent-black" />
-                                        <span className="text-xs font-black uppercase text-slate-700">Produto Ativo</span>
+                                        <span className="text-xs font-black uppercase text-slate-700">Ativo</span>
                                     </label>
                                     <label className="flex items-center gap-2 cursor-pointer bg-white p-3 rounded-xl border border-slate-200 flex-1">
                                         <input type="checkbox" checked={formData.destaque} onChange={e => setFormData({...formData, destaque: e.target.checked})} className="w-4 h-4 accent-amber-500" />
-                                        <span className="text-xs font-black uppercase text-amber-600">Destacar</span>
+                                        <span className="text-xs font-black uppercase text-amber-600">Selo TOP</span>
                                     </label>
                                 </div>
                             </div>
@@ -385,7 +491,7 @@ export default function Produtos({ user, permissoes }) {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Peso (kg)</label>
-                                        <input type="number" step="0.001" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black" placeholder="Ex: 0.150" />
+                                        <input type="number" step="0.001" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black" />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Comprimento (cm)</label>
@@ -404,7 +510,6 @@ export default function Produtos({ user, permissoes }) {
 
                             <div className="p-4 border border-slate-200 rounded-xl space-y-4 bg-slate-50/50">
                                 <h4 className="font-black text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-2"><Icon name="layers" size={16}/> Variações (Cor, Tamanho, Material)</h4>
-                                
                                 {formData.variations.length > 0 && (
                                     <div className="space-y-2 mb-4">
                                         {formData.variations.map((v, idx) => (
@@ -418,7 +523,6 @@ export default function Produtos({ user, permissoes }) {
                                         ))}
                                     </div>
                                 )}
-
                                 <div className="flex flex-col md:flex-row gap-2 items-end bg-white p-4 rounded-xl border border-slate-200">
                                     <div className="w-full md:w-1/3 space-y-1">
                                         <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Tipo (Ex: Cor)</label>
@@ -444,12 +548,6 @@ export default function Produtos({ user, permissoes }) {
                     </div>
                 </div>
             )}
-
-            <style jsx>{`
-                .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
-            `}</style>
         </div>
     );
 }

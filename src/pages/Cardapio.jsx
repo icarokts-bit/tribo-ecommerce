@@ -36,22 +36,31 @@ export default function Cardapio() {
                 const donoUid = docLoja.ref.path.split('/')[3]; 
                 
                 const info = docLoja.data();
-                if (!info.corPrincipal) info.corPrincipal = '#3b82f6';
-                if (!info.templateSelecionado) info.templateSelecionado = 'minimalista';
+                if (!info.corPrincipal) info.corPrincipal = '#234794';
+                if (!info.templateSelecionado) info.templateSelecionado = 'vibrante';
                 setLojaInfo(info);
 
-                // Carrega os produtos do catalog_state (onde a tela Produtos.jsx salva)
                 const catalogDoc = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get();
-                if (catalogDoc.exists && catalogDoc.data().products) {
-                    const ativos = catalogDoc.data().products
+                if (catalogDoc.exists) {
+                    const data = catalogDoc.data();
+                    const ativos = (data.products || [])
                         .filter(p => p.isActive !== false)
                         .map(p => ({ ...p, sellingPrice: p.isPromo ? p.promoPrice : p.price }));
                     
                     setProdutos(ativos);
 
-                    // Extrai as categorias únicas dos produtos cadastrados
-                    const catsUnicas = [...new Set(ativos.map(p => p.category).filter(Boolean))].map(c => ({ id: c, name: c }));
-                    setCategorias(catsUnicas);
+                    // Mescla as categorias com foto salvas com eventuais categorias avulsas dos produtos
+                    const savedCats = data.categories || [];
+                    const prodCatNames = [...new Set(ativos.map(p => p.category).filter(Boolean))];
+                    
+                    const finalCats = [...savedCats];
+                    prodCatNames.forEach(name => {
+                        if (!finalCats.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+                            finalCats.push({ id: name, name: name, imageUrl: '' });
+                        }
+                    });
+
+                    setCategorias(finalCats);
                 }
             } catch (error) { console.error("Erro ao carregar vitrine:", error); }
             setLoading(false);
@@ -63,7 +72,7 @@ export default function Cardapio() {
     if (!lojaInfo) return <div className="text-center p-10"><h1 className="text-2xl font-black">Loja não encontrada</h1></div>;
 
     const estiloDinamico = { '--cor-primaria': lojaInfo.corPrincipal };
-    const ComponenteVisual = TEMPLATES[lojaInfo.templateSelecionado] || TemplateMinimalista;
+    const ComponenteVisual = TEMPLATES[lojaInfo.templateSelecionado] || TemplateVibrante;
 
     return (
         <div style={estiloDinamico} className="w-full min-h-screen">
