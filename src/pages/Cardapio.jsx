@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import Icon from '../components/Icon';
+import { db } from '../../firebase';
+import Icon from '../../components/Icon';
 
 export default function Produtos({ user, permissoes }) {
     const [products, setProducts] = useState([]);
-    const [produtosDoCusto, setProdutosDoCusto] = useState([]); // NOVO: Guarda as fichas técnicas
+    const [produtosDoCusto, setProdutosDoCusto] = useState([]); 
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -35,7 +35,7 @@ export default function Produtos({ user, permissoes }) {
                     setProducts(docRef.data().products || []);
                 }
 
-                // 2. NOVO: Busca os Custos (Fichas Técnicas)
+                // 2. Busca os Custos (Fichas Técnicas)
                 const recSnap = await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/recipes`).get();
                 const custos = recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setProdutosDoCusto(custos);
@@ -72,7 +72,6 @@ export default function Produtos({ user, permissoes }) {
         setIsModalOpen(true);
     };
 
-    // NOVO: Função para preencher o formulário automaticamente
     const handleImportarDoCusto = (e) => {
         const idEscolhido = e.target.value;
         if (!idEscolhido) return;
@@ -84,7 +83,6 @@ export default function Produtos({ user, permissoes }) {
                 ...prev,
                 name: prodCusto.name || '',
                 category: prodCusto.category || prev.category,
-                // Assume o preço sugerido do custo, se existir
                 price: prodCusto.sellingPrice || prodCusto.suggestedPrice || 0
             }));
         }
@@ -247,8 +245,8 @@ export default function Produtos({ user, permissoes }) {
 
                         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                             
-                            {/* NOVO: BLOCO MÁGICO DE IMPORTAÇÃO (Só aparece ao criar um novo) */}
-                            {!editingId && produtosDoCusto.length > 0 && (
+                            {/* BLOCO MÁGICO DE IMPORTAÇÃO (Agora sempre visível ao criar novo) */}
+                            {!editingId && (
                                 <div className="mb-2 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
                                     <label className="text-[10px] font-black uppercase text-emerald-800 block mb-2 flex items-center gap-1">
                                         <Icon name="download" size={14} /> Importar de uma Ficha Técnica (Custo)
@@ -257,7 +255,11 @@ export default function Produtos({ user, permissoes }) {
                                         onChange={handleImportarDoCusto} 
                                         className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none text-slate-700 focus:border-emerald-500 cursor-pointer"
                                     >
-                                        <option value="">Selecione um produto cadastrado no custo...</option>
+                                        <option value="">
+                                            {produtosDoCusto.length > 0 
+                                                ? "Selecione um produto cadastrado no custo..." 
+                                                : "Você ainda não cadastrou nenhuma ficha técnica..."}
+                                        </option>
                                         {produtosDoCusto.map(prod => (
                                             <option key={prod.id} value={prod.id}>
                                                 {prod.name} (Custo base: {formatMoney(prod.totalCost || 0)})
