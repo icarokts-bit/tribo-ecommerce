@@ -26,7 +26,8 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [carrinho, setCarrinho] = useState([]);
     const [copiadoId, setCopiadoId] = useState(null);
 
-    // Estados dos 2 Carrosséis (Destaques e Promoções)
+    // Estados dos Carrosséis (Mosaico de Categorias, Destaques e Promoções)
+    const [catSlidePage, setCatSlidePage] = useState(0);
     const [slideDestaque, setSlideDestaque] = useState(0);
     const [slidePromo, setSlidePromo] = useState(0);
 
@@ -40,7 +41,34 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [loginSenha, setLoginSenha] = useState('');
     const [processandoAuth, setProcessandoAuth] = useState(false);
 
-    // Listas para os Carrosséis Lado a Lado
+    // =====================================================
+    // PREPARAÇÃO DO CARROSSEL MOSAICO DE CATEGORIAS (8 BLOCOS = 7 SLOTS BENTO)
+    // =====================================================
+    const ITEMS_POR_PAGINA_MOSAICO = 7;
+    const totalPaginasMosaico = Math.max(1, Math.ceil(categorias.length / 3));
+
+    const ObterCategoriasDaPagina = (pagina) => {
+        if (categorias.length === 0) return [];
+        const inicio = (pagina * 3) % categorias.length;
+        const resultado = [];
+        const limite = Math.min(ITEMS_POR_PAGINA_MOSAICO, categorias.length);
+        for (let i = 0; i < limite; i++) {
+            resultado.push(categorias[(inicio + i) % categorias.length]);
+        }
+        return resultado;
+    };
+
+    const categoriasMosaicoAtual = ObterCategoriasDaPagina(catSlidePage);
+
+    const proximoSlideCategorias = () => {
+        setCatSlidePage(prev => (prev + 1) % Math.max(1, categorias.length > 3 ? totalPaginasMosaico : 1));
+    };
+
+    const anteriorSlideCategorias = () => {
+        setCatSlidePage(prev => (prev - 1 + Math.max(1, categorias.length > 3 ? totalPaginasMosaico : 1)) % Math.max(1, categorias.length > 3 ? totalPaginasMosaico : 1));
+    };
+
+    // Listas para os Carrosséis de Produtos (Destaques e Promoções)
     const produtosDestaque = produtos.filter(p => p.destaque);
     const listaCarrosselDestaque = produtosDestaque.length > 0 ? produtosDestaque : produtos.slice(0, 5);
 
@@ -121,7 +149,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             const clientId = crypto.randomUUID();
             const agora = new Date().toISOString();
 
-            // Payload compatível com todos os formatos de colunas da aba Clientes do sistema
             const novoCliente = {
                 id: clientId,
                 nome: regNome.trim(),
@@ -326,8 +353,14 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         return matchNome && matchCat;
     });
 
+    const selecionarCategoriaMosaico = (nomeCat) => {
+        setCategoriaFiltro(prev => prev.toLowerCase() === nomeCat.toLowerCase() ? 'todas' : nomeCat);
+        const el = document.getElementById('vitrine');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+    };
+
     return (
-        <div className="bg-[#f8fafc] min-h-screen w-full font-sans text-slate-800 flex flex-col">
+        <div className="bg-white min-h-screen w-full font-sans text-slate-800 flex flex-col">
             
             {/* NOTIFICAÇÃO FLUTUANTE DE LOGIN / AÇÕES */}
             {mensagemTopo && (
@@ -347,7 +380,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </div>
 
-            {/* 2. SUB-TOPBAR UTILITÁRIA (FONTES AUMENTADAS PARA SOBRE NÓS, CATÁLOGO E CONTATO) */}
+            {/* 2. SUB-TOPBAR UTILITÁRIA (SOBRE NÓS, CATÁLOGO E CONTATO GRANDES) */}
             <div className="w-full bg-white border-b border-slate-200 py-3 px-4 md:px-10 xl:px-16">
                 <div className="w-full flex flex-wrap justify-between items-center gap-4">
                     <div className="flex items-center gap-6 text-sm md:text-base font-extrabold text-slate-700">
@@ -377,11 +410,11 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </div>
 
-            {/* 3. HEADER PRINCIPAL (LOGO BEM GRANDE + BUSCA + MENU DIFERENCIADO LOGADO) */}
+            {/* 3. HEADER PRINCIPAL (LOGO GRANDE + BUSCA + MENU CLIENTE) */}
             <header className="w-full bg-white py-5 px-4 md:px-10 xl:px-16 border-b border-slate-200 sticky top-0 z-40 shadow-sm">
                 <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-6">
                     
-                    {/* LOGO AUMENTADA (h-24 w-24 md:h-28 md:w-28) */}
+                    {/* LOGO GRANDE */}
                     <div onClick={() => { setCategoriaFiltro('todas'); setBusca(''); }} className="flex items-center gap-5 cursor-pointer shrink-0">
                         {loja.logoUrl ? (
                             <img 
@@ -476,7 +509,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </a>
                         )}
 
-                        {/* ÁREA DO CLIENTE (MUDA QUANDO ESTÁ LOGADO) */}
                         {clienteLogado ? (
                             <div className="relative">
                                 <button 
@@ -487,7 +519,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                         {(clienteLogado.nome || clienteLogado.name || 'C').charAt(0).toUpperCase()}
                                     </div>
                                     <div className="text-left leading-tight">
-                                        <span className="block text-[10px] font-black uppercase text-emerald-700">Olá, { (clienteLogado.nome || clienteLogado.name).split(' ')[0] }</span>
+                                        <span className="block text-[10px] font-black uppercase text-emerald-700">Olá, {(clienteLogado.nome || clienteLogado.name).split(' ')[0]}</span>
                                         <span className="font-black text-xs text-slate-800 flex items-center gap-1">
                                             Minha Conta <span>▼</span>
                                         </span>
@@ -537,7 +569,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </div>
                         )}
 
-                        {/* Botão do Carrinho */}
                         <button onClick={() => setShowCartModal(true)} className="flex items-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-xl transition-colors">
                             <div className="relative">
                                 <Icon name="shopping-cart" size={24} className="text-slate-800" />
@@ -552,21 +583,21 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </header>
 
-            {/* 4. BARRA DE NAVEGAÇÃO HORIZONTAL (FONTES GRANDES PARA INÍCIO/TODOS, CATEGORIAS E STATUS DO PEDIDO) */}
+            {/* 4. BARRA DE NAVEGAÇÃO HORIZONTAL (ESTILO ALL DEPARTMENTS DO PRINT) */}
             <nav className="w-full bg-white border-b border-slate-200 px-4 md:px-10 xl:px-16 shadow-xs">
                 <div className="w-full flex items-center justify-between py-4 gap-6 overflow-x-auto no-scrollbar">
-                    <div className="flex items-center gap-8 text-sm md:text-base font-extrabold text-slate-700 whitespace-nowrap">
+                    <div className="flex items-center gap-7 text-sm md:text-base font-extrabold text-slate-700 whitespace-nowrap">
                         <button 
                             onClick={() => { setCategoriaFiltro('todas'); setBusca(''); }} 
-                            className={`transition-colors pb-1.5 border-b-3 ${categoriaFiltro === 'todas' ? 'border-orange-500 text-orange-600 font-black' : 'border-transparent hover:text-[var(--cor-primaria)]'}`}
+                            className={`flex items-center gap-2 pr-6 border-r border-slate-200 transition-colors ${categoriaFiltro === 'todas' ? 'text-orange-600 font-black' : 'text-slate-700 hover:text-[var(--cor-primaria)]'}`}
                         >
-                            Início / Todos ({produtos.length})
+                            <Icon name="grid" size={18} /> Todos os Departamentos ({produtos.length})
                         </button>
                         {categorias.map(c => (
                             <button 
                                 key={c.id} 
                                 onClick={() => setCategoriaFiltro(c.name)} 
-                                className={`transition-colors pb-1.5 border-b-3 ${categoriaFiltro.toLowerCase() === c.name.toLowerCase() ? 'border-orange-500 text-orange-600 font-black' : 'border-transparent hover:text-[var(--cor-primaria)]'}`}
+                                className={`transition-colors pb-1 border-b-2 ${categoriaFiltro.toLowerCase() === c.name.toLowerCase() ? 'border-orange-500 text-orange-600 font-black' : 'border-transparent hover:text-[var(--cor-primaria)]'}`}
                             >
                                 {c.name}
                             </button>
@@ -606,10 +637,209 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             {/* CONTEÚDO PRINCIPAL EM TELA INTEIRA */}
             <main className="w-full px-4 md:px-10 xl:px-16 py-8 space-y-12 flex-1">
                 
-                {/* 5. HERO BANNER + BANNER LATERAL */}
+                {/* ========================================================================= */}
+                {/* 5. MENU MOSAICO BENTO GRID COM FOTOS DE CADA CATEGORIA + SETAS CARROSSEL  */}
+                {/* (IDÊNTICO À IMAGEM ENVIADA: TABLETS / MOTHERBOARDS / CONSOLES / ETC.)     */}
+                {/* ========================================================================= */}
+                {categorias.length > 0 && (
+                    <section className="relative py-2">
+                        
+                        {/* Seta Esquerda Flutuante (<) igual à imagem */}
+                        <button 
+                            type="button"
+                            onClick={anteriorSlideCategorias}
+                            title="Categorias Anteriores"
+                            className="flex absolute -left-2 md:-left-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-300 hover:text-slate-700 bg-white/80 hover:bg-white rounded-xl shadow-sm border border-slate-100 transition-all cursor-pointer"
+                        >
+                            <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+
+                        {/* Seta Direita Flutuante (>) igual à imagem */}
+                        <button 
+                            type="button"
+                            onClick={proximoSlideCategorias}
+                            title="Próximas Categorias"
+                            className="flex absolute -right-2 md:-right-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-300 hover:text-slate-700 bg-white/80 hover:bg-white rounded-xl shadow-sm border border-slate-100 transition-all cursor-pointer"
+                        >
+                            <svg className="w-9 h-9" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+
+                        {/* GRADE BENTO DO MOSAICO (PARTE SUPERIOR + PARTE INFERIOR) */}
+                        <div className="space-y-5">
+                            
+                            {/* LINHA SUPERIOR DO MOSAICO: 1 Card Alto (Esq) + 2 Cards Empilhados (Meio) + 1 Card Largo (Dir) */}
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                                
+                                {/* SLOT 0: Card Vertical Grande Esquerdo (Estilo "Tablets") */}
+                                {categoriasMosaicoAtual[0] && (
+                                    <div 
+                                        onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[0].name)}
+                                        className={`md:col-span-3 bg-[#f5f6f8] hover:bg-[#eceef2] rounded-sm p-6 flex flex-col items-center justify-between text-center cursor-pointer transition-all min-h-[340px] group border-2 ${
+                                            categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[0].name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                        }`}
+                                    >
+                                        <h3 className="text-xl font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] tracking-tight mt-1">
+                                            {categoriasMosaicoAtual[0].name}
+                                        </h3>
+                                        <div className="w-full h-60 flex items-center justify-center p-2">
+                                            {categoriasMosaicoAtual[0].imageUrl ? (
+                                                <img 
+                                                    src={categoriasMosaicoAtual[0].imageUrl} 
+                                                    alt={categoriasMosaicoAtual[0].name} 
+                                                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-md" 
+                                                />
+                                            ) : (
+                                                <Icon name="box" size={64} className="text-slate-300" />
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* SLOTS 1 e 2: Coluna Central com 2 Cards Horizontais Azuis Empilhados (Estilo "Motherboards" e "Smartphone Cases") */}
+                                <div className="md:col-span-3 flex flex-col gap-5 justify-between">
+                                    {categoriasMosaicoAtual[1] && (
+                                        <div 
+                                            onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[1].name)}
+                                            className={`flex-1 bg-[#eaf4fc] hover:bg-[#dcebfb] rounded-sm p-5 flex items-center justify-between gap-4 cursor-pointer transition-all min-h-[160px] group border-2 ${
+                                                categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[1].name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                            }`}
+                                        >
+                                            <div className="w-28 h-28 flex items-center justify-center shrink-0">
+                                                {categoriasMosaicoAtual[1].imageUrl ? (
+                                                    <img 
+                                                        src={categoriasMosaicoAtual[1].imageUrl} 
+                                                        alt={categoriasMosaicoAtual[1].name} 
+                                                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-sm" 
+                                                    />
+                                                ) : (
+                                                    <Icon name="box" size={44} className="text-blue-300" />
+                                                )}
+                                            </div>
+                                            <h3 className="text-lg font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] text-right leading-snug">
+                                                {categoriasMosaicoAtual[1].name}
+                                            </h3>
+                                        </div>
+                                    )}
+
+                                    {categoriasMosaicoAtual[2] && (
+                                        <div 
+                                            onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[2].name)}
+                                            className={`flex-1 bg-[#eaf4fc] hover:bg-[#dcebfb] rounded-sm p-5 flex items-center justify-between gap-4 cursor-pointer transition-all min-h-[160px] group border-2 ${
+                                                categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[2].name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                            }`}
+                                        >
+                                            <div className="w-28 h-28 flex items-center justify-center shrink-0">
+                                                {categoriasMosaicoAtual[2].imageUrl ? (
+                                                    <img 
+                                                        src={categoriasMosaicoAtual[2].imageUrl} 
+                                                        alt={categoriasMosaicoAtual[2].name} 
+                                                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-sm" 
+                                                    />
+                                                ) : (
+                                                    <Icon name="box" size={44} className="text-blue-300" />
+                                                )}
+                                            </div>
+                                            <h3 className="text-lg font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] text-right leading-snug">
+                                                {categoriasMosaicoAtual[2].name}
+                                            </h3>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* SLOT 3: Card Largo Direito (Estilo "Consoles & accessories") */}
+                                {categoriasMosaicoAtual[3] && (
+                                    <div 
+                                        onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[3].name)}
+                                        className={`md:col-span-6 bg-[#f5f6f8] hover:bg-[#eceef2] rounded-sm p-8 flex flex-col sm:flex-row items-center justify-between gap-6 cursor-pointer transition-all min-h-[340px] group border-2 ${
+                                            categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[3].name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                        }`}
+                                    >
+                                        <div className="w-full sm:w-3/5 h-64 flex items-center justify-center">
+                                            {categoriasMosaicoAtual[3].imageUrl ? (
+                                                <img 
+                                                    src={categoriasMosaicoAtual[3].imageUrl} 
+                                                    alt={categoriasMosaicoAtual[3].name} 
+                                                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-lg" 
+                                                />
+                                            ) : (
+                                                <Icon name="box" size={80} className="text-slate-300" />
+                                            )}
+                                        </div>
+                                        <div className="w-full sm:w-2/5 text-center sm:text-center">
+                                            <h3 className="text-2xl font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] leading-snug">
+                                                {categoriasMosaicoAtual[3].name}
+                                            </h3>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* LINHA INFERIOR DO MOSAICO: 4 Cards Horizontais Azuis (Estilo "Gaming Mouse", "Smart Speakers", etc.) */}
+                            {categoriasMosaicoAtual.length > 4 && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                                    {categoriasMosaicoAtual.slice(4, 8).map((cat, idx) => (
+                                        <div 
+                                            key={`${cat.id}-${idx}`}
+                                            onClick={() => selecionarCategoriaMosaico(cat.name)}
+                                            className={`bg-[#eaf4fc] hover:bg-[#dcebfb] rounded-sm p-5 flex items-center justify-between gap-4 cursor-pointer transition-all h-40 group border-2 ${
+                                                categoriaFiltro.toLowerCase() === cat.name.toLowerCase() ? 'border-orange-500 shadow-md' : 'border-transparent'
+                                            }`}
+                                        >
+                                            <div className="w-28 h-28 flex items-center justify-center shrink-0">
+                                                {cat.imageUrl ? (
+                                                    <img 
+                                                        src={cat.imageUrl} 
+                                                        alt={cat.name} 
+                                                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-sm" 
+                                                    />
+                                                ) : (
+                                                    <Icon name="box" size={44} className="text-blue-300" />
+                                                )}
+                                            </div>
+                                            <h3 className="text-lg font-bold text-[#556987] group-hover:text-[var(--cor-primaria)] text-right leading-snug pr-2">
+                                                {cat.name}
+                                            </h3>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Paginadores Inferiores (Tracinhos igual ao print) + Botão de Limpar Filtro */}
+                        <div className="flex flex-col items-center justify-center gap-3 mt-6">
+                            <div className="flex items-center gap-2">
+                                {Array.from({ length: Math.max(3, totalPaginasMosaico) }).map((_, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setCatSlidePage(i % Math.max(1, totalPaginasMosaico))}
+                                        className={`h-1 rounded-full transition-all cursor-pointer ${
+                                            catSlidePage === (i % Math.max(1, totalPaginasMosaico)) ? 'w-6 bg-[#234794]' : 'w-4 bg-slate-200 hover:bg-slate-400'
+                                        }`}
+                                        aria-label={`Página ${i + 1}`}
+                                    />
+                                ))}
+                            </div>
+
+                            {categoriaFiltro !== 'todas' && (
+                                <button 
+                                    onClick={() => setCategoriaFiltro('todas')} 
+                                    className="bg-orange-100 text-orange-700 px-4 py-1.5 rounded-full text-xs font-black uppercase hover:bg-orange-200 transition-colors"
+                                >
+                                    ✕ Limpar Filtro de Categoria ({categoriaFiltro})
+                                </button>
+                            )}
+                        </div>
+                    </section>
+                )}
+
+                {/* 6. HERO BANNER + BANNER LATERAL */}
                 {categoriaFiltro === 'todas' && !busca && (
                     <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-[var(--cor-primaria)] text-white relative min-h-[280px] md:min-h-[360px] flex items-center shadow-md">
+                        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-[var(--cor-primaria)] text-white relative min-h-[260px] md:min-h-[320px] flex items-center shadow-md">
                             {loja.bannerUrl && <img src={loja.bannerUrl} alt="Banner" className="absolute inset-0 w-full h-full object-cover opacity-55" />}
                             <div className="relative z-10 p-8 md:p-12 max-w-xl space-y-4">
                                 <span className="bg-orange-500 text-white text-xs font-black uppercase px-3.5 py-1 rounded-full tracking-widest inline-block">Destaque Exclusivo</span>
@@ -621,7 +851,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 </div>
                             </div>
                         </div>
-                        <div className="lg:col-span-4 rounded-2xl overflow-hidden bg-[#eaeff6] border border-slate-200 p-8 flex flex-col justify-between relative min-h-[280px] shadow-sm">
+                        <div className="lg:col-span-4 rounded-2xl overflow-hidden bg-[#eaeff6] border border-slate-200 p-8 flex flex-col justify-between relative min-h-[260px] shadow-sm">
                             <div className="space-y-2 z-10">
                                 <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded">PROJETOS ESPECIAIS</span>
                                 <h3 className="text-2xl font-black text-slate-900 leading-tight pt-1">Personalize com a sua Marca</h3>
@@ -633,62 +863,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     Solicitar Cotação <span>→</span>
                                 </a>
                             </div>
-                        </div>
-                    </section>
-                )}
-
-                {/* 6. MOSAICO DE FOTOS DAS CATEGORIAS (BENTO GRID MARKETOP RESTAURADO) */}
-                {categorias.length > 0 && (
-                    <section className="space-y-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight">Departamentos & Categorias</h2>
-                                <p className="text-xs text-slate-500 font-bold">Clique em uma categoria para filtrar os produtos</p>
-                            </div>
-                            {categoriaFiltro !== 'todas' && (
-                                <button onClick={() => setCategoriaFiltro('todas')} className="bg-orange-100 text-orange-700 px-4 py-2 rounded-xl text-xs font-black uppercase hover:bg-orange-200">
-                                    ✕ Mostrar Todas ({categoriaFiltro})
-                                </button>
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {categorias.map((cat, index) => {
-                                const ativo = categoriaFiltro.toLowerCase() === cat.name.toLowerCase();
-                                const isLargeTall = index === 0 && categorias.length >= 3;
-                                const isLargeWide = index === 2 && categorias.length >= 4;
-
-                                return (
-                                    <div 
-                                        key={cat.id}
-                                        onClick={() => setCategoriaFiltro(ativo ? 'todas' : cat.name)}
-                                        className={`group cursor-pointer rounded-2xl p-6 flex transition-all duration-300 hover:shadow-lg border-2 overflow-hidden relative ${
-                                            ativo ? 'border-orange-500 bg-orange-50/40' : 'border-slate-200/80 hover:border-[var(--cor-primaria)]'
-                                        } ${
-                                            isLargeTall ? 'col-span-2 sm:col-span-1 row-span-2 bg-white flex-col justify-between items-center text-center min-h-[270px]' :
-                                            isLargeWide ? 'col-span-2 bg-white flex-col justify-between items-center text-center min-h-[270px]' :
-                                            'bg-[#eef6ff] hover:bg-[#e2effe] items-center justify-between gap-4 h-36'
-                                        }`}
-                                    >
-                                        <div className="z-10">
-                                            <h3 className={`font-black uppercase tracking-wide transition-colors ${ativo ? 'text-orange-600' : 'text-slate-800 group-hover:text-[var(--cor-primaria)]'} ${isLargeTall || isLargeWide ? 'text-lg md:text-xl' : 'text-sm md:text-base'}`}>
-                                                {cat.name}
-                                            </h3>
-                                            <span className="text-[11px] font-bold text-slate-400 group-hover:text-orange-500">Ver itens →</span>
-                                        </div>
-                                        
-                                        <div className={`flex items-center justify-center overflow-hidden ${isLargeTall || isLargeWide ? 'w-full h-44 my-auto' : 'w-24 h-24 shrink-0'}`}>
-                                            {cat.imageUrl ? (
-                                                <img src={cat.imageUrl} alt={cat.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-xs" />
-                                            ) : (
-                                                <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center text-slate-400 shadow-xs">
-                                                    <Icon name="box" size={28} />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
                         </div>
                     </section>
                 )}
@@ -773,7 +947,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                             )}
                                         </div>
                                         <div className="sm:col-span-7 space-y-3">
-                                            <span className="text-xs font-black uppercase text-rose-600 block">Oferta por Tempo Limitado</span>
+                                            <span className="text-xs font-black uppercase text-rose-600 block">Oferta Especial</span>
                                             <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-tight line-clamp-2">{promoSlide.name}</h3>
                                             <p className="text-xs text-slate-600 font-medium line-clamp-2">{promoSlide.description || 'Aproveite o desconto especial direto da fábrica.'}</p>
                                             <div className="flex items-baseline gap-2.5 pt-1">
@@ -1002,7 +1176,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </footer>
 
-            {/* 12. BOTÃO FLUTUANTE WHATSAPP (PUXANDO TELEFONE DA ABA AJUSTES DO SITE) */}
+            {/* 12. BOTÃO FLUTUANTE WHATSAPP */}
             <a 
                 href={getWppLink(`Olá! Estou no site da ${loja.nomeLoja} e gostaria de atendimento.`)} 
                 target="_blank" 
@@ -1019,7 +1193,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </a>
 
-            {/* 13. MODAL DE LOGIN E CADASTRO INTEGRADO À ABA CLIENTES */}
+            {/* 13. MODAL DE LOGIN E CADASTRO */}
             {authModal.open && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
@@ -1079,7 +1253,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             )}
 
-            {/* 14. MODAL EXCLUSIVO DO CLIENTE LOGADO (MEU CADASTRO E MEUS PEDIDOS) */}
+            {/* 14. MODAL EXCLUSIVO DO CLIENTE LOGADO */}
             {clientAreaModal.open && clienteLogado && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
