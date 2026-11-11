@@ -4,6 +4,7 @@ import Icon from '../../components/Icon';
 
 export default function Produtos({ user, permissoes }) {
     const [products, setProducts] = useState([]);
+    const [produtosDoCusto, setProdutosDoCusto] = useState([]); // NOVO: Guarda as fichas técnicas
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -18,7 +19,7 @@ export default function Produtos({ user, permissoes }) {
         variations: []
     });
 
-    // Estado temporário para adicionar nova variação (Ex: Cor -> Preto, Branco)
+    // Estado temporário para adicionar nova variação
     const [newVarName, setNewVarName] = useState('');
     const [newVarOptions, setNewVarOptions] = useState('');
 
@@ -26,18 +27,25 @@ export default function Produtos({ user, permissoes }) {
 
     useEffect(() => {
         if (!donoUid) return;
-        const fetchProducts = async () => {
+        const fetchData = async () => {
             try {
+                // 1. Busca os Produtos da Vitrine
                 const docRef = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get();
                 if (docRef.exists) {
                     setProducts(docRef.data().products || []);
                 }
+
+                // 2. NOVO: Busca os Custos (Fichas Técnicas)
+                const recSnap = await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/recipes`).get();
+                const custos = recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setProdutosDoCusto(custos);
+
             } catch (error) {
-                console.error("Erro ao buscar produtos:", error);
+                console.error("Erro ao buscar dados:", error);
             }
             setLoading(false);
         };
-        fetchProducts();
+        fetchData();
     }, [donoUid]);
 
     const openModal = (product = null) => {
@@ -62,6 +70,24 @@ export default function Produtos({ user, permissoes }) {
         setNewVarName('');
         setNewVarOptions('');
         setIsModalOpen(true);
+    };
+
+    // NOVO: Função para preencher o formulário automaticamente
+    const handleImportarDoCusto = (e) => {
+        const idEscolhido = e.target.value;
+        if (!idEscolhido) return;
+
+        const prodCusto = produtosDoCusto.find(p => p.id === idEscolhido);
+        
+        if (prodCusto) {
+            setFormData(prev => ({
+                ...prev,
+                name: prodCusto.name || '',
+                category: prodCusto.category || prev.category,
+                // Assume o preço sugerido do custo, se existir
+                price: prodCusto.sellingPrice || prodCusto.suggestedPrice || 0
+            }));
+        }
     };
 
     const handleAddVariation = () => {
@@ -121,7 +147,7 @@ export default function Produtos({ user, permissoes }) {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm("Tem a certeza que deseja remover este modelo 3D do catálogo?")) return;
+        if (!window.confirm("Tem a certeza que deseja remover este produto do catálogo?")) return;
         
         const updatedProducts = products.filter(p => p.id !== id);
         try {
@@ -144,7 +170,7 @@ export default function Produtos({ user, permissoes }) {
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center text-white"><Icon name="box" size={20}/></div>
                     <div>
-                        <h1 className="font-black text-slate-800 text-lg uppercase tracking-widest leading-none">Meus Modelos 3D</h1>
+                        <h1 className="font-black text-slate-800 text-lg uppercase tracking-widest leading-none">Meus Produtos</h1>
                         <span className="text-xs font-bold text-slate-500">Gestão de Catálogo e SKUs</span>
                     </div>
                 </div>
@@ -215,11 +241,35 @@ export default function Produtos({ user, permissoes }) {
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
                         <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
-                            <h3 className="font-black text-slate-800 text-lg">{editingId ? 'Editar Modelo 3D' : 'Novo Modelo 3D'}</h3>
+                            <h3 className="font-black text-slate-800 text-lg">{editingId ? 'Editar Produto' : 'Novo Produto'}</h3>
                             <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-black"><Icon name="x" size={24} /></button>
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                            
+                            {/* NOVO: BLOCO MÁGICO DE IMPORTAÇÃO (Só aparece ao criar um novo) */}
+                            {!editingId && produtosDoCusto.length > 0 && (
+                                <div className="mb-2 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                                    <label className="text-[10px] font-black uppercase text-emerald-800 block mb-2 flex items-center gap-1">
+                                        <Icon name="download" size={14} /> Importar de uma Ficha Técnica (Custo)
+                                    </label>
+                                    <select 
+                                        onChange={handleImportarDoCusto} 
+                                        className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none text-slate-700 focus:border-emerald-500 cursor-pointer"
+                                    >
+                                        <option value="">Selecione um produto cadastrado no custo...</option>
+                                        {produtosDoCusto.map(prod => (
+                                            <option key={prod.id} value={prod.id}>
+                                                {prod.name} (Custo base: {formatMoney(prod.totalCost || 0)})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[9px] text-emerald-600 mt-2 font-bold flex items-center gap-1">
+                                        <Icon name="zap" size={10} /> Preenchimento automático de Nome e Preço.
+                                    </p>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Nome do Produto *</label>
