@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import Icon from '../components/Icon';
+import { db } from '../../firebase';
+import Icon from '../../components/Icon';
 
 const IMAGEM_PADRAO_PROJETOS = "https://images.unsplash.com/photo-1631541909061-71e349d1f203?auto=format&fit=crop&w=600&q=80";
 
