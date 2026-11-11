@@ -44,30 +44,29 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [processandoAuth, setProcessandoAuth] = useState(false);
 
     // =====================================================
-    // PREPARAÇÃO DO CARROSSEL MOSAICO DE CATEGORIAS
+    // PREPARAÇÃO DO CARROSSEL MOSAICO DE CATEGORIAS (SEM DUPLICAR)
     // =====================================================
-    const ITEMS_POR_PAGINA_MOSAICO = 7;
-    const totalPaginasMosaico = Math.max(1, Math.ceil(categorias.length / 3));
+    const ITEMS_POR_PAGINA_MOSAICO = 8; // 4 blocos na linha de cima + 4 blocos na linha de baixo
+    const totalPaginasMosaico = Math.max(1, Math.ceil(categorias.length / ITEMS_POR_PAGINA_MOSAICO));
 
-    const ObterCategoriasDaPagina = (pagina) => {
-        if (categorias.length === 0) return [];
-        const inicio = (pagina * 3) % categorias.length;
-        const resultado = [];
-        const limite = Math.min(ITEMS_POR_PAGINA_MOSAICO, categorias.length);
-        for (let i = 0; i < limite; i++) {
-            resultado.push(categorias[(inicio + i) % categorias.length]);
+    useEffect(() => {
+        if (catSlidePage >= totalPaginasMosaico) {
+            setCatSlidePage(0);
         }
-        return resultado;
-    };
+    }, [categorias.length, totalPaginasMosaico, catSlidePage]);
 
-    const categoriasMosaicoAtual = ObterCategoriasDaPagina(catSlidePage);
+    // Fatia exata da página atual sem repetir itens da página anterior
+    const inicioSlice = catSlidePage * ITEMS_POR_PAGINA_MOSAICO;
+    const categoriasMosaicoAtual = categorias.slice(inicioSlice, inicioSlice + ITEMS_POR_PAGINA_MOSAICO);
 
     const proximoSlideCategorias = () => {
-        setCatSlidePage(prev => (prev + 1) % Math.max(1, categorias.length > 3 ? totalPaginasMosaico : 1));
+        if (totalPaginasMosaico <= 1) return;
+        setCatSlidePage(prev => (prev + 1) % totalPaginasMosaico);
     };
 
     const anteriorSlideCategorias = () => {
-        setCatSlidePage(prev => (prev - 1 + Math.max(1, categorias.length > 3 ? totalPaginasMosaico : 1)) % Math.max(1, categorias.length > 3 ? totalPaginasMosaico : 1));
+        if (totalPaginasMosaico <= 1) return;
+        setCatSlidePage(prev => (prev - 1 + totalPaginasMosaico) % totalPaginasMosaico);
     };
 
     // =====================================================
@@ -644,36 +643,42 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             <main className="w-full px-4 md:px-10 xl:px-16 py-8 space-y-12 flex-1">
                 
                 {/* ========================================================================= */}
-                {/* 5. MENU MOSAICO BENTO GRID COM FOTOS OCUPANDO 100% DO QUADRADO + SETAS    */}
+                {/* 5. MENU MOSAICO BENTO GRID SEM DUPLICAR CATEGORIAS ENTRE AS PÁGINAS       */}
                 {/* ========================================================================= */}
                 {categorias.length > 0 && (
                     <section className="relative py-2">
-                        <button 
-                            type="button"
-                            onClick={anteriorSlideCategorias}
-                            title="Categorias Anteriores"
-                            className="flex absolute -left-2 md:-left-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-500 hover:text-slate-900 bg-white/90 hover:bg-white rounded-xl shadow-md border border-slate-200 transition-all cursor-pointer"
-                        >
-                            <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                            </svg>
-                        </button>
+                        
+                        {/* Setas Laterais: Só aparecem quando a 1ª página encher (mais de 8 categorias) */}
+                        {totalPaginasMosaico > 1 && (
+                            <>
+                                <button 
+                                    type="button"
+                                    onClick={anteriorSlideCategorias}
+                                    title="Página Anterior de Categorias"
+                                    className="flex absolute -left-2 md:-left-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-500 hover:text-slate-900 bg-white/90 hover:bg-white rounded-xl shadow-md border border-slate-200 transition-all cursor-pointer"
+                                >
+                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
 
-                        <button 
-                            type="button"
-                            onClick={proximoSlideCategorias}
-                            title="Próximas Categorias"
-                            className="flex absolute -right-2 md:-right-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-500 hover:text-slate-900 bg-white/90 hover:bg-white rounded-xl shadow-md border border-slate-200 transition-all cursor-pointer"
-                        >
-                            <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                            </svg>
-                        </button>
+                                <button 
+                                    type="button"
+                                    onClick={proximoSlideCategorias}
+                                    title="Próxima Página de Categorias"
+                                    className="flex absolute -right-2 md:-right-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-500 hover:text-slate-900 bg-white/90 hover:bg-white rounded-xl shadow-md border border-slate-200 transition-all cursor-pointer"
+                                >
+                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
+                            </>
+                        )}
 
                         <div className="space-y-5">
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
                                 
-                                {/* SLOT 0: Card Vertical Grande Esquerdo (Foto 100% do quadrado) */}
+                                {/* SLOT 0: Card Vertical Grande Esquerdo */}
                                 {categoriasMosaicoAtual[0] && (
                                     <div 
                                         onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[0].name)}
@@ -702,64 +707,66 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     </div>
                                 )}
 
-                                {/* SLOTS 1 e 2: Coluna Central com 2 Cards Empilhados (Foto 100% do quadrado) */}
-                                <div className="md:col-span-3 flex flex-col gap-5 justify-between">
-                                    {categoriasMosaicoAtual[1] && (
-                                        <div 
-                                            onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[1].name)}
-                                            className={`flex-1 relative rounded-2xl overflow-hidden cursor-pointer transition-all min-h-[160px] group border-2 bg-slate-100 ${
-                                                categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[1].name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
-                                            }`}
-                                        >
-                                            {categoriasMosaicoAtual[1].imageUrl ? (
-                                                <img 
-                                                    src={categoriasMosaicoAtual[1].imageUrl} 
-                                                    alt={categoriasMosaicoAtual[1].name} 
-                                                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                                                />
-                                            ) : (
-                                                <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-                                                    <Icon name="box" size={44} />
+                                {/* SLOTS 1 e 2: Coluna Central com 2 Cards Empilhados */}
+                                {(categoriasMosaicoAtual[1] || categoriasMosaicoAtual[2]) && (
+                                    <div className="md:col-span-3 flex flex-col gap-5 justify-between">
+                                        {categoriasMosaicoAtual[1] && (
+                                            <div 
+                                                onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[1].name)}
+                                                className={`flex-1 relative rounded-2xl overflow-hidden cursor-pointer transition-all min-h-[160px] group border-2 bg-slate-100 ${
+                                                    categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[1].name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
+                                                }`}
+                                            >
+                                                {categoriasMosaicoAtual[1].imageUrl ? (
+                                                    <img 
+                                                        src={categoriasMosaicoAtual[1].imageUrl} 
+                                                        alt={categoriasMosaicoAtual[1].name} 
+                                                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                                    />
+                                                ) : (
+                                                    <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                                                        <Icon name="box" size={44} />
+                                                    </div>
+                                                )}
+                                                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                                <div className="absolute bottom-3.5 left-4 right-4 z-10">
+                                                    <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
+                                                        {categoriasMosaicoAtual[1].name}
+                                                    </h3>
                                                 </div>
-                                            )}
-                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
-                                            <div className="absolute bottom-3.5 left-4 right-4 z-10">
-                                                <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
-                                                    {categoriasMosaicoAtual[1].name}
-                                                </h3>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
 
-                                    {categoriasMosaicoAtual[2] && (
-                                        <div 
-                                            onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[2].name)}
-                                            className={`flex-1 relative rounded-2xl overflow-hidden cursor-pointer transition-all min-h-[160px] group border-2 bg-slate-100 ${
-                                                categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[2].name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
-                                            }`}
-                                        >
-                                            {categoriasMosaicoAtual[2].imageUrl ? (
-                                                <img 
-                                                    src={categoriasMosaicoAtual[2].imageUrl} 
-                                                    alt={categoriasMosaicoAtual[2].name} 
-                                                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                                                />
-                                            ) : (
-                                                <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-                                                    <Icon name="box" size={44} />
+                                        {categoriasMosaicoAtual[2] && (
+                                            <div 
+                                                onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[2].name)}
+                                                className={`flex-1 relative rounded-2xl overflow-hidden cursor-pointer transition-all min-h-[160px] group border-2 bg-slate-100 ${
+                                                    categoriaFiltro.toLowerCase() === categoriasMosaicoAtual[2].name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
+                                                }`}
+                                            >
+                                                {categoriasMosaicoAtual[2].imageUrl ? (
+                                                    <img 
+                                                        src={categoriasMosaicoAtual[2].imageUrl} 
+                                                        alt={categoriasMosaicoAtual[2].name} 
+                                                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                                    />
+                                                ) : (
+                                                    <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                                                        <Icon name="box" size={44} />
+                                                    </div>
+                                                )}
+                                                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                                <div className="absolute bottom-3.5 left-4 right-4 z-10">
+                                                    <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
+                                                        {categoriasMosaicoAtual[2].name}
+                                                    </h3>
                                                 </div>
-                                            )}
-                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
-                                            <div className="absolute bottom-3.5 left-4 right-4 z-10">
-                                                <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
-                                                    {categoriasMosaicoAtual[2].name}
-                                                </h3>
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
+                                        )}
+                                    </div>
+                                )}
 
-                                {/* SLOT 3: Card Largo Direito (Foto 100% do quadrado) */}
+                                {/* SLOT 3: Card Largo Direito */}
                                 {categoriasMosaicoAtual[3] && (
                                     <div 
                                         onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[3].name)}
@@ -789,12 +796,12 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 )}
                             </div>
 
-                            {/* LINHA INFERIOR DO MOSAICO: 4 Cards Horizontais (Foto 100% do quadrado) */}
+                            {/* LINHA INFERIOR DO MOSAICO: Até 4 Cards Horizontais (Slots 4, 5, 6 e 7) */}
                             {categoriasMosaicoAtual.length > 4 && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                                    {categoriasMosaicoAtual.slice(4, 8).map((cat, idx) => (
+                                    {categoriasMosaicoAtual.slice(4, 8).map((cat) => (
                                         <div 
-                                            key={`${cat.id}-${idx}`}
+                                            key={cat.id}
                                             onClick={() => selecionarCategoriaMosaico(cat.name)}
                                             className={`relative rounded-2xl overflow-hidden cursor-pointer transition-all h-44 group border-2 bg-slate-100 ${
                                                 categoriaFiltro.toLowerCase() === cat.name.toLowerCase() ? 'border-orange-500 shadow-lg' : 'border-slate-200/80'
@@ -810,7 +817,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 <div className="absolute inset-0 flex items-center justify-center text-slate-300">
                                                     <Icon name="box" size={44} />
                                                 </div>
-                            )}
+                                            )}
                                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
                                             <div className="absolute bottom-3.5 left-4 right-4 z-10">
                                                 <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
@@ -823,19 +830,22 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             )}
                         </div>
 
+                        {/* Paginadores Inferiores (Só aparecem quando há mais de 1 página) + Limpar Filtro */}
                         <div className="flex flex-col items-center justify-center gap-3 mt-6">
-                            <div className="flex items-center gap-2">
-                                {Array.from({ length: Math.max(3, totalPaginasMosaico) }).map((_, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => setCatSlidePage(i % Math.max(1, totalPaginasMosaico))}
-                                        className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                                            catSlidePage === (i % Math.max(1, totalPaginasMosaico)) ? 'w-7 bg-[#234794]' : 'w-4 bg-slate-200 hover:bg-slate-400'
-                                        }`}
-                                        aria-label={`Página ${i + 1}`}
-                                    />
-                                ))}
-                            </div>
+                            {totalPaginasMosaico > 1 && (
+                                <div className="flex items-center gap-2">
+                                    {Array.from({ length: totalPaginasMosaico }).map((_, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => setCatSlidePage(i)}
+                                            className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                                                catSlidePage === i ? 'w-7 bg-[#234794]' : 'w-4 bg-slate-200 hover:bg-slate-400'
+                                            }`}
+                                            aria-label={`Página ${i + 1}`}
+                                        />
+                                    ))}
+                                </div>
+                            )}
 
                             {categoriaFiltro !== 'todas' && (
                                 <button 
@@ -849,7 +859,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </section>
                 )}
 
-                {/* 6. HERO BANNER PRINCIPAL + BANNER PROMOCIONAL LATERAL COM FOTO PREENCHIDA */}
+                {/* 6. HERO BANNER PRINCIPAL + BANNER PROMOCIONAL LATERAL */}
                 {categoriaFiltro === 'todas' && !busca && (
                     <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                         
@@ -867,7 +877,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </div>
                         </div>
 
-                        {/* Banner Lateral Configurável (4 colunas) - Imagem ocupando todo o espaço central */}
+                        {/* Banner Lateral Configurável (4 colunas) */}
                         <div className="lg:col-span-4 rounded-2xl overflow-hidden bg-[#eaeff6] border border-slate-200 p-6 flex flex-col gap-3 relative min-h-[380px] md:min-h-[440px] shadow-sm">
                             <div className="space-y-1 z-10 shrink-0">
                                 <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded inline-block">
@@ -903,7 +913,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </section>
                 )}
 
-                {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES (SÓ EXIBE ITENS COM isPromo === true) */}
+                {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES */}
                 {(listaCarrosselDestaque.length > 0 || listaCarrosselPromo.length > 0) && categoriaFiltro === 'todas' && !busca && (
                     <section className={`grid grid-cols-1 ${listaCarrosselDestaque.length > 0 && listaCarrosselPromo.length > 0 ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
                         
