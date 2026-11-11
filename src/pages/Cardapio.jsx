@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
+import { db } from '../firebase';
 import Icon from '../components/Icon';
 
 export default function Produtos({ user, permissoes }) {
