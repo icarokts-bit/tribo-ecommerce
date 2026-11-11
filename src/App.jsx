@@ -29,7 +29,7 @@ import Produtos from './pages/GestaoPedidos/Produtos';
 import CustosProdutos from './pages/GestaoPedidos/CustosProdutos';
 import Estoque from './pages/GestaoPedidos/Estoque';
 import HistoricoPedidos from './pages/GestaoPedidos/HistoricoPedidos';
-import ClientesDelivery from './pages/GestaoPedidos/ClientesDelivery';
+import ClientesDelivery from './pages/GestaoPedidos/Clientes';
 import Fidelidade from './pages/GestaoPedidos/Fidelidade';
 import AjustesImpressao from './pages/GestaoPedidos/AjustesImpressao';
 
