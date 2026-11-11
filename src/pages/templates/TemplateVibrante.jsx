@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Icon from '../../components/Icon';
 import { db } from '../../firebase';
 
+// Imagem padrão bonita caso o lojista ainda não tenha enviado foto no Banner Secundário
+const IMAGEM_PADRAO_BANNER_SECUNDARIO = "https://images.unsplash.com/photo-1631541909061-71e349d1f203?auto=format&fit=crop&w=600&q=80";
+
 export default function TemplateVibrante({ loja, produtos, categorias, donoUid }) {
     const uidLoja = donoUid || loja?.donoUid || loja?.uid;
 
@@ -42,7 +45,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [processandoAuth, setProcessandoAuth] = useState(false);
 
     // =====================================================
-    // PREPARAÇÃO DO CARROSSEL MOSAICO DE CATEGORIAS (8 BLOCOS = 7 SLOTS BENTO)
+    // PREPARAÇÃO DO CARROSSEL MOSAICO DE CATEGORIAS
     // =====================================================
     const ITEMS_POR_PAGINA_MOSAICO = 7;
     const totalPaginasMosaico = Math.max(1, Math.ceil(categorias.length / 3));
@@ -68,12 +71,21 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         setCatSlidePage(prev => (prev - 1 + Math.max(1, categorias.length > 3 ? totalPaginasMosaico : 1)) % Math.max(1, categorias.length > 3 ? totalPaginasMosaico : 1));
     };
 
-    // Listas para os Carrosséis de Produtos (Destaques e Promoções)
-    const produtosDestaque = produtos.filter(p => p.destaque);
+    // =====================================================
+    // FILTROS DOS CARROSSÉIS DE DESTAQUES E PROMOÇÕES (ESTRITO PARA PROMOÇÃO)
+    // =====================================================
+    const produtosDestaque = produtos.filter(p => p.destaque === true);
     const listaCarrosselDestaque = produtosDestaque.length > 0 ? produtosDestaque : produtos.slice(0, 5);
 
-    const produtosPromocao = produtos.filter(p => p.isPromo);
-    const listaCarrosselPromo = produtosPromocao.length > 0 ? produtosPromocao : produtos.slice(0, 5);
+    // SOMENTE produtos marcados com isPromo === true no cadastro aparecem no Carrossel de Promoções
+    const listaCarrosselPromo = produtos.filter(p => p.isPromo === true);
+
+    // Dados dinâmicos do Banner Secundário (antigo Totem Vertical)
+    const fotoBannerSecundario = loja?.bannerSecundarioUrl || loja?.totemUrl || IMAGEM_PADRAO_BANNER_SECUNDARIO;
+    const tagBannerSecundario = loja?.bannerSecundarioTag || 'PROJETOS ESPECIAIS';
+    const tituloBannerSecundario = loja?.bannerSecundarioTitulo || 'Personalize com a sua Marca';
+    const textoBannerSecundario = loja?.bannerSecundarioTexto || 'Displays NFC, chaveiros corporativos e peças exclusivas feitas sob medida.';
+    const botaoBannerSecundario = loja?.bannerSecundarioBotao || 'Solicitar Cotação';
 
     // Recupera sessão salva do cliente no navegador
     useEffect(() => {
@@ -380,7 +392,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </div>
 
-            {/* 2. SUB-TOPBAR UTILITÁRIA (SOBRE NÓS, CATÁLOGO E CONTATO GRANDES) */}
+            {/* 2. SUB-TOPBAR UTILITÁRIA */}
             <div className="w-full bg-white border-b border-slate-200 py-3 px-4 md:px-10 xl:px-16">
                 <div className="w-full flex flex-wrap justify-between items-center gap-4">
                     <div className="flex items-center gap-6 text-sm md:text-base font-extrabold text-slate-700">
@@ -410,7 +422,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </div>
 
-            {/* 3. HEADER PRINCIPAL (LOGO GRANDE + BUSCA + MENU CLIENTE) */}
+            {/* 3. HEADER PRINCIPAL */}
             <header className="w-full bg-white py-5 px-4 md:px-10 xl:px-16 border-b border-slate-200 sticky top-0 z-40 shadow-sm">
                 <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-6">
                     
@@ -583,7 +595,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </header>
 
-            {/* 4. BARRA DE NAVEGAÇÃO HORIZONTAL (ESTILO ALL DEPARTMENTS DO PRINT) */}
+            {/* 4. BARRA DE NAVEGAÇÃO HORIZONTAL */}
             <nav className="w-full bg-white border-b border-slate-200 px-4 md:px-10 xl:px-16 shadow-xs">
                 <div className="w-full flex items-center justify-between py-4 gap-6 overflow-x-auto no-scrollbar">
                     <div className="flex items-center gap-7 text-sm md:text-base font-extrabold text-slate-700 whitespace-nowrap">
@@ -637,14 +649,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             {/* CONTEÚDO PRINCIPAL EM TELA INTEIRA */}
             <main className="w-full px-4 md:px-10 xl:px-16 py-8 space-y-12 flex-1">
                 
-                {/* ========================================================================= */}
-                {/* 5. MENU MOSAICO BENTO GRID COM FOTOS DE CADA CATEGORIA + SETAS CARROSSEL  */}
-                {/* (IDÊNTICO À IMAGEM ENVIADA: TABLETS / MOTHERBOARDS / CONSOLES / ETC.)     */}
-                {/* ========================================================================= */}
+                {/* 5. MENU MOSAICO BENTO GRID COM FOTOS DE CADA CATEGORIA + SETAS CARROSSEL */}
                 {categorias.length > 0 && (
                     <section className="relative py-2">
-                        
-                        {/* Seta Esquerda Flutuante (<) igual à imagem */}
                         <button 
                             type="button"
                             onClick={anteriorSlideCategorias}
@@ -656,7 +663,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </svg>
                         </button>
 
-                        {/* Seta Direita Flutuante (>) igual à imagem */}
                         <button 
                             type="button"
                             onClick={proximoSlideCategorias}
@@ -668,13 +674,8 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </svg>
                         </button>
 
-                        {/* GRADE BENTO DO MOSAICO (PARTE SUPERIOR + PARTE INFERIOR) */}
                         <div className="space-y-5">
-                            
-                            {/* LINHA SUPERIOR DO MOSAICO: 1 Card Alto (Esq) + 2 Cards Empilhados (Meio) + 1 Card Largo (Dir) */}
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-                                
-                                {/* SLOT 0: Card Vertical Grande Esquerdo (Estilo "Tablets") */}
                                 {categoriasMosaicoAtual[0] && (
                                     <div 
                                         onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[0].name)}
@@ -699,7 +700,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     </div>
                                 )}
 
-                                {/* SLOTS 1 e 2: Coluna Central com 2 Cards Horizontais Azuis Empilhados (Estilo "Motherboards" e "Smartphone Cases") */}
                                 <div className="md:col-span-3 flex flex-col gap-5 justify-between">
                                     {categoriasMosaicoAtual[1] && (
                                         <div 
@@ -750,7 +750,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     )}
                                 </div>
 
-                                {/* SLOT 3: Card Largo Direito (Estilo "Consoles & accessories") */}
                                 {categoriasMosaicoAtual[3] && (
                                     <div 
                                         onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[3].name)}
@@ -778,7 +777,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 )}
                             </div>
 
-                            {/* LINHA INFERIOR DO MOSAICO: 4 Cards Horizontais Azuis (Estilo "Gaming Mouse", "Smart Speakers", etc.) */}
                             {categoriasMosaicoAtual.length > 4 && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                                     {categoriasMosaicoAtual.slice(4, 8).map((cat, idx) => (
@@ -809,7 +807,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             )}
                         </div>
 
-                        {/* Paginadores Inferiores (Tracinhos igual ao print) + Botão de Limpar Filtro */}
                         <div className="flex flex-col items-center justify-center gap-3 mt-6">
                             <div className="flex items-center gap-2">
                                 {Array.from({ length: Math.max(3, totalPaginasMosaico) }).map((_, i) => (
@@ -836,10 +833,14 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </section>
                 )}
 
-                {/* 6. HERO BANNER + BANNER LATERAL */}
+                {/* ========================================================================= */}
+                {/* 6. HERO BANNER PRINCIPAL + BANNER PROMOCIONAL LATERAL COM FOTO E TEXTO    */}
+                {/* ========================================================================= */}
                 {categoriaFiltro === 'todas' && !busca && (
                     <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-[var(--cor-primaria)] text-white relative min-h-[260px] md:min-h-[320px] flex items-center shadow-md">
+                        
+                        {/* Banner Horizontal Principal (8 colunas) */}
+                        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-[var(--cor-primaria)] text-white relative min-h-[300px] md:min-h-[360px] flex items-center shadow-md">
                             {loja.bannerUrl && <img src={loja.bannerUrl} alt="Banner" className="absolute inset-0 w-full h-full object-cover opacity-55" />}
                             <div className="relative z-10 p-8 md:p-12 max-w-xl space-y-4">
                                 <span className="bg-orange-500 text-white text-xs font-black uppercase px-3.5 py-1 rounded-full tracking-widest inline-block">Destaque Exclusivo</span>
@@ -851,25 +852,50 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 </div>
                             </div>
                         </div>
-                        <div className="lg:col-span-4 rounded-2xl overflow-hidden bg-[#eaeff6] border border-slate-200 p-8 flex flex-col justify-between relative min-h-[260px] shadow-sm">
-                            <div className="space-y-2 z-10">
-                                <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded">PROJETOS ESPECIAIS</span>
-                                <h3 className="text-2xl font-black text-slate-900 leading-tight pt-1">Personalize com a sua Marca</h3>
-                                <p className="text-xs md:text-sm text-slate-600 font-medium">Displays NFC, chaveiros corporativos e peças exclusivas.</p>
+
+                        {/* Banner Lateral Configurável (4 colunas) - Com Imagem Centralizada e Texto Abaixo */}
+                        <div className="lg:col-span-4 rounded-2xl overflow-hidden bg-[#eaeff6] border border-slate-200 p-6 md:p-7 flex flex-col justify-between relative min-h-[300px] md:min-h-[360px] shadow-sm">
+                            <div className="space-y-1.5 z-10">
+                                <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded inline-block">
+                                    {tagBannerSecundario}
+                                </span>
+                                <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-tight pt-1">
+                                    {tituloBannerSecundario}
+                                </h3>
                             </div>
-                            {loja.totemUrl && <img src={loja.totemUrl} alt="Promo" className="w-36 h-36 object-contain self-end my-2 drop-shadow-md" />}
-                            <div className="z-10 pt-4">
-                                <a href={getWppLink(`Olá! Quero cotar um projeto personalizado na ${loja.nomeLoja}.`)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-slate-900 hover:bg-black text-white text-xs font-black uppercase px-5 py-3.5 rounded-xl transition-colors">
-                                    Solicitar Cotação <span>→</span>
+
+                            {/* Imagem em Destaque no Espaço Central */}
+                            <div className="my-3 w-full h-40 md:h-44 rounded-xl bg-white/80 border border-white overflow-hidden flex items-center justify-center p-2 shadow-inner">
+                                <img 
+                                    src={fotoBannerSecundario} 
+                                    alt={tituloBannerSecundario} 
+                                    className="w-full h-full object-cover rounded-lg hover:scale-105 transition-transform duration-300" 
+                                />
+                            </div>
+
+                            {/* Texto explicativo abaixo da imagem + Botão */}
+                            <div className="space-y-3 z-10">
+                                <p className="text-xs md:text-sm text-slate-700 font-bold leading-snug">
+                                    {textoBannerSecundario}
+                                </p>
+                                <a 
+                                    href={getWppLink(`Olá! Quero saber mais sobre: ${tituloBannerSecundario} (${loja.nomeLoja}).`)} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white text-xs font-black uppercase px-5 py-3 rounded-xl transition-colors w-full sm:w-auto shadow-sm"
+                                >
+                                    {botaoBannerSecundario} <span>→</span>
                                 </a>
                             </div>
                         </div>
                     </section>
                 )}
 
-                {/* 7. CARROSSEL DUPLO LADO A LADO: DESTAQUES (ESQUERDA) + PROMOÇÕES (DIREITA) */}
+                {/* ========================================================================= */}
+                {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES (SÓ EXIBE ITENS COM isPromo === true) */}
+                {/* ========================================================================= */}
                 {(listaCarrosselDestaque.length > 0 || listaCarrosselPromo.length > 0) && categoriaFiltro === 'todas' && !busca && (
-                    <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <section className={`grid grid-cols-1 ${listaCarrosselDestaque.length > 0 && listaCarrosselPromo.length > 0 ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
                         
                         {/* CARROSSEL 1: PRODUTOS EM DESTAQUE */}
                         {listaCarrosselDestaque.length > 0 && (() => {
@@ -917,12 +943,12 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             );
                         })()}
 
-                        {/* CARROSSEL 2: OFERTAS & PROMOÇÕES */}
+                        {/* CARROSSEL 2: OFERTAS & PROMOÇÕES (SÓ APARECE SE EXISTIR PRODUTO COM isPromo === true) */}
                         {listaCarrosselPromo.length > 0 && (() => {
                             const promoSlide = listaCarrosselPromo[slidePromo] || listaCarrosselPromo[0];
-                            const descPerc = promoSlide.isPromo && promoSlide.price > 0
-                                ? Math.round(((promoSlide.price - promoSlide.promoPrice) / promoSlide.price) * 100)
-                                : 15;
+                            const descPerc = promoSlide.price > 0 && promoSlide.promoPrice > 0
+                                ? Math.max(1, Math.round(((promoSlide.price - promoSlide.promoPrice) / promoSlide.price) * 100))
+                                : 10;
                             return (
                                 <div className="bg-white rounded-2xl border border-rose-200 shadow-sm overflow-hidden flex flex-col justify-between">
                                     <div className="bg-rose-600 text-white px-5 py-3.5 flex items-center justify-between">
@@ -947,14 +973,12 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                             )}
                                         </div>
                                         <div className="sm:col-span-7 space-y-3">
-                                            <span className="text-xs font-black uppercase text-rose-600 block">Oferta Especial</span>
+                                            <span className="text-xs font-black uppercase text-rose-600 block">Em Promoção</span>
                                             <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-tight line-clamp-2">{promoSlide.name}</h3>
-                                            <p className="text-xs text-slate-600 font-medium line-clamp-2">{promoSlide.description || 'Aproveite o desconto especial direto da fábrica.'}</p>
+                                            <p className="text-xs text-slate-600 font-medium line-clamp-2">{promoSlide.description || 'Aproveite o preço promocional por tempo limitado.'}</p>
                                             <div className="flex items-baseline gap-2.5 pt-1">
-                                                <span className="text-2xl font-black text-rose-600">{formatMoney(promoSlide.sellingPrice)}</span>
-                                                {promoSlide.price > promoSlide.sellingPrice && (
-                                                    <span className="text-xs text-slate-400 line-through font-bold">{formatMoney(promoSlide.price)}</span>
-                                                )}
+                                                <span className="text-2xl font-black text-rose-600">{formatMoney(promoSlide.promoPrice || promoSlide.sellingPrice)}</span>
+                                                <span className="text-xs text-slate-400 line-through font-bold">{formatMoney(promoSlide.price)}</span>
                                             </div>
                                             <div className="flex flex-wrap items-center gap-2 pt-2">
                                                 <button onClick={() => handleComprarDireto(promoSlide)} className="bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm transition-colors">Aproveitar Oferta</button>
