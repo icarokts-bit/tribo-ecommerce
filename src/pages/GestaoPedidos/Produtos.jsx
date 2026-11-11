@@ -4,12 +4,11 @@ import Icon from '../../components/Icon';
 
 export default function Produtos({ user, permissoes }) {
     const [products, setProducts] = useState([]);
-    const [produtosDoCusto, setProdutosDoCusto] = useState([]); // NOVO: Guarda as fichas técnicas
+    const [produtosDoCusto, setProdutosDoCusto] = useState([]); 
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     
-    // Estado do formulário
     const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({
         name: '', sku: '', description: '', category: '', imageUrl: '',
@@ -19,7 +18,6 @@ export default function Produtos({ user, permissoes }) {
         variations: []
     });
 
-    // Estado temporário para adicionar nova variação
     const [newVarName, setNewVarName] = useState('');
     const [newVarOptions, setNewVarOptions] = useState('');
 
@@ -29,17 +27,14 @@ export default function Produtos({ user, permissoes }) {
         if (!donoUid) return;
         const fetchData = async () => {
             try {
-                // 1. Busca os Produtos da Vitrine
                 const docRef = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get();
                 if (docRef.exists) {
                     setProducts(docRef.data().products || []);
                 }
 
-                // 2. NOVO: Busca os Custos (Fichas Técnicas)
                 const recSnap = await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/recipes`).get();
                 const custos = recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setProdutosDoCusto(custos);
-
             } catch (error) {
                 console.error("Erro ao buscar dados:", error);
             }
@@ -72,19 +67,16 @@ export default function Produtos({ user, permissoes }) {
         setIsModalOpen(true);
     };
 
-    // NOVO: Função para preencher o formulário automaticamente
     const handleImportarDoCusto = (e) => {
         const idEscolhido = e.target.value;
         if (!idEscolhido) return;
 
         const prodCusto = produtosDoCusto.find(p => p.id === idEscolhido);
-        
         if (prodCusto) {
             setFormData(prev => ({
                 ...prev,
                 name: prodCusto.name || '',
                 category: prodCusto.category || prev.category,
-                // Assume o preço sugerido do custo, se existir
                 price: prodCusto.sellingPrice || prodCusto.suggestedPrice || 0
             }));
         }
@@ -125,12 +117,9 @@ export default function Produtos({ user, permissoes }) {
             }
         };
 
-        let updatedProducts;
-        if (editingId) {
-            updatedProducts = products.map(p => p.id === editingId ? newProduct : p);
-        } else {
-            updatedProducts = [...products, newProduct];
-        }
+        const updatedProducts = editingId 
+            ? products.map(p => p.id === editingId ? newProduct : p)
+            : [...products, newProduct];
 
         try {
             await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
@@ -148,7 +137,6 @@ export default function Produtos({ user, permissoes }) {
 
     const handleDelete = async (id) => {
         if (!window.confirm("Tem a certeza que deseja remover este produto do catálogo?")) return;
-        
         const updatedProducts = products.filter(p => p.id !== id);
         try {
             await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
@@ -236,7 +224,6 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             </main>
 
-            {/* MODAL DE EDIÇÃO */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
@@ -246,9 +233,7 @@ export default function Produtos({ user, permissoes }) {
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                            
-                            {/* NOVO: BLOCO MÁGICO DE IMPORTAÇÃO (Só aparece ao criar um novo) */}
-                            {!editingId && produtosDoCusto.length > 0 && (
+                            {!editingId && (
                                 <div className="mb-2 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
                                     <label className="text-[10px] font-black uppercase text-emerald-800 block mb-2 flex items-center gap-1">
                                         <Icon name="download" size={14} /> Importar de uma Ficha Técnica (Custo)
@@ -257,7 +242,11 @@ export default function Produtos({ user, permissoes }) {
                                         onChange={handleImportarDoCusto} 
                                         className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none text-slate-700 focus:border-emerald-500 cursor-pointer"
                                     >
-                                        <option value="">Selecione um produto cadastrado no custo...</option>
+                                        <option value="">
+                                            {produtosDoCusto.length > 0 
+                                                ? "Selecione um produto cadastrado no custo..." 
+                                                : "Você ainda não cadastrou nenhuma ficha técnica..."}
+                                        </option>
                                         {produtosDoCusto.map(prod => (
                                             <option key={prod.id} value={prod.id}>
                                                 {prod.name} (Custo base: {formatMoney(prod.totalCost || 0)})
@@ -344,7 +333,6 @@ export default function Produtos({ user, permissoes }) {
 
                             <div className="p-4 border border-slate-200 rounded-xl space-y-4 bg-slate-50/50">
                                 <h4 className="font-black text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-2"><Icon name="layers" size={16}/> Variações (Cor, Tamanho, Material)</h4>
-                                
                                 {formData.variations.length > 0 && (
                                     <div className="space-y-2 mb-4">
                                         {formData.variations.map((v, idx) => (
@@ -358,7 +346,6 @@ export default function Produtos({ user, permissoes }) {
                                         ))}
                                     </div>
                                 )}
-
                                 <div className="flex flex-col md:flex-row gap-2 items-end bg-white p-4 rounded-xl border border-slate-200">
                                     <div className="w-full md:w-1/3 space-y-1">
                                         <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Tipo (Ex: Cor)</label>
@@ -384,12 +371,6 @@ export default function Produtos({ user, permissoes }) {
                     </div>
                 </div>
             )}
-
-            <style jsx>{`
-                .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
-            `}</style>
         </div>
     );
 }
