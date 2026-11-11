@@ -80,9 +80,9 @@ export default function Produtos({ user, permissoes }) {
         if (prodCusto) {
             setFormData(prev => ({
                 ...prev,
-                name: prodCusto.nome || '', // Mapeia 'nome'
-                price: prodCusto.precoVenda || 0, // Mapeia 'precoVenda'
-                weight: prodCusto.peso || 0, // Mapeia peso
+                name: prodCusto.nome || '',
+                price: prodCusto.precoVenda || 0,
+                weight: prodCusto.peso || 0,
                 dimensions: {
                     length: prodCusto.comprimento || 0,
                     width: prodCusto.largura || 0,
@@ -90,6 +90,54 @@ export default function Produtos({ user, permissoes }) {
                 }
             }));
         }
+    };
+
+    // COMPRESSOR DE IMAGEM INTELIGENTE
+    const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            
+            img.onload = () => {
+                // Define o tamanho máximo padrão para não sobrecarregar o banco
+                const MAX_WIDTH = 800;
+                const MAX_HEIGHT = 800;
+                let width = img.width;
+                let height = img.height;
+
+                // Calcula a nova proporção
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height = Math.round((height * MAX_WIDTH) / width);
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width = Math.round((width * MAX_HEIGHT) / height);
+                        height = MAX_HEIGHT;
+                    }
+                }
+
+                // Desenha a imagem redimensionada num canvas invisível
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Converte para WEBP comprimido (qualidade 70%)
+                const compressedDataUrl = canvas.toDataURL('image/webp', 0.7);
+                
+                // Salva a imagem comprimida no formulário
+                setFormData(prev => ({ ...prev, imageUrl: compressedDataUrl }));
+            };
+        };
     };
 
     const handleAddVariation = () => {
@@ -238,7 +286,6 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             </main>
 
-            {/* MODAL DE EDIÇÃO */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
@@ -249,7 +296,6 @@ export default function Produtos({ user, permissoes }) {
 
                         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                             
-                            {/* BLOCO MÁGICO DE IMPORTAÇÃO (Usando a coleção certa) */}
                             {!editingId && (
                                 <div className="mb-2 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
                                     <label className="text-[10px] font-black uppercase text-emerald-800 block mb-2 flex items-center gap-1">
@@ -270,11 +316,25 @@ export default function Produtos({ user, permissoes }) {
                                             </option>
                                         ))}
                                     </select>
-                                    <p className="text-[9px] text-emerald-600 mt-2 font-bold flex items-center gap-1">
-                                        <Icon name="zap" size={10} /> Preenchimento automático de Nome, Preço e Logística.
-                                    </p>
                                 </div>
                             )}
+
+                            {/* ÁREA DE UPLOAD DE IMAGEM */}
+                            <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors group cursor-pointer relative overflow-hidden">
+                                {formData.imageUrl ? (
+                                    <div className="flex flex-col items-center">
+                                        <img src={formData.imageUrl} alt="Preview" className="h-40 w-auto object-cover rounded-lg shadow-sm border border-slate-200" />
+                                        <span className="text-[10px] font-black uppercase text-slate-500 mt-3 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm group-hover:text-emerald-500 transition-colors">Alterar Foto</span>
+                                    </div>
+                                ) : (
+                                    <div className="text-center p-4">
+                                        <Icon name="camera" size={36} className="text-slate-300 mx-auto mb-3 group-hover:text-emerald-500 transition-colors" />
+                                        <span className="text-xs font-black uppercase text-slate-500">Clique para selecionar foto do produto</span>
+                                        <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">A foto será redimensionada e otimizada automaticamente</p>
+                                    </div>
+                                )}
+                                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" title="Selecione uma imagem" />
+                            </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1">
@@ -287,15 +347,9 @@ export default function Produtos({ user, permissoes }) {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Categoria *</label>
-                                    <input type="text" required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black" placeholder="Ex: Displays, Decoração..." />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black uppercase text-slate-500 ml-1">URL da Imagem</label>
-                                    <input type="text" value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black" placeholder="https://link-da-foto.com/foto.jpg" />
-                                </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Categoria *</label>
+                                <input type="text" required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black" placeholder="Ex: Displays, Decoração..." />
                             </div>
 
                             <div className="space-y-1">
