@@ -4,7 +4,7 @@ import Icon from '../../components/Icon';
 
 export default function Produtos({ user, permissoes }) {
     const [products, setProducts] = useState([]);
-    const [categoriesList, setCategoriesList] = useState([]); // Categorias com foto
+    const [categoriesList, setCategoriesList] = useState([]);
     const [produtosDoCusto, setProdutosDoCusto] = useState([]); 
     const [loading, setLoading] = useState(true);
     
@@ -316,14 +316,14 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             </main>
 
-            {/* MODAL DE CATEGORIAS COM FOTO (ESTILO MARKETOP) */}
+            {/* MODAL DE CATEGORIAS COM FOTO */}
             {isCatModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
                         <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                             <div>
                                 <h3 className="font-black text-slate-800 text-lg uppercase">Categorias da Vitrine</h3>
-                                <p className="text-xs font-bold text-slate-400">Adicione fotos para criar os blocos visuais no topo da loja</p>
+                                <p className="text-xs font-bold text-slate-400">Adicione fotos para criar o mosaico visual no topo da loja</p>
                             </div>
                             <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-black"><Icon name="x" size={24} /></button>
                         </div>
@@ -367,7 +367,7 @@ export default function Produtos({ user, permissoes }) {
                                     <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
                                         <div className="flex items-center gap-3">
                                             <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
-                                                {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-contain p-1" /> : <Icon name="image" size={18} className="text-slate-300" />}
+                                                {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-contain p-1" alt={cat.name} /> : <Icon name="image" size={18} className="text-slate-300" />}
                                             </div>
                                             <span className="font-black text-slate-800 text-sm">{cat.name}</span>
                                         </div>
@@ -548,6 +548,12 @@ export default function Produtos({ user, permissoes }) {
                     </div>
                 </div>
             )}
+
+            <style jsx>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+            `}</style>
         </div>
     );
 }

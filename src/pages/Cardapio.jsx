@@ -23,6 +23,7 @@ export default function Cardapio() {
     const [produtos, setProdutos] = useState([]);
     const [categorias, setCategorias] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [donoUidGlobal, setDonoUidGlobal] = useState(null);
 
     useEffect(() => {
         if (!slug) return;
@@ -34,11 +35,12 @@ export default function Cardapio() {
 
                 const docLoja = profilesSnap.docs[0];
                 const donoUid = docLoja.ref.path.split('/')[3]; 
+                setDonoUidGlobal(donoUid);
                 
                 const info = docLoja.data();
-                if (!info.corPrincipal) info.corPrincipal = '#234794';
+                if (!info.corPrincipal) info.corPrincipal = '#3b82f6';
                 if (!info.templateSelecionado) info.templateSelecionado = 'vibrante';
-                setLojaInfo(info);
+                setLojaInfo({ ...info, donoUid });
 
                 const catalogDoc = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get();
                 if (catalogDoc.exists) {
@@ -49,7 +51,6 @@ export default function Cardapio() {
                     
                     setProdutos(ativos);
 
-                    // Mescla as categorias com foto salvas com eventuais categorias avulsas dos produtos
                     const savedCats = data.categories || [];
                     const prodCatNames = [...new Set(ativos.map(p => p.category).filter(Boolean))];
                     
@@ -59,10 +60,11 @@ export default function Cardapio() {
                             finalCats.push({ id: name, name: name, imageUrl: '' });
                         }
                     });
-
                     setCategorias(finalCats);
                 }
-            } catch (error) { console.error("Erro ao carregar vitrine:", error); }
+            } catch (error) {
+                console.error("Erro ao carregar vitrine:", error);
+            }
             setLoading(false);
         };
         carregarDados();
@@ -76,7 +78,7 @@ export default function Cardapio() {
 
     return (
         <div style={estiloDinamico} className="w-full min-h-screen">
-            <ComponenteVisual loja={lojaInfo} produtos={produtos} categorias={categorias} />
+            <ComponenteVisual loja={lojaInfo} produtos={produtos} categorias={categorias} donoUid={donoUidGlobal} />
         </div>
     );
 }
