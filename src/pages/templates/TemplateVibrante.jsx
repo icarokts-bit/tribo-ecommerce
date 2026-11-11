@@ -1,167 +1,417 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Icon from '../../components/Icon';
 
 export default function TemplateVibrante({ loja, produtos, categorias }) {
-    const [showLogin, setShowLogin] = useState(false);
+    // Estados de Modais (Login / Cadastro / Carrinho)
+    const [authModal, setAuthModal] = useState({ open: false, mode: 'login' }); // 'login' | 'register'
+    const [showCartModal, setShowCartModal] = useState(false);
+    const [deptOpen, setDeptOpen] = useState(false);
+
+    // Estados de Filtro e Busca
     const [busca, setBusca] = useState('');
     const [categoriaFiltro, setCategoriaFiltro] = useState('todas');
 
-    const wppNumber = loja?.whatsapp ? String(loja.whatsapp).replace(/\D/g, '') : '';
-    const wppLink = wppNumber ? `https://wa.me/55${wppNumber}?text=Olá! Vim pelo site da ${loja.nomeLoja} e gostaria de tirar uma dúvida.` : '#';
+    // Estados de Interação do Cliente (Favoritos, Carrinho, Carrossel)
+    const [favoritos, setFavoritos] = useState([]);
+    const [carrinho, setCarrinho] = useState([]);
+    const [slideAtual, setSlideAtual] = useState(0);
+    const [copiadoId, setCopiadoId] = useState(null);
+
+    // Produtos marcados como "Destaque" no painel
+    const produtosDestaque = produtos.filter(p => p.destaque);
+    const listaCarrossel = produtosDestaque.length > 0 ? produtosDestaque : produtos.slice(0, 4);
+
+    // Rotação automática do carrossel de destaques
+    useEffect(() => {
+        if (listaCarrossel.length <= 1) return;
+        const timer = setInterval(() => {
+            setSlideAtual(prev => (prev + 1) % listaCarrossel.length);
+        }, 5000);
+        return () => clearInterval(timer);
+    }, [listaCarrossel.length]);
+
+    // Tratamento seguro do WhatsApp
+    const wppLimpo = loja?.whatsapp ? String(loja.whatsapp).replace(/\D/g, '') : '';
+    const getWppLink = (msg) => {
+        const texto = encodeURIComponent(msg);
+        return wppLimpo 
+            ? `https://wa.me/55${wppLimpo}?text=${texto}` 
+            : `https://api.whatsapp.com/send?text=${texto}`;
+    };
+
+    // Funções de Favoritos, Compartilhar e Comprar
+    const toggleFavorito = (id) => {
+        setFavoritos(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+    };
+
+    const handleCompartilhar = async (produto) => {
+        const urlLoja = window.location.href;
+        const shareData = {
+            title: `${produto.name} - ${loja.nomeLoja}`,
+            text: `Confira ${produto.name} por ${formatMoney(produto.sellingPrice)} na ${loja.nomeLoja}!`,
+            url: urlLoja
+        };
+
+        if (navigator.share) {
+            try { await navigator.share(shareData); } catch (err) {}
+        } else {
+            navigator.clipboard.writeText(`${shareData.text} ${urlLoja}`);
+            setCopiadoId(produto.id);
+            setTimeout(() => setCopiadoId(null), 2000);
+        }
+    };
+
+    const adicionarAoCarrinho = (produto) => {
+        setCarrinho(prev => {
+            const existe = prev.find(item => item.id === produto.id);
+            if (existe) {
+                return prev.map(item => item.id === produto.id ? { ...item, qtd: item.qtd + 1 } : item);
+            }
+            return [...prev, { ...produto, qtd: 1 }];
+        });
+    };
+
+    const handleComprarDireto = (produto) => {
+        const msg = `Olá! Quero comprar agora o produto *${produto.name}* (${formatMoney(produto.sellingPrice)}) que vi no site da ${loja.nomeLoja}.`;
+        window.open(getWppLink(msg), '_blank');
+    };
+
+    const totalCarrinho = carrinho.reduce((acc, item) => acc + (Number(item.sellingPrice || 0) * item.qtd), 0);
+    const qtdTotalCarrinho = carrinho.reduce((acc, item) => acc + item.qtd, 0);
 
     const produtosFiltrados = produtos.filter(p => {
         const matchNome = p.name?.toLowerCase().includes(busca.toLowerCase());
-        const matchCat = categoriaFiltro === 'todas' || p.category?.toLowerCase() === categoriaFiltro.toLowerCase();
+        const matchCat = categoriaFiltro === 'todas' || 
+                         (categoriaFiltro === 'favoritos' ? favoritos.includes(p.id) : p.category?.toLowerCase() === categoriaFiltro.toLowerCase());
         return matchNome && matchCat;
     });
 
     const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
     return (
-        <div className="bg-white min-h-screen font-sans text-slate-800 pb-20">
+        <div className="bg-[#f8fafc] min-h-screen w-full font-sans text-slate-800 flex flex-col">
             
-            {/* 1. TOPBAR UTILITÁRIA FINA */}
-            <div className="border-b border-slate-100 bg-white text-[11px] text-slate-500 py-2 px-4">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div className="flex items-center gap-5 font-medium">
-                        <button onClick={() => setShowLogin(true)} className="hover:text-[var(--cor-primaria)] flex items-center gap-1.5 transition-colors">
-                            <Icon name="map-pin" size={13} className="text-orange-500" /> Rastrear Pedido
+            {/* 1. FAIXA PROMOCIONAL LARANJA DE TOPO (ESTILO MAGICMART) */}
+            <div className="w-full bg-orange-500 text-white text-[11px] font-bold py-2 px-4 md:px-10 xl:px-16">
+                <div className="w-full flex flex-wrap justify-between items-center gap-2">
+                    <span className="flex items-center gap-1.5">
+                        ✓ Envio rápido e seguro para todo o Brasil
+                    </span>
+                    <span className="hidden md:inline">
+                        ✓ Peças personalizadas com acabamento premium direto da fábrica
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                        ✓ Atendimento rápido e suporte dedicado
+                    </span>
+                </div>
+            </div>
+
+            {/* 2. SUB-TOPBAR UTILITÁRIA */}
+            <div className="w-full bg-white border-b border-slate-100 text-xs text-slate-500 py-2 px-4 md:px-10 xl:px-16">
+                <div className="w-full flex justify-between items-center">
+                    <div className="flex items-center gap-4 font-semibold">
+                        <a href="#rodape" className="hover:text-[var(--cor-primaria)]">Sobre Nós</a>
+                        <span>|</span>
+                        <a href="#vitrine" className="hover:text-[var(--cor-primaria)]">Catálogo</a>
+                        <span>|</span>
+                        <a href="#rodape" className="hover:text-[var(--cor-primaria)]">Contato</a>
+                    </div>
+                    <div className="hidden sm:flex items-center gap-1 font-bold text-slate-700">
+                        <span>Avaliação dos Clientes 5 de 5:</span>
+                        <span className="text-orange-400">★★★★★</span>
+                    </div>
+                    <div className="flex items-center gap-3 font-bold">
+                        <button onClick={() => { setAuthModal({ open: true, mode: 'register' }); }} className="text-orange-600 hover:underline">
+                            Criar Conta Grátis
                         </button>
-                        {loja.mostrarEndereco && loja.endereco && (
-                            <span className="hidden md:inline text-slate-400">| {loja.endereco}</span>
-                        )}
-                    </div>
-                    <div className="hidden sm:block text-slate-500 font-medium">
-                        Confira os lançamentos e peças exclusivas. <a href="#vitrine" className="text-blue-600 font-bold hover:underline">Comprar agora</a>
-                    </div>
-                    <div className="flex items-center gap-4 font-bold text-slate-600">
-                        {wppNumber && (
-                            <a href={wppLink} target="_blank" rel="noreferrer" className="hover:text-emerald-600 flex items-center gap-1">
-                                <Icon name="message-circle" size={13} className="text-emerald-500"/> Suporte WhatsApp
-                            </a>
-                        )}
                     </div>
                 </div>
             </div>
 
-            {/* 2. HEADER PRINCIPAL (ESTILO MARKETOP) */}
-            <header className="bg-[var(--cor-primaria)] text-white py-5 px-4 shadow-sm sticky top-0 z-40">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* 3. HEADER PRINCIPAL (LOGO GRANDE + BUSCA + TELEFONE + LOGIN/CADASTRO + CARRINHO) */}
+            <header className="w-full bg-white py-4 px-4 md:px-10 xl:px-16 border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+                <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-5">
                     
-                    {/* Logo + Nome */}
-                    <div onClick={() => setCategoriaFiltro('todas')} className="flex items-center gap-3 cursor-pointer shrink-0">
+                    {/* LOGO BEM MAIOR E VISÍVEL */}
+                    <div 
+                        onClick={() => { setCategoriaFiltro('todas'); setBusca(''); }} 
+                        className="flex items-center gap-4 cursor-pointer shrink-0"
+                    >
                         {loja.logoUrl ? (
-                            <img src={loja.logoUrl} className="w-11 h-11 rounded-xl object-cover bg-white p-0.5 shadow-sm" alt="Logo" />
+                            <img 
+                                src={loja.logoUrl} 
+                                className="h-16 w-16 md:h-20 md:w-20 rounded-2xl object-contain bg-white border-2 border-slate-100 p-1 shadow-md" 
+                                alt={loja.nomeLoja} 
+                            />
                         ) : (
-                            <div className="w-11 h-11 rounded-xl bg-orange-500 flex items-center justify-center text-white font-black text-xl shadow-sm">
-                                <Icon name="shopping-cart" size={22} />
+                            <div className="h-16 w-16 md:h-20 md:w-20 rounded-2xl bg-[var(--cor-primaria)] flex items-center justify-center text-white font-black text-2xl shadow-md">
+                                <Icon name="shopping-cart" size={32} />
                             </div>
                         )}
-                        <span className="font-black text-2xl tracking-tight">{loja.nomeLoja}</span>
-                    </div>
-
-                    {/* Barra de Busca Integrada com Seletor de Categorias */}
-                    <div className="flex-1 max-w-2xl w-full flex bg-white rounded-lg overflow-hidden shadow-inner border border-white/20">
-                        <input 
-                            type="text" 
-                            value={busca}
-                            onChange={e => setBusca(e.target.value)}
-                            placeholder="Buscar produtos na loja..." 
-                            className="flex-1 px-4 py-2.5 text-sm text-slate-700 font-medium outline-none"
-                        />
-                        <select 
-                            value={categoriaFiltro}
-                            onChange={e => setCategoriaFiltro(e.target.value)}
-                            className="hidden sm:block bg-slate-50 border-l border-slate-200 px-3 text-xs font-bold text-slate-600 outline-none cursor-pointer"
-                        >
-                            <option value="todas">Todas as categorias</option>
-                            {categorias.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                        </select>
-                        <button className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2.5 font-bold text-xs uppercase tracking-wider transition-colors">
-                            Buscar
-                        </button>
-                    </div>
-
-                    {/* Botões de Conta, Favoritos e Carrinho */}
-                    <div className="flex items-center gap-2.5 shrink-0">
-                        <button onClick={() => setShowLogin(true)} className="flex items-center gap-2.5 bg-white/10 hover:bg-white/20 border border-white/15 px-3.5 py-2 rounded-lg transition-colors text-left">
-                            <Icon name="user" size={18} />
-                            <div className="leading-none">
-                                <span className="block text-[9px] opacity-75">Entrar</span>
-                                <span className="font-bold text-xs">Minha Conta</span>
-                            </div>
-                        </button>
-
-                        <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 px-3.5 py-2.5 rounded-lg transition-colors" title="Meus Pedidos">
-                            <Icon name="package" size={18} />
-                            <span className="hidden lg:inline font-bold text-xs">Pedidos</span>
-                        </button>
-
-                        <button className="relative bg-white/10 hover:bg-white/20 border border-white/15 p-2.5 rounded-lg transition-colors">
-                            <Icon name="shopping-cart" size={18} />
-                            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow">
-                                0
+                        <div>
+                            <h1 className="font-black text-2xl md:text-3xl text-slate-900 tracking-tight leading-none uppercase">
+                                {loja.nomeLoja}
+                            </h1>
+                            <span className="text-[11px] font-black uppercase tracking-widest text-orange-500 block mt-1">
+                                Loja Oficial Online
                             </span>
+                        </div>
+                    </div>
+
+                    {/* BOTÃO DE DEPARTAMENTOS + BARRA DE BUSCA (ESTILO MAGICMART) */}
+                    <div className="flex-1 w-full max-w-3xl flex flex-col sm:flex-row items-stretch gap-2 relative">
+                        
+                        {/* Dropdown Todos os Departamentos Funcional */}
+                        <div className="relative">
+                            <button 
+                                type="button"
+                                onClick={() => setDeptOpen(!deptOpen)}
+                                className="h-full w-full sm:w-56 bg-[#3b5998] hover:bg-slate-800 text-white px-4 py-3 rounded-lg font-bold text-xs uppercase flex items-center justify-between gap-2 transition-colors shadow-sm"
+                                style={{ backgroundColor: 'var(--cor-primaria)' }}
+                            >
+                                <span className="flex items-center gap-2 truncate">
+                                    <Icon name="list" size={16} />
+                                    {categoriaFiltro === 'todas' ? 'Departamentos' : categoriaFiltro}
+                                </span>
+                                <span className="text-[10px]">▼</span>
+                            </button>
+
+                            {deptOpen && (
+                                <div className="absolute left-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-2xl py-2 z-50">
+                                    <button 
+                                        onClick={() => { setCategoriaFiltro('todas'); setDeptOpen(false); }}
+                                        className={`w-full text-left px-4 py-2.5 text-xs font-black uppercase hover:bg-slate-50 flex items-center justify-between ${categoriaFiltro === 'todas' ? 'text-orange-500 bg-orange-50/50' : 'text-slate-700'}`}
+                                    >
+                                        <span>Todos os Produtos</span>
+                                        <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full">{produtos.length}</span>
+                                    </button>
+                                    {categorias.map(c => (
+                                        <button 
+                                            key={c.id}
+                                            onClick={() => { setCategoriaFiltro(c.name); setDeptOpen(false); }}
+                                            className={`w-full text-left px-4 py-2.5 text-xs font-bold hover:bg-slate-50 flex items-center justify-between border-t border-slate-50 ${categoriaFiltro === c.name ? 'text-orange-500 bg-orange-50/50 font-black' : 'text-slate-600'}`}
+                                        >
+                                            <span>{c.name}</span>
+                                            <span>›</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Input de Busca */}
+                        <div className="flex-1 flex bg-white border-2 border-slate-200 focus-within:border-[var(--cor-primaria)] rounded-lg overflow-hidden">
+                            <input 
+                                type="text" 
+                                value={busca}
+                                onChange={e => setBusca(e.target.value)}
+                                placeholder="Buscar produtos, modelos, chaveiros..." 
+                                className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 outline-none"
+                            />
+                            {busca && (
+                                <button onClick={() => setBusca('')} className="px-2 text-slate-400 hover:text-slate-600">✕</button>
+                            )}
+                            <button className="px-4 text-slate-500 hover:text-[var(--cor-primaria)]">
+                                <Icon name="search" size={18} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* CONTATO + LOGIN/CADASTRO + CARRINHO */}
+                    <div className="flex items-center gap-5 shrink-0">
+                        
+                        {/* Precisa de Ajuda? */}
+                        {loja.whatsapp && (
+                            <a 
+                                href={getWppLink(`Olá! Preciso de ajuda na loja ${loja.nomeLoja}.`)} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="hidden xl:flex items-center gap-2.5 border-r border-slate-200 pr-5 hover:opacity-80"
+                            >
+                                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-[var(--cor-primaria)]">
+                                    <Icon name="phone" size={18} />
+                                </div>
+                                <div className="leading-tight">
+                                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Precisa de Ajuda?</span>
+                                    <span className="font-black text-xs text-slate-800">{loja.whatsapp}</span>
+                                </div>
+                            </a>
+                        )}
+
+                        {/* Botão de Login e Cadastro */}
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-700">
+                                <Icon name="user" size={20} />
+                            </div>
+                            <div className="leading-tight text-left">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase">Minha Conta</span>
+                                <div className="text-xs font-black text-slate-800 flex items-center gap-1">
+                                    <button onClick={() => setAuthModal({ open: true, mode: 'login' })} className="hover:text-orange-500">Entrar</button>
+                                    <span>/</span>
+                                    <button onClick={() => setAuthModal({ open: true, mode: 'register' })} className="text-orange-500 hover:underline">Cadastrar</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Botão do Carrinho com Valor Total */}
+                        <button 
+                            onClick={() => setShowCartModal(true)}
+                            className="flex items-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3.5 py-2 rounded-xl transition-colors"
+                        >
+                            <div className="relative">
+                                <Icon name="shopping-cart" size={22} className="text-slate-800" />
+                                <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow">
+                                    {qtdTotalCarrinho}
+                                </span>
+                            </div>
+                            <div className="text-left leading-tight hidden sm:block">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase">Carrinho</span>
+                                <span className="font-black text-xs text-slate-900">{formatMoney(totalCarrinho)}</span>
+                            </div>
                         </button>
                     </div>
                 </div>
             </header>
 
-            {/* 3. SUB-BARRA DE NAVEGAÇÃO POR DEPARTAMENTOS */}
-            <nav className="border-b border-slate-200 bg-white px-4">
-                <div className="max-w-7xl mx-auto flex items-center gap-6 overflow-x-auto no-scrollbar py-3 text-xs font-bold text-slate-600">
-                    <button 
-                        onClick={() => setCategoriaFiltro('todas')} 
-                        className={`flex items-center gap-2 pr-4 border-r border-slate-200 whitespace-nowrap ${categoriaFiltro === 'todas' ? 'text-[var(--cor-primaria)] font-black' : 'hover:text-slate-900'}`}
-                    >
-                        <Icon name="grid" size={15} /> Todos os Departamentos
-                    </button>
-                    {categorias.map(c => (
+            {/* 4. BARRA DE NAVEGAÇÃO HORIZONTAL (TODOS OS DEPARTAMENTOS FUNCIONANDO + FAVORITOS + PEDIDOS) */}
+            <nav className="w-full bg-white border-b border-slate-200 px-4 md:px-10 xl:px-16 shadow-xs">
+                <div className="w-full flex items-center justify-between py-3 gap-4 overflow-x-auto no-scrollbar">
+                    <div className="flex items-center gap-6 text-xs font-bold text-slate-700 whitespace-nowrap">
                         <button 
-                            key={c.id} 
-                            onClick={() => setCategoriaFiltro(c.name)}
-                            className={`whitespace-nowrap transition-colors ${categoriaFiltro === c.name ? 'text-orange-500 font-black' : 'hover:text-[var(--cor-primaria)]'}`}
+                            onClick={() => { setCategoriaFiltro('todas'); setBusca(''); }}
+                            className={`transition-colors pb-1 border-b-2 ${categoriaFiltro === 'todas' ? 'border-orange-500 text-orange-600 font-black' : 'border-transparent hover:text-[var(--cor-primaria)]'}`}
                         >
-                            {c.name}
+                            Início / Todos ({produtos.length})
                         </button>
-                    ))}
+                        {categorias.map(c => (
+                            <button 
+                                key={c.id} 
+                                onClick={() => setCategoriaFiltro(c.name)}
+                                className={`transition-colors pb-1 border-b-2 ${categoriaFiltro.toLowerCase() === c.name.toLowerCase() ? 'border-orange-500 text-orange-600 font-black' : 'border-transparent hover:text-[var(--cor-primaria)]'}`}
+                            >
+                                {c.name}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex items-center gap-5 text-xs font-bold text-slate-600 whitespace-nowrap shrink-0">
+                        <button 
+                            onClick={() => setAuthModal({ open: true, mode: 'login' })}
+                            className="flex items-center gap-1.5 hover:text-[var(--cor-primaria)]"
+                        >
+                            <Icon name="package" size={15} className="text-orange-500" /> Status do Pedido
+                        </button>
+                        <span className="text-slate-300">|</span>
+                        <button 
+                            onClick={() => setCategoriaFiltro(categoriaFiltro === 'favoritos' ? 'todas' : 'favoritos')}
+                            className={`flex items-center gap-1.5 transition-colors ${categoriaFiltro === 'favoritos' ? 'text-rose-600 font-black' : 'hover:text-rose-500'}`}
+                        >
+                            <span className="text-rose-500">♥</span> Itens Salvos ({favoritos.length})
+                        </button>
+                    </div>
                 </div>
             </nav>
 
-            <main className="max-w-7xl mx-auto px-4 py-8 space-y-12">
+            {/* CONTEÚDO PRINCIPAL EM TELA INTEIRA */}
+            <main className="w-full px-4 md:px-10 xl:px-16 py-6 space-y-12 flex-1">
                 
-                {/* 4. MOSAICO DE CATEGORIAS COM FOTOS (ESTILO BENTO MARKETOP) */}
-                {categorias.length > 0 && categoriaFiltro === 'todas' && !busca && (
-                    <section>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {categorias.slice(0, 7).map((cat, index) => {
-                                // Destaca o primeiro e o quarto card como blocos maiores no estilo Bento Grid
-                                const isLargeTall = index === 0;
-                                const isLargeWide = index === 2;
+                {/* 5. HERO BANNER + BANNER PROMOCIONAL LATERAL (ESTILO MAGICMART) */}
+                {categoriaFiltro === 'todas' && !busca && (
+                    <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* Banner Principal Grande (8 colunas) */}
+                        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-[var(--cor-primaria)] text-white relative min-h-[280px] md:min-h-[360px] flex items-center shadow-md">
+                            {loja.bannerUrl && (
+                                <img src={loja.bannerUrl} alt="Banner Principal" className="absolute inset-0 w-full h-full object-cover opacity-55" />
+                            )}
+                            <div className="relative z-10 p-8 md:p-12 max-w-xl space-y-4">
+                                <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-3 py-1 rounded-full tracking-widest inline-block">
+                                    Destaque Exclusivo
+                                </span>
+                                <h2 className="text-3xl md:text-5xl font-black leading-tight tracking-tight">
+                                    {loja.nomeLoja}
+                                </h2>
+                                <p className="text-sm md:text-base text-slate-100 font-medium">
+                                    Qualidade profissional, personalização sob medida e envio para todo o país.
+                                </p>
+                                <div className="pt-2 flex flex-wrap gap-3">
+                                    <a href="#vitrine" className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase px-6 py-3.5 rounded-xl shadow-lg transition-colors">
+                                        Ver Ofertas Agora
+                                    </a>
+                                    <a href={getWppLink(`Olá! Gostaria de fazer um pedido personalizado na ${loja.nomeLoja}.`)} target="_blank" rel="noreferrer" className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white border border-white/30 font-black text-xs uppercase px-6 py-3.5 rounded-xl transition-colors">
+                                        Falar no WhatsApp
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
 
+                        {/* Banner Promocional Secundário (4 colunas) */}
+                        <div className="lg:col-span-4 rounded-2xl overflow-hidden bg-[#eaeff6] border border-slate-200 p-8 flex flex-col justify-between relative min-h-[280px] shadow-sm">
+                            <div className="space-y-2 z-10">
+                                <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded">
+                                    PROJETOS ESPECIAIS
+                                </span>
+                                <h3 className="text-2xl font-black text-slate-900 leading-tight pt-1">
+                                    Personalize com a sua Marca
+                                </h3>
+                                <p className="text-xs text-slate-600 font-medium">
+                                    Displays NFC, chaveiros corporativos e peças exclusivas.
+                                </p>
+                            </div>
+                            {loja.totemUrl && (
+                                <img src={loja.totemUrl} alt="Promo" className="w-36 h-36 object-contain self-end my-2 drop-shadow-md" />
+                            )}
+                            <div className="z-10 pt-4">
+                                <a 
+                                    href={getWppLink(`Olá! Quero cotar um projeto personalizado na ${loja.nomeLoja}.`)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-2 bg-slate-900 hover:bg-black text-white text-xs font-black uppercase px-5 py-3 rounded-xl transition-colors"
+                                >
+                                    Solicitar Cotação <span>→</span>
+                                </a>
+                            </div>
+                        </div>
+                    </section>
+                )}
+
+                {/* 6. CATEGORIAS COM FOTOS (ESTILO VITRINE LIMPA) */}
+                {categorias.length > 0 && (
+                    <section className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg md:text-xl font-black text-slate-800 uppercase tracking-tight">
+                                Navegue por Categorias
+                            </h2>
+                            {categoriaFiltro !== 'todas' && (
+                                <button 
+                                    onClick={() => setCategoriaFiltro('todas')}
+                                    className="text-xs font-black text-orange-600 hover:underline"
+                                >
+                                    ✕ Limpar Filtro ({categoriaFiltro})
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {categorias.map(cat => {
+                                const ativo = categoriaFiltro.toLowerCase() === cat.name.toLowerCase();
                                 return (
                                     <div 
                                         key={cat.id}
-                                        onClick={() => setCategoriaFiltro(cat.name)}
-                                        className={`group cursor-pointer rounded-xl p-5 flex transition-all duration-300 hover:shadow-md border border-slate-100 overflow-hidden relative ${
-                                            isLargeTall ? 'col-span-2 sm:col-span-1 row-span-2 bg-slate-50 flex-col justify-between items-center text-center min-h-[260px]' :
-                                            isLargeWide ? 'col-span-2 bg-slate-50 flex-col justify-between items-center text-center min-h-[260px]' :
-                                            'bg-[#eef6ff] hover:bg-[#e2effe] items-center justify-between gap-3 h-32'
+                                        onClick={() => setCategoriaFiltro(ativo ? 'todas' : cat.name)}
+                                        className={`group cursor-pointer bg-white rounded-2xl p-4 border-2 transition-all flex flex-col items-center text-center shadow-xs hover:shadow-md ${
+                                            ativo ? 'border-orange-500 bg-orange-50/20' : 'border-slate-200/80 hover:border-[var(--cor-primaria)]'
                                         }`}
                                     >
-                                        <h3 className={`font-bold text-slate-700 group-hover:text-[var(--cor-primaria)] transition-colors z-10 ${isLargeTall || isLargeWide ? 'text-lg mt-1' : 'text-sm order-2 text-right'}`}>
-                                            {cat.name}
-                                        </h3>
-                                        
-                                        <div className={`flex items-center justify-center overflow-hidden ${isLargeTall || isLargeWide ? 'w-full h-44 my-auto' : 'w-20 h-20 shrink-0 order-1'}`}>
+                                        <div className="w-24 h-24 rounded-xl bg-slate-50 flex items-center justify-center p-2 mb-3 overflow-hidden">
                                             {cat.imageUrl ? (
-                                                <img src={cat.imageUrl} alt={cat.name} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                                                <img src={cat.imageUrl} alt={cat.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300" />
                                             ) : (
-                                                <div className="w-14 h-14 rounded-full bg-white/80 flex items-center justify-center text-slate-400 shadow-sm">
-                                                    <Icon name="box" size={24} />
-                                                </div>
+                                                <Icon name="box" size={32} className="text-slate-300" />
                                             )}
                                         </div>
+                                        <h3 className={`font-black text-xs uppercase tracking-wide ${ativo ? 'text-orange-600' : 'text-slate-700 group-hover:text-[var(--cor-primaria)]'}`}>
+                                            {cat.name}
+                                        </h3>
                                     </div>
                                 );
                             })}
@@ -169,67 +419,178 @@ export default function TemplateVibrante({ loja, produtos, categorias }) {
                     </section>
                 )}
 
-                {/* 5. FAIXA DE BENEFÍCIOS E CONFIANÇA */}
-                <section className="grid grid-cols-2 lg:grid-cols-4 gap-6 py-6 border-y border-slate-100">
-                    <div className="flex items-center gap-3.5">
-                        <div className="text-[var(--cor-primaria)] shrink-0"><Icon name="truck" size={28} /></div>
+                {/* 7. BANNER CARROSSEL ABAIXO DAS CATEGORIAS COM OS PRODUTOS EM DESTAQUE */}
+                {listaCarrossel.length > 0 && categoriaFiltro === 'todas' && !busca && (
+                    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="bg-slate-900 text-white px-6 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="bg-amber-400 text-slate-900 text-[10px] font-black uppercase px-2 py-0.5 rounded">★ DESTAQUES</span>
+                                <h2 className="font-black text-xs md:text-sm uppercase tracking-wider">Produtos em Destaque no Catálogo</h2>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => setSlideAtual(prev => (prev - 1 + listaCarrossel.length) % listaCarrossel.length)}
+                                    className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-black"
+                                >
+                                    ❮
+                                </button>
+                                <span className="text-xs font-bold">{slideAtual + 1} / {listaCarrossel.length}</span>
+                                <button 
+                                    onClick={() => setSlideAtual(prev => (prev + 1) % listaCarrossel.length)}
+                                    className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-black"
+                                >
+                                    ❯
+                                </button>
+                            </div>
+                        </div>
+
+                        {(() => {
+                            const prodSlide = listaCarrossel[slideAtual] || listaCarrossel[0];
+                            if (!prodSlide) return null;
+                            return (
+                                <div className="p-6 md:p-10 grid grid-cols-1 md:grid-cols-12 gap-8 items-center bg-gradient-to-br from-white via-slate-50 to-orange-50/30">
+                                    <div className="md:col-span-5 flex items-center justify-center bg-white rounded-2xl p-6 border border-slate-100 h-64 md:h-72 shadow-inner">
+                                        {prodSlide.imageUrl ? (
+                                            <img src={prodSlide.imageUrl} alt={prodSlide.name} className="max-h-full max-w-full object-contain hover:scale-105 transition-transform" />
+                                        ) : (
+                                            <Icon name="image" size={64} className="text-slate-200" />
+                                        )}
+                                    </div>
+                                    <div className="md:col-span-7 space-y-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-black uppercase text-orange-500">{prodSlide.category || 'Destaque'}</span>
+                                            <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">Em Estoque</span>
+                                        </div>
+                                        <h3 className="text-2xl md:text-3xl font-black text-slate-900 leading-tight">
+                                            {prodSlide.name}
+                                        </h3>
+                                        <p className="text-xs md:text-sm text-slate-600 font-medium line-clamp-3">
+                                            {prodSlide.description || 'Produto em destaque produzido com materiais de alta durabilidade e acabamento detalhado.'}
+                                        </p>
+                                        <div className="flex items-baseline gap-3 pt-1">
+                                            <span className="text-3xl font-black text-rose-600">{formatMoney(prodSlide.sellingPrice)}</span>
+                                            {prodSlide.isPromo && (
+                                                <span className="text-sm text-slate-400 line-through font-bold">{formatMoney(prodSlide.price)}</span>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-3 pt-2">
+                                            <button 
+                                                onClick={() => handleComprarDireto(prodSlide)}
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase px-6 py-3.5 rounded-xl shadow-md transition-colors"
+                                            >
+                                                Comprar Agora
+                                            </button>
+                                            <button 
+                                                onClick={() => adicionarAoCarrinho(prodSlide)}
+                                                className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase px-6 py-3.5 rounded-xl shadow-md flex items-center gap-2 transition-colors"
+                                            >
+                                                <Icon name="shopping-cart" size={15} /> Adicionar ao Carrinho
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleFavorito(prodSlide.id)}
+                                                className={`p-3 rounded-xl border transition-colors ${favoritos.includes(prodSlide.id) ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-500 hover:text-rose-500'}`}
+                                                title="Salvar nos Favoritos"
+                                            >
+                                                ♥
+                                            </button>
+                                            <button 
+                                                onClick={() => handleCompartilhar(prodSlide)}
+                                                className="p-3 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-[var(--cor-primaria)] transition-colors"
+                                                title="Compartilhar Produto"
+                                            >
+                                                🔗
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </section>
+                )}
+
+                {/* 8. FAIXA DE BENEFÍCIOS COM SVGs CORRIGIDOS */}
+                <section className="bg-white rounded-2xl border border-slate-200 p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 shadow-xs">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-blue-50 text-[var(--cor-primaria)] flex items-center justify-center shrink-0">
+                            <Icon name="truck" size={26} />
+                        </div>
                         <div>
-                            <h4 className="font-bold text-xs text-slate-800">Envio Rápido e Seguro</h4>
-                            <p className="text-[11px] text-slate-400">Despachamos para todo o Brasil</p>
+                            <h4 className="font-black text-xs uppercase text-slate-800">Envio Rápido e Seguro</h4>
+                            <p className="text-xs text-slate-500">Despachamos para todo o Brasil</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3.5">
-                        <div className="text-[var(--cor-primaria)] shrink-0"><Icon name="headphones" size={28} /></div>
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M21 19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3zM3 19a2 2 0 002 2h1a2 2 0 002-2v-3a2 2 0 00-2-2H3z" />
+                            </svg>
+                        </div>
                         <div>
-                            <h4 className="font-bold text-xs text-slate-800">Suporte Online</h4>
-                            <p className="text-[11px] text-slate-400">Atendimento direto via WhatsApp</p>
+                            <h4 className="font-black text-xs uppercase text-slate-800">Suporte Online</h4>
+                            <p className="text-xs text-slate-500">Atendimento direto via WhatsApp</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3.5">
-                        <div className="text-[var(--cor-primaria)] shrink-0"><Icon name="tag" size={28} /></div>
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center shrink-0">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                        </div>
                         <div>
-                            <h4 className="font-bold text-xs text-slate-800">Preços Direto da Fábrica</h4>
-                            <p className="text-[11px] text-slate-400">Produção própria em impressão 3D</p>
+                            <h4 className="font-black text-xs uppercase text-slate-800">Preços Direto da Fábrica</h4>
+                            <p className="text-xs text-slate-500">Produção própria personalizada</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3.5">
-                        <div className="text-[var(--cor-primaria)] shrink-0"><Icon name="shield" size={28} /></div>
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                            <Icon name="shield" size={26} />
+                        </div>
                         <div>
-                            <h4 className="font-bold text-xs text-slate-800">Garantia de Qualidade</h4>
-                            <p className="text-[11px] text-slate-400">Acabamento premium revisado</p>
+                            <h4 className="font-black text-xs uppercase text-slate-800">Garantia de Qualidade</h4>
+                            <p className="text-xs text-slate-500">Acabamento premium revisado</p>
                         </div>
                     </div>
                 </section>
 
-                {/* 6. GRADE DE PRODUTOS (ESTILO TRENDING PRODUCTS) */}
+                {/* 9. GRADE DE PRODUTOS COM FAVORITAR, COMPARTILHAR, ADD CARRINHO E COMPRAR DIRETO */}
                 <section id="vitrine" className="space-y-6">
-                    <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                        <h2 className="text-xl font-black text-slate-800 tracking-tight">
-                            {categoriaFiltro === 'todas' ? 'Produtos em Destaque' : categoriaFiltro}
-                        </h2>
+                    <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-3 gap-2">
+                        <div>
+                            <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight">
+                                {categoriaFiltro === 'todas' ? 'Catálogo Completo' : categoriaFiltro === 'favoritos' ? 'Meus Produtos Favoritos' : categoriaFiltro}
+                            </h2>
+                            <p className="text-xs text-slate-500 font-medium">
+                                Exibindo {produtosFiltrados.length} produto(s) disponível(is)
+                            </p>
+                        </div>
                         {categoriaFiltro !== 'todas' && (
-                            <button onClick={() => setCategoriaFiltro('todas')} className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1">
-                                Ver Todos <Icon name="arrow-right" size={13} />
+                            <button onClick={() => setCategoriaFiltro('todas')} className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-black uppercase px-4 py-2 rounded-lg transition-colors">
+                                Ver Todos os Produtos
                             </button>
                         )}
                     </div>
 
                     {produtosFiltrados.length === 0 ? (
-                        <div className="text-center py-16 text-slate-400 font-bold text-sm">
-                            Nenhum produto encontrado nesta categoria.
+                        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+                            <Icon name="box" size={48} className="mx-auto text-slate-300" />
+                            <p className="font-black text-slate-600 uppercase text-sm">Nenhum produto encontrado</p>
+                            <button onClick={() => { setCategoriaFiltro('todas'); setBusca(''); }} className="text-xs font-bold text-orange-500 hover:underline">
+                                Mostrar todo o catálogo
+                            </button>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                             {produtosFiltrados.map(p => {
                                 const descontoPerc = p.isPromo && p.price > 0 
                                     ? Math.round(((p.price - p.promoPrice) / p.price) * 100) 
                                     : 0;
+                                const isFav = favoritos.includes(p.id);
 
                                 return (
-                                    <div key={p.id} className="bg-white rounded-xl p-4 border border-transparent hover:border-slate-200 hover:shadow-xl transition-all duration-300 flex flex-col justify-between group relative">
+                                    <div key={p.id} className="bg-white rounded-2xl p-4 border border-slate-200/80 hover:border-[var(--cor-primaria)] hover:shadow-xl transition-all duration-300 flex flex-col justify-between group relative">
                                         
-                                        {/* Badges Superiores (Desconto / Top) */}
-                                        <div className="absolute top-4 left-4 z-10 flex flex-col gap-1">
+                                        {/* Selos de Desconto / Destaque */}
+                                        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
                                             {descontoPerc > 0 && (
                                                 <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm">
                                                     -{descontoPerc}%
@@ -242,55 +603,95 @@ export default function TemplateVibrante({ loja, produtos, categorias }) {
                                             )}
                                         </div>
 
-                                        {/* Botão Favorito */}
-                                        <button className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-200 flex items-center justify-center shadow-sm transition-colors">
-                                            <Icon name="heart" size={14} />
-                                        </button>
+                                        {/* Botões de Favorito (Coração) e Compartilhar */}
+                                        <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
+                                            <button 
+                                                onClick={() => toggleFavorito(p.id)}
+                                                title="Adicionar aos Favoritos"
+                                                className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-sm transition-all ${
+                                                    isFav ? 'bg-rose-500 border-rose-500 text-white scale-110' : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500'
+                                                }`}
+                                            >
+                                                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                                                </svg>
+                                            </button>
 
-                                        {/* Imagem Limpa */}
-                                        <div className="w-full h-52 flex items-center justify-center p-4 mb-3 bg-white overflow-hidden">
+                                            <button 
+                                                onClick={() => handleCompartilhar(p)}
+                                                title="Compartilhar Produto"
+                                                className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-[var(--cor-primaria)] hover:border-blue-300 flex items-center justify-center shadow-sm transition-colors"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                                </svg>
+                                            </button>
+                                        </div>
+
+                                        {copiadoId === p.id && (
+                                            <span className="absolute top-12 right-12 z-20 bg-slate-900 text-white text-[10px] font-bold px-2.5 py-1 rounded shadow">
+                                                Link copiado!
+                                            </span>
+                                        )}
+
+                                        {/* Foto do Produto */}
+                                        <div className="w-full h-48 flex items-center justify-center p-3 mb-3 bg-slate-50/60 rounded-xl overflow-hidden">
                                             {p.imageUrl ? (
                                                 <img src={p.imageUrl} alt={p.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300" />
                                             ) : (
-                                                <Icon name="image" size={48} className="text-slate-200" />
+                                                <Icon name="image" size={44} className="text-slate-300" />
                                             )}
                                         </div>
 
-                                        {/* Informações do Produto */}
-                                        <div className="space-y-1.5">
-                                            <span className="text-[11px] font-semibold text-orange-500 block">
-                                                {p.category || 'Geral'}
-                                            </span>
-                                            <h3 className="font-bold text-sm text-[#1e3a8a] group-hover:text-orange-500 transition-colors line-clamp-2 min-h-[40px]">
-                                                {p.name}
-                                            </h3>
-
-                                            {/* Estrelas de Avaliação */}
-                                            <div className="flex items-center gap-0.5 text-orange-400 text-xs">
-                                                <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
-                                            </div>
-
-                                            {/* Preços */}
-                                            <div className="pt-1 flex items-baseline gap-2">
-                                                <span className="font-bold text-lg text-rose-500">
-                                                    {formatMoney(p.sellingPrice)}
+                                        {/* Detalhes */}
+                                        <div className="space-y-1.5 flex-1 flex flex-col justify-between">
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase text-orange-500 block">
+                                                    {p.category || 'Geral'}
                                                 </span>
-                                                {p.isPromo && (
-                                                    <span className="text-xs text-slate-400 line-through">
-                                                        {formatMoney(p.price)}
-                                                    </span>
+                                                <h3 className="font-bold text-sm text-slate-800 group-hover:text-[var(--cor-primaria)] transition-colors line-clamp-2 min-h-[40px]">
+                                                    {p.name}
+                                                </h3>
+                                                {p.description && (
+                                                    <p className="text-[11px] text-slate-500 line-clamp-2 mt-1">
+                                                        {p.description}
+                                                    </p>
                                                 )}
                                             </div>
 
-                                            <p className="text-[11px] text-slate-400 font-medium">
-                                                Pronta entrega / Produção rápida
-                                            </p>
+                                            <div className="pt-2">
+                                                <div className="flex items-center gap-0.5 text-orange-400 text-xs">
+                                                    <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+                                                </div>
+
+                                                <div className="pt-1 flex items-baseline gap-2">
+                                                    <span className="font-black text-lg text-rose-600">
+                                                        {formatMoney(p.sellingPrice)}
+                                                    </span>
+                                                    {p.isPromo && (
+                                                        <span className="text-xs text-slate-400 line-through">
+                                                            {formatMoney(p.price)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        {/* Botão Add to Cart que destaca no Hover */}
-                                        <button className="mt-4 w-full py-2.5 bg-orange-400 hover:bg-orange-500 text-white font-bold text-xs rounded-lg shadow-sm flex items-center justify-center gap-2 transition-colors">
-                                            <Icon name="shopping-cart" size={14} /> Adicionar ao Carrinho
-                                        </button>
+                                        {/* Botões Duplos: Add Carrinho + Comprar Direto */}
+                                        <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
+                                            <button 
+                                                onClick={() => adicionarAoCarrinho(p)}
+                                                className="py-2.5 px-2 bg-orange-50 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200 font-black text-[11px] uppercase rounded-xl flex items-center justify-center gap-1 transition-colors"
+                                            >
+                                                <Icon name="shopping-cart" size={13} /> + Carrinho
+                                            </button>
+                                            <button 
+                                                onClick={() => handleComprarDireto(p)}
+                                                className="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase rounded-xl flex items-center justify-center gap-1 shadow-xs transition-colors"
+                                            >
+                                                Comprar
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -298,56 +699,258 @@ export default function TemplateVibrante({ loja, produtos, categorias }) {
                     )}
                 </section>
 
-                {/* 7. BANNER PROMOCIONAL HORIZONTAL INFERIOR */}
-                {loja.bannerUrl && (
-                    <section className="rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 grid grid-cols-1 md:grid-cols-2 items-center">
-                        <div className="p-8 md:p-12 space-y-3">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-700">Destaque da Semana</span>
-                            <h3 className="text-2xl md:text-3xl font-black text-slate-900 leading-tight">{loja.nomeLoja} - Projetos Personalizados</h3>
-                            <p className="text-xs text-slate-500 font-medium">Peças exclusivas feitas sob medida para você ou para a sua empresa.</p>
-                            <div className="pt-2">
-                                <a href={wppLink} target="_blank" rel="noreferrer" className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs px-6 py-3 rounded-lg shadow transition-colors">
-                                    Solicitar Orçamento
-                                </a>
-                            </div>
-                        </div>
-                        <div className="h-56 md:h-64 w-full overflow-hidden">
-                            <img src={loja.bannerUrl} alt="Banner" className="w-full h-full object-cover" />
-                        </div>
-                    </section>
-                )}
+                {/* 10. BANNER PROMOCIONAL INFERIOR */}
+                <section className="rounded-2xl overflow-hidden bg-gradient-to-r from-[var(--cor-primaria)] to-slate-900 text-white p-8 md:p-12 grid grid-cols-1 md:grid-cols-12 items-center gap-6 shadow-md">
+                    <div className="md:col-span-8 space-y-3">
+                        <span className="bg-amber-400 text-slate-900 text-[10px] font-black uppercase px-3 py-1 rounded-full tracking-wider">
+                            Oferta Especial & Atacado
+                        </span>
+                        <h3 className="text-2xl md:text-3xl font-black leading-tight">
+                            Quer personalizar brindes, chaveiros ou displays NFC para sua empresa?
+                        </h3>
+                        <p className="text-xs md:text-sm text-slate-200 font-medium max-w-2xl">
+                            Produzimos em escala com descontos progressivos. Fale diretamente com nossa equipe pelo WhatsApp.
+                        </p>
+                    </div>
+                    <div className="md:col-span-4 flex md:justify-end">
+                        <a 
+                            href={getWppLink(`Olá! Gostaria de solicitar um orçamento personalizado na ${loja.nomeLoja}.`)}
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase px-8 py-4 rounded-xl shadow-lg transition-transform hover:scale-105 inline-block text-center"
+                        >
+                            Solicitar Orçamento no WhatsApp
+                        </a>
+                    </div>
+                </section>
             </main>
 
-            {/* 8. BOTÃO WHATSAPP FLUTUANTE */}
-            {wppNumber && (
-                <a href={wppLink} target="_blank" rel="noreferrer" className="fixed bottom-6 right-6 w-14 h-14 bg-emerald-500 text-white rounded-full shadow-xl flex items-center justify-center hover:scale-110 hover:bg-emerald-600 transition-all z-50 border-2 border-white">
-                    <Icon name="message-circle" size={28} />
-                </a>
-            )}
-
-            {/* 9. MODAL DE LOGIN DE CLIENTES */}
-            {showLogin && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="bg-[var(--cor-primaria)] p-6 text-center text-white relative">
-                            <button onClick={() => setShowLogin(false)} className="absolute top-4 right-4 text-white/70 hover:text-white"><Icon name="x" size={20}/></button>
-                            <Icon name="user" size={40} className="mx-auto mb-2 opacity-90"/>
-                            <h3 className="font-black text-lg uppercase tracking-wider">Acesse sua Conta</h3>
-                            <p className="text-[11px] opacity-80 mt-0.5">Acompanhe seus pedidos e favoritos</p>
+            {/* 11. RODAPÉ COMPLETO PROFISSIONAL (ESTILO MAGICMART) */}
+            <footer id="rodape" className="w-full bg-white border-t border-slate-200 mt-12 text-slate-600">
+                <div className="w-full px-4 md:px-10 xl:px-16 py-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
+                    
+                    {/* Coluna 1: Dados de Contato Puxados do Sistema */}
+                    <div className="lg:col-span-2 space-y-4">
+                        <div className="flex items-center gap-3">
+                            {loja.logoUrl && (
+                                <img src={loja.logoUrl} className="w-14 h-14 rounded-xl object-contain border border-slate-200 p-1" alt="Logo Rodapé" />
+                            )}
+                            <div>
+                                <h4 className="font-black text-lg text-slate-900 uppercase">{loja.nomeLoja}</h4>
+                                <span className="text-xs text-slate-400 font-bold">Catálogo Oficial & E-commerce</span>
+                            </div>
                         </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">E-mail ou WhatsApp</label>
-                                <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[var(--cor-primaria)]" placeholder="Digite seu acesso..." />
+
+                        {loja.whatsapp && (
+                            <div className="flex items-center gap-3 pt-1">
+                                <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center shrink-0">
+                                    <Icon name="phone" size={20} />
+                                </div>
+                                <div>
+                                    <span className="text-[10px] font-black uppercase text-slate-400 block">Atendimento / WhatsApp:</span>
+                                    <a href={getWppLink(`Olá! Vim pelo site da ${loja.nomeLoja}.`)} target="_blank" rel="noreferrer" className="text-lg font-black text-orange-500 hover:underline">
+                                        {loja.whatsapp}
+                                    </a>
+                                </div>
                             </div>
-                            <div>
-                                <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Senha</label>
-                                <input type="password" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[var(--cor-primaria)]" placeholder="••••••••" />
-                            </div>
-                            <button className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black uppercase text-xs shadow-md transition-colors">
-                                Entrar na Loja
+                        )}
+
+                        {loja.mostrarEndereco && loja.endereco && (
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                                <strong className="text-slate-800">Endereço:</strong> {loja.endereco}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Coluna 2: Informações */}
+                    <div className="space-y-3">
+                        <h4 className="font-black text-sm text-slate-900 uppercase tracking-wider">Informações</h4>
+                        <ul className="space-y-2 text-xs font-semibold text-slate-500">
+                            <li><a href="#vitrine" className="hover:text-[var(--cor-primaria)]">Sobre a {loja.nomeLoja}</a></li>
+                            <li><a href={getWppLink('Olá! Gostaria de tirar uma dúvida.')} target="_blank" rel="noreferrer" className="hover:text-[var(--cor-primaria)]">Fale Conosco</a></li>
+                            <li><button onClick={() => setAuthModal({ open: true, mode: 'login' })} className="hover:text-[var(--cor-primaria)]">Rastrear Pedido</button></li>
+                            <li><a href="#vitrine" className="hover:text-[var(--cor-primaria)]">Política de Privacidade</a></li>
+                            <li><a href="#vitrine" className="hover:text-[var(--cor-primaria)]">Termos e Condições</a></li>
+                        </ul>
+                    </div>
+
+                    {/* Coluna 3: Categorias do Cadastro */}
+                    <div className="space-y-3">
+                        <h4 className="font-black text-sm text-slate-900 uppercase tracking-wider">Departamentos</h4>
+                        <ul className="space-y-2 text-xs font-semibold text-slate-500">
+                            <li>
+                                <button onClick={() => setCategoriaFiltro('todas')} className="hover:text-orange-500">
+                                    Todos os Produtos
+                                </button>
+                            </li>
+                            {categorias.slice(0, 6).map(c => (
+                                <li key={c.id}>
+                                    <button onClick={() => setCategoriaFiltro(c.name)} className="hover:text-orange-500">
+                                        {c.name}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    {/* Coluna 4: Área do Cliente */}
+                    <div className="space-y-3">
+                        <h4 className="font-black text-sm text-slate-900 uppercase tracking-wider">Área do Cliente</h4>
+                        <p className="text-xs text-slate-500">
+                            Cadastre-se para salvar seus produtos favoritos e acompanhar suas entregas.
+                        </p>
+                        <div className="flex flex-col gap-2 pt-1">
+                            <button 
+                                onClick={() => setAuthModal({ open: true, mode: 'login' })}
+                                className="w-full py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl font-black text-xs uppercase transition-colors"
+                            >
+                                Entrar na Minha Conta
+                            </button>
+                            <button 
+                                onClick={() => setAuthModal({ open: true, mode: 'register' })}
+                                className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-xs uppercase transition-colors"
+                            >
+                                Criar Cadastro Rápido
                             </button>
                         </div>
+                    </div>
+                </div>
+
+                {/* Barra Inferior de Copyright e Pagamentos */}
+                <div className="w-full bg-slate-50 border-t border-slate-200 px-4 md:px-10 xl:px-16 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-semibold">
+                    <p>© {new Date().getFullYear()} {loja.nomeLoja}. Todos os direitos reservados.</p>
+                    <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 bg-white border border-slate-200 rounded font-black text-[10px] text-emerald-700">PIX</span>
+                        <span className="px-2.5 py-1 bg-white border border-slate-200 rounded font-black text-[10px] text-blue-800">VISA</span>
+                        <span className="px-2.5 py-1 bg-white border border-slate-200 rounded font-black text-[10px] text-orange-600">MASTERCARD</span>
+                        <span className="px-2.5 py-1 bg-white border border-slate-200 rounded font-black text-[10px] text-slate-700">BOLETO</span>
+                    </div>
+                </div>
+            </footer>
+
+            {/* 12. BOTÃO FLUTUANTE DO WHATSAPP SEMPRE VISÍVEL COM ÍCONE OFICIAL */}
+            <a 
+                href={getWppLink(`Olá! Estou no site da ${loja.nomeLoja} e gostaria de atendimento.`)} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe57] text-white px-4 py-3.5 rounded-full shadow-2xl hover:scale-105 transition-all border-2 border-white"
+                title="Conversar no WhatsApp"
+            >
+                <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                    <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.126.556 4.124 1.535 5.862l-1.535 5.638 5.792-1.518c1.693.904 3.621 1.418 5.672 1.418 6.627 0 12-5.373 12-12s-5.373-12-12-12z"/>
+                </svg>
+                <span className="font-black text-xs uppercase tracking-wider hidden sm:inline">WhatsApp</span>
+            </a>
+
+            {/* 13. MODAL DE LOGIN E CADASTRO DE CLIENTES */}
+            {authModal.open && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="bg-[var(--cor-primaria)] p-6 text-center text-white relative">
+                            <button onClick={() => setAuthModal({ ...authModal, open: false })} className="absolute top-4 right-4 text-white/70 hover:text-white">✕</button>
+                            <h3 className="font-black text-lg uppercase tracking-wider">
+                                {authModal.mode === 'login' ? 'Entrar na Minha Conta' : 'Criar Conta de Cliente'}
+                            </h3>
+                            <p className="text-xs opacity-80 mt-1">
+                                {authModal.mode === 'login' ? 'Acompanhe seus pedidos e favoritos' : 'Cadastre-se grátis para comprar mais rápido'}
+                            </p>
+                        </div>
+
+                        {/* Abas Login / Cadastro */}
+                        <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50 text-xs font-black uppercase">
+                            <button 
+                                onClick={() => setAuthModal({ open: true, mode: 'login' })}
+                                className={`py-3 ${authModal.mode === 'login' ? 'bg-white text-[var(--cor-primaria)] border-b-2 border-[var(--cor-primaria)]' : 'text-slate-400'}`}
+                            >
+                                Já sou Cliente
+                            </button>
+                            <button 
+                                onClick={() => setAuthModal({ open: true, mode: 'register' })}
+                                className={`py-3 ${authModal.mode === 'register' ? 'bg-white text-orange-500 border-b-2 border-orange-500' : 'text-slate-400'}`}
+                            >
+                                Quero me Cadastrar
+                            </button>
+                        </div>
+
+                        <form onSubmit={(e) => { e.preventDefault(); alert(authModal.mode === 'login' ? 'Login realizado!' : 'Cadastro concluído com sucesso!'); setAuthModal({ ...authModal, open: false }); }} className="p-6 space-y-4">
+                            {authModal.mode === 'register' && (
+                                <>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nome Completo *</label>
+                                        <input type="text" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-orange-500" placeholder="Seu nome" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">WhatsApp / Telefone *</label>
+                                        <input type="text" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-orange-500" placeholder="(11) 99999-9999" />
+                                    </div>
+                                </>
+                            )}
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">E-mail *</label>
+                                <input type="email" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[var(--cor-primaria)]" placeholder="seu@email.com" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Senha *</label>
+                                <input type="password" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[var(--cor-primaria)]" placeholder="••••••••" />
+                            </div>
+                            <button type="submit" className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black uppercase text-xs shadow-md transition-colors">
+                                {authModal.mode === 'login' ? 'Acessar Conta' : 'Finalizar Cadastro'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 14. MODAL DO CARRINHO DE COMPRAS */}
+            {showCartModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-end">
+                    <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between p-6">
+                        <div className="flex justify-between items-center border-b border-slate-200 pb-4">
+                            <h3 className="font-black text-lg uppercase text-slate-800">Meu Carrinho ({qtdTotalCarrinho})</h3>
+                            <button onClick={() => setShowCartModal(false)} className="text-slate-400 hover:text-black text-xl">✕</button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto py-4 space-y-3">
+                            {carrinho.length === 0 ? (
+                                <p className="text-center text-slate-400 font-bold text-sm py-12">Seu carrinho está vazio.</p>
+                            ) : (
+                                carrinho.map(item => (
+                                    <div key={item.id} className="flex items-center justify-between border border-slate-200 p-3 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            {item.imageUrl && <img src={item.imageUrl} className="w-12 h-12 object-contain rounded border" alt={item.name} />}
+                                            <div>
+                                                <p className="font-bold text-xs text-slate-800">{item.name}</p>
+                                                <p className="text-xs font-black text-rose-600">{item.qtd}x {formatMoney(item.sellingPrice)}</p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => setCarrinho(prev => prev.filter(i => i.id !== item.id))}
+                                            className="text-red-400 hover:text-red-600 text-xs font-bold"
+                                        >
+                                            Remover
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        {carrinho.length > 0 && (
+                            <div className="border-t border-slate-200 pt-4 space-y-3">
+                                <div className="flex justify-between items-center font-black text-base">
+                                    <span>Total:</span>
+                                    <span className="text-emerald-600">{formatMoney(totalCarrinho)}</span>
+                                </div>
+                                <button 
+                                    onClick={() => {
+                                        const resumo = carrinho.map(i => `${i.qtd}x ${i.name} (${formatMoney(i.sellingPrice)})`).join(', ');
+                                        window.open(getWppLink(`Olá! Quero finalizar meu pedido na ${loja.nomeLoja}: ${resumo}. Total: ${formatMoney(totalCarrinho)}`), '_blank');
+                                    }}
+                                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs shadow-md"
+                                >
+                                    Finalizar Pedido no WhatsApp
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
