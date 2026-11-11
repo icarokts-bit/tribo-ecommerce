@@ -2,15 +2,14 @@ import React, { useState, useEffect } from 'react';
 import Icon from '../../components/Icon';
 import { db } from '../../firebase';
 
-// Imagem padrão bonita caso o lojista ainda não tenha enviado foto no Banner Secundário
 const IMAGEM_PADRAO_BANNER_SECUNDARIO = "https://images.unsplash.com/photo-1631541909061-71e349d1f203?auto=format&fit=crop&w=600&q=80";
 
 export default function TemplateVibrante({ loja, produtos, categorias, donoUid }) {
     const uidLoja = donoUid || loja?.donoUid || loja?.uid;
 
     // Estados de Modais e Menus
-    const [authModal, setAuthModal] = useState({ open: false, mode: 'login' }); // 'login' | 'register'
-    const [clientAreaModal, setClientAreaModal] = useState({ open: false, tab: 'pedidos' }); // 'cadastro' | 'pedidos'
+    const [authModal, setAuthModal] = useState({ open: false, mode: 'login' });
+    const [clientAreaModal, setClientAreaModal] = useState({ open: false, tab: 'pedidos' });
     const [showCartModal, setShowCartModal] = useState(false);
     const [deptOpen, setDeptOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -29,7 +28,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [carrinho, setCarrinho] = useState([]);
     const [copiadoId, setCopiadoId] = useState(null);
 
-    // Estados dos Carrosséis (Mosaico de Categorias, Destaques e Promoções)
+    // Estados dos Carrosséis
     const [catSlidePage, setCatSlidePage] = useState(0);
     const [slideDestaque, setSlideDestaque] = useState(0);
     const [slidePromo, setSlidePromo] = useState(0);
@@ -72,7 +71,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     };
 
     // =====================================================
-    // FILTROS DOS CARROSSÉIS DE DESTAQUES E PROMOÇÕES (ESTRITO PARA PROMOÇÃO)
+    // FILTROS DOS CARROSSÉIS DE DESTAQUES E PROMOÇÕES
     // =====================================================
     const produtosDestaque = produtos.filter(p => p.destaque === true);
     const listaCarrosselDestaque = produtosDestaque.length > 0 ? produtosDestaque : produtos.slice(0, 5);
@@ -80,14 +79,13 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     // SOMENTE produtos marcados com isPromo === true no cadastro aparecem no Carrossel de Promoções
     const listaCarrosselPromo = produtos.filter(p => p.isPromo === true);
 
-    // Dados dinâmicos do Banner Secundário (antigo Totem Vertical)
+    // Dados dinâmicos do Banner Secundário
     const fotoBannerSecundario = loja?.bannerSecundarioUrl || loja?.totemUrl || IMAGEM_PADRAO_BANNER_SECUNDARIO;
     const tagBannerSecundario = loja?.bannerSecundarioTag || 'PROJETOS ESPECIAIS';
     const tituloBannerSecundario = loja?.bannerSecundarioTitulo || 'Personalize com a sua Marca';
-    const textoBannerSecundario = loja?.bannerSecundarioTexto || 'Displays NFC, chaveiros corporativos e peças exclusivas feitas sob medida.';
+    const textoBannerSecundario = loja?.bannerSecundarioTexto || 'Displays NFC, chaveiros corporativos e peças exclusivas.';
     const botaoBannerSecundario = loja?.bannerSecundarioBotao || 'Solicitar Cotação';
 
-    // Recupera sessão salva do cliente no navegador
     useEffect(() => {
         const salvo = localStorage.getItem(`cliente_${uidLoja}`);
         if (salvo) {
@@ -102,7 +100,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         }
     }, [uidLoja]);
 
-    // Rotação automática do Carrossel de Destaques
     useEffect(() => {
         if (listaCarrosselDestaque.length <= 1) return;
         const timer = setInterval(() => {
@@ -111,7 +108,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         return () => clearInterval(timer);
     }, [listaCarrosselDestaque.length]);
 
-    // Rotação automática do Carrossel de Promoções
     useEffect(() => {
         if (listaCarrosselPromo.length <= 1) return;
         const timer = setInterval(() => {
@@ -120,7 +116,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         return () => clearInterval(timer);
     }, [listaCarrosselPromo.length]);
 
-    // Puxa o telefone/WhatsApp configurado na aba Ajustes do Site
     const telefoneAjustes = loja?.whatsapp || loja?.telefone || loja?.phone || loja?.celular || loja?.contato || '';
     const wppLimpo = String(telefoneAjustes).replace(/\D/g, '');
 
@@ -834,13 +829,13 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 )}
 
                 {/* ========================================================================= */}
-                {/* 6. HERO BANNER PRINCIPAL + BANNER PROMOCIONAL LATERAL COM FOTO E TEXTO    */}
+                {/* 6. HERO BANNER PRINCIPAL + BANNER PROMOCIONAL LATERAL COM FOTO PREENCHIDA */}
                 {/* ========================================================================= */}
                 {categoriaFiltro === 'todas' && !busca && (
-                    <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                         
                         {/* Banner Horizontal Principal (8 colunas) */}
-                        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-[var(--cor-primaria)] text-white relative min-h-[300px] md:min-h-[360px] flex items-center shadow-md">
+                        <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-[var(--cor-primaria)] text-white relative min-h-[380px] md:min-h-[440px] flex items-center shadow-md">
                             {loja.bannerUrl && <img src={loja.bannerUrl} alt="Banner" className="absolute inset-0 w-full h-full object-cover opacity-55" />}
                             <div className="relative z-10 p-8 md:p-12 max-w-xl space-y-4">
                                 <span className="bg-orange-500 text-white text-xs font-black uppercase px-3.5 py-1 rounded-full tracking-widest inline-block">Destaque Exclusivo</span>
@@ -853,28 +848,28 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </div>
                         </div>
 
-                        {/* Banner Lateral Configurável (4 colunas) - Com Imagem Centralizada e Texto Abaixo */}
-                        <div className="lg:col-span-4 rounded-2xl overflow-hidden bg-[#eaeff6] border border-slate-200 p-6 md:p-7 flex flex-col justify-between relative min-h-[300px] md:min-h-[360px] shadow-sm">
-                            <div className="space-y-1.5 z-10">
+                        {/* Banner Lateral Configurável (4 colunas) - Imagem ocupando todo o espaço central */}
+                        <div className="lg:col-span-4 rounded-2xl overflow-hidden bg-[#eaeff6] border border-slate-200 p-6 flex flex-col gap-3 relative min-h-[380px] md:min-h-[440px] shadow-sm">
+                            <div className="space-y-1 z-10 shrink-0">
                                 <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded inline-block">
                                     {tagBannerSecundario}
                                 </span>
-                                <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-tight pt-1">
+                                <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-tight pt-0.5">
                                     {tituloBannerSecundario}
                                 </h3>
                             </div>
 
-                            {/* Imagem em Destaque no Espaço Central */}
-                            <div className="my-3 w-full h-40 md:h-44 rounded-xl bg-white/80 border border-white overflow-hidden flex items-center justify-center p-2 shadow-inner">
+                            {/* Imagem ocupando 100% do espaço livre entre o título e o texto de baixo */}
+                            <div className="flex-1 w-full min-h-[210px] md:min-h-[250px] rounded-xl overflow-hidden relative shadow-sm bg-slate-200">
                                 <img 
                                     src={fotoBannerSecundario} 
                                     alt={tituloBannerSecundario} 
-                                    className="w-full h-full object-cover rounded-lg hover:scale-105 transition-transform duration-300" 
+                                    className="absolute inset-0 w-full h-full object-cover hover:scale-105 transition-transform duration-500" 
                                 />
                             </div>
 
                             {/* Texto explicativo abaixo da imagem + Botão */}
-                            <div className="space-y-3 z-10">
+                            <div className="space-y-2.5 z-10 shrink-0 pt-1">
                                 <p className="text-xs md:text-sm text-slate-700 font-bold leading-snug">
                                     {textoBannerSecundario}
                                 </p>
@@ -943,7 +938,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             );
                         })()}
 
-                        {/* CARROSSEL 2: OFERTAS & PROMOÇÕES (SÓ APARECE SE EXISTIR PRODUTO COM isPromo === true) */}
+                        {/* CARROSSEL 2: OFERTAS & PROMOÇÕES */}
                         {listaCarrosselPromo.length > 0 && (() => {
                             const promoSlide = listaCarrosselPromo[slidePromo] || listaCarrosselPromo[0];
                             const descPerc = promoSlide.price > 0 && promoSlide.promoPrice > 0
