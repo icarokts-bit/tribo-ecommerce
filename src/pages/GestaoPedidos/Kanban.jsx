@@ -29,7 +29,7 @@ const COLUNAS = [
         titulo: 'ENVIADO / AGUARD. RETIRADA',
         icone: 'truck',
         corTopo: 'bg-emerald-500',
-        statusAceitos: ['enviado', 'retirada', 'entregue', 'shipped', 'delivered', 'concluido']
+        statusAceitos: ['enviado', 'retirada', 'shipped']
     }
 ];
 
@@ -37,13 +37,13 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
     const [pedidos, setPedidos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [pedidoSelecionado, setPedidoSelecionado] = useState(null);
+    const [rastreioInput, setRastreioInput] = useState('');
 
     const donoUid = propDonoUid || permissoes?.donoUid || user?.uid;
 
     useEffect(() => {
         if (!donoUid) return;
 
-        // Escuta em tempo real a coleção 'orders' e mescla com 'pedidos' e 'ecommerce_orders'
         const unsub = db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/orders`)
             .onSnapshot(async (snapOrders) => {
                 const listaOrders = snapOrders.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -74,8 +74,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                     setPedidos(listaOrders);
                 }
                 setLoading(false);
-            }, (error) => {
-                console.error("Erro ao escutar pedidos:", error);
+            }, () => {
                 setLoading(false);
             });
 
@@ -84,9 +83,11 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
 
     const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-    // Descobre em qual coluna o pedido deve entrar
     const obterColunaDoPedido = (pedido) => {
         const st = String(pedido.status || pedido.etapa || pedido.orderStatus || 'novo').toLowerCase().trim();
+        if (['concluido', 'finalizado', 'entregue', 'delivered', 'cancelado'].includes(st)) {
+            return 'arquivado_historico';
+        }
         for (const col of COLUNAS) {
             if (col.id === st || col.statusAceitos.includes(st)) {
                 return col.id;
@@ -95,7 +96,15 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
         return 'novo';
     };
 
-    // Move o pedido de uma coluna para outra no Firebase
+    const atualizarPedidoNasColecoes = async (pedidoId, atualizado) => {
+        const colecoes = ['orders', 'pedidos', 'delivery_orders', 'ecommerce_orders'];
+        await Promise.all(
+            colecoes.map(col =>
+                db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/${col}`).doc(pedidoId).set(atualizado, { merge: true })
+            )
+        );
+    };
+
     const moverPedido = async (pedido, novoStatus) => {
         if (!donoUid) return;
         const atualizado = {
@@ -106,44 +115,35 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
             updatedAt: new Date().toISOString()
         };
 
-        // Atualiza na tela imediatamente
         setPedidos(prev => prev.map(p => p.id === pedido.id ? atualizado : p));
         if (pedidoSelecionado?.id === pedido.id) {
             setPedidoSelecionado(atualizado);
         }
 
-        const colecoes = ['orders', 'pedidos', 'delivery_orders', 'ecommerce_orders'];
         try {
-            await Promise.all(
-                colecoes.map(col =>
-                    db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/${col}`).doc(pedido.id).set(atualizado, { merge: true })
-                )
-            );
+            await atualizarPedidoNasColecoes(pedido.id, atualizado);
         } catch (error) {
             console.error("Erro ao mover pedido:", error);
         }
     };
 
-    const excluirPedido = async (pedidoId) => {
-        if (!window.confirm("Deseja arquivar/remover este pedido do painel?")) return;
-        const colecoes = ['orders', 'pedidos', 'delivery_orders', 'ecommerce_orders'];
-        try {
-            await Promise.all(
-                colecoes.map(col =>
-                    db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/${col}`).doc(pedidoId).delete()
-                )
-            );
-            setPedidos(prev => prev.filter(p => p.id !== pedidoId));
-            setPedidoSelecionado(null);
-        } catch (error) {
-            console.error("Erro ao excluir pedido:", error);
-        }
+    const salvarCodigoRastreio = async () => {
+        if (!pedidoSelecionado || !donoUid) return;
+        const atualizado = {
+            ...pedidoSelecionado,
+            trackingCode: rastreioInput.trim().toUpperCase(),
+            codigoRastreio: rastreioInput.trim().toUpperCase(),
+            updatedAt: new Date().toISOString()
+        };
+        setPedidos(prev => prev.map(p => p.id === pedidoSelecionado.id ? atualizado : p));
+        setPedidoSelecionado(atualizado);
+        await atualizarPedidoNasColecoes(pedidoSelecionado.id, atualizado);
+        alert("Código de rastreio salvo! O cliente já pode visualizá-lo em 'Meus Pedidos'.");
     };
 
     return (
         <div className="p-4 md:p-6 space-y-6 font-sans min-h-screen bg-slate-100">
             
-            {/* CABEÇALHO DO PAINEL DE PRODUÇÃO */}
             <header className="bg-white rounded-2xl border border-slate-200 px-6 py-4 flex items-center justify-between shadow-xs">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white">
@@ -153,7 +153,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                         <h1 className="font-black text-slate-800 text-base md:text-lg uppercase tracking-wider leading-none">
                             Painel de Produção
                         </h1>
-                        <span className="text-xs font-bold text-slate-400">Gestão de E-commerce 3D</span>
+                        <span className="text-xs font-bold text-slate-400">Gestão de E-commerce 3D (Sincronizado com o Cliente)</span>
                     </div>
                 </div>
 
@@ -163,15 +163,12 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                 </div>
             </header>
 
-            {/* QUADRO KANBAN DE 4 COLUNAS */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
                 {COLUNAS.map((coluna, colIndex) => {
                     const pedidosDaColuna = pedidos.filter(p => obterColunaDoPedido(p) === coluna.id);
 
                     return (
                         <div key={coluna.id} className="bg-slate-200/70 rounded-2xl overflow-hidden flex flex-col min-h-[650px] border border-slate-200/80">
-                            
-                            {/* Cabeçalho colorido da Coluna */}
                             <div className={`${coluna.corTopo} text-white px-4 py-3.5 flex items-center justify-between shadow-xs`}>
                                 <div className="flex items-center gap-2">
                                     <Icon name={coluna.icone} size={16} />
@@ -182,7 +179,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                 </span>
                             </div>
 
-                            {/* Lista de Cards de Pedidos */}
                             <div className="p-3 space-y-3 flex-1">
                                 {loading ? (
                                     <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-xs font-black uppercase text-slate-400">
@@ -196,7 +192,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                     pedidosDaColuna.map(ped => {
                                         const codigo = ped.orderNumber || ped.numeroPedido || ped.codigo || ped.id?.slice(0, 6).toUpperCase();
                                         const nomeCli = ped.customerName || ped.clienteNome || ped.nomeCliente || ped.nome || 'Cliente';
-                                        const foneCli = ped.customerPhone || ped.clienteTelefone || ped.telefone || ped.whatsapp || '';
                                         const total = ped.total || ped.valorTotal || ped.totalAmount || 0;
                                         const listaItens = Array.isArray(ped.items) ? ped.items : Array.isArray(ped.itens) ? ped.itens : [];
                                         const dataHora = ped.createdAt ? new Date(ped.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
@@ -215,19 +210,13 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
 
                                                 <div>
                                                     <p className="font-black text-sm text-slate-800 uppercase">{nomeCli}</p>
-                                                    {foneCli && (
-                                                        <a
-                                                            href={`https://wa.me/55${String(foneCli).replace(/\D/g, '')}`}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1 mt-0.5"
-                                                        >
-                                                            <Icon name="phone" size={12} /> {foneCli}
-                                                        </a>
+                                                    {(ped.endereco || ped.address) && (
+                                                        <p className="text-[11px] text-slate-500 font-semibold line-clamp-2 mt-0.5">
+                                                            📍 {ped.endereco || ped.address}
+                                                        </p>
                                                     )}
                                                 </div>
 
-                                                {/* Itens do Pedido */}
                                                 <div className="bg-slate-50 rounded-lg p-2.5 space-y-1 border border-slate-100">
                                                     {listaItens.length > 0 ? (
                                                         listaItens.map((it, idx) => (
@@ -239,56 +228,51 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                                     ) : (
                                                         <p className="text-xs font-bold text-slate-700">{ped.resumoItens || '1x Produto'}</p>
                                                     )}
-                                                    {(ped.observacao || ped.notes) && (
-                                                        <p className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded mt-1">
-                                                            Obs: {ped.observacao || ped.notes}
-                                                        </p>
-                                                    )}
                                                 </div>
 
                                                 <div className="flex items-center justify-between pt-1">
-                                                    <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1 rounded">
-                                                        {ped.formaPagamento || ped.paymentMethod || 'PIX'}
+                                                    <span className="text-[10px] font-black uppercase bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                                                        {ped.modalidadeFrete || 'Envio'} • {ped.formaPagamento || 'PIX'}
                                                     </span>
                                                     <span className="font-black text-base text-emerald-600">
                                                         {formatMoney(total)}
                                                     </span>
                                                 </div>
 
-                                                {/* Botões de Ação e Movimentação entre Colunas */}
                                                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
-                                                    {antColuna ? (
+                                                    {antColuna && (
                                                         <button
                                                             onClick={() => moverPedido(ped, antColuna.id)}
                                                             className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-black text-[10px] uppercase"
-                                                            title={`Voltar para ${antColuna.titulo}`}
                                                         >
                                                             ←
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => excluirPedido(ped.id)}
-                                                            className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg font-black text-[10px]"
-                                                            title="Excluir Pedido"
-                                                        >
-                                                            <Icon name="trash-2" size={13} />
                                                         </button>
                                                     )}
 
                                                     <button
-                                                        onClick={() => setPedidoSelecionado(ped)}
+                                                        onClick={() => {
+                                                            setPedidoSelecionado(ped);
+                                                            setRastreioInput(ped.trackingCode || ped.codigoRastreio || '');
+                                                        }}
                                                         className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-black text-[10px] uppercase"
                                                     >
-                                                        Detalhes
+                                                        Detalhes / Rastreio
                                                     </button>
 
-                                                    {proxColuna && (
+                                                    {proxColuna ? (
                                                         <button
                                                             onClick={() => moverPedido(ped, proxColuna.id)}
-                                                            className="px-3 py-1.5 bg-slate-900 hover:bg-black text-white rounded-lg font-black text-[10px] uppercase flex items-center gap-1"
-                                                            title={`Avançar para ${proxColuna.titulo}`}
+                                                            className="px-3 py-1.5 bg-slate-900 hover:bg-black text-white rounded-lg font-black text-[10px] uppercase"
                                                         >
                                                             Avançar →
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => moverPedido(ped, 'concluido')}
+                                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black text-[10px] uppercase"
+                                                            title="Marca como Entregue para o cliente e arquiva no Histórico"
+                                                        >
+                                                            ✓ Entregue
                                                         </button>
                                                     )}
                                                 </div>
@@ -302,64 +286,62 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                 })}
             </div>
 
-            {/* MODAL DE DETALHES DO PEDIDO */}
+            {/* MODAL DE DETALHES + CÓDIGO DE RASTREIO */}
             {pedidoSelecionado && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
                         <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
                             <div>
                                 <h3 className="font-black text-base uppercase">
-                                    Pedido #{pedidoSelecionado.orderNumber || pedidoSelecionado.codigo || pedidoSelecionado.id?.slice(0, 6).toUpperCase()}
+                                    Pedido #{pedidoSelecionado.orderNumber || pedidoSelecionado.codigo}
                                 </h3>
-                                <span className="text-xs text-slate-400">Detalhes completos para produção e envio</span>
+                                <span className="text-xs text-slate-400">Envio e Código de Rastreio</span>
                             </div>
                             <button onClick={() => setPedidoSelecionado(null)} className="text-white/70 hover:text-white text-xl">✕</button>
                         </div>
 
                         <div className="p-6 space-y-4 text-xs">
                             <div>
-                                <span className="text-[10px] font-black uppercase text-slate-400 block">Cliente</span>
+                                <span className="text-[10px] font-black uppercase text-slate-400 block">Cliente / Contato</span>
                                 <p className="font-black text-sm text-slate-800">{pedidoSelecionado.customerName || pedidoSelecionado.nome}</p>
                                 <p className="font-bold text-emerald-600">{pedidoSelecionado.customerPhone || pedidoSelecionado.telefone}</p>
                             </div>
 
                             <div>
-                                <span className="text-[10px] font-black uppercase text-slate-400 block">Endereço de Entrega</span>
-                                <p className="font-bold text-slate-700">{pedidoSelecionado.address || pedidoSelecionado.endereco || 'Não informado'}</p>
+                                <span className="text-[10px] font-black uppercase text-slate-400 block">Endereço Completo e CEP</span>
+                                <p className="font-bold text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-200 mt-1">
+                                    {pedidoSelecionado.address || pedidoSelecionado.endereco || 'Não informado'}
+                                </p>
                             </div>
 
-                            <div>
-                                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Itens do Pedido</span>
-                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
-                                    {(pedidoSelecionado.items || pedidoSelecionado.itens || []).map((it, i) => (
-                                        <div key={i} className="flex justify-between font-bold">
-                                            <span>{it.qtd || it.quantity || 1}x {it.name || it.nome}</span>
-                                            <span>{formatMoney((it.price || it.preco || 0) * (it.qtd || it.quantity || 1))}</span>
-                                        </div>
-                                    ))}
+                            {/* Campo para informar Código de Rastreio ao Cliente */}
+                            <div className="bg-blue-50/60 p-3.5 rounded-xl border border-blue-200 space-y-2">
+                                <label className="text-[10px] font-black uppercase text-blue-800 block">
+                                    Código de Rastreio (Correios / Transportadora)
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={rastreioInput}
+                                        onChange={e => setRastreioInput(e.target.value)}
+                                        placeholder="Ex: AA123456789BR"
+                                        className="flex-1 p-2 bg-white border border-blue-200 rounded-lg font-black text-xs uppercase outline-none"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={salvarCodigoRastreio}
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-black text-xs uppercase"
+                                    >
+                                        Salvar
+                                    </button>
                                 </div>
                             </div>
 
                             <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                                <span className="font-black uppercase text-slate-500">Valor Total ({pedidoSelecionado.formaPagamento || 'PIX'}):</span>
+                                <span className="font-black uppercase text-slate-500">
+                                    Total ({pedidoSelecionado.modalidadeFrete || 'Frete'} • {pedidoSelecionado.formaPagamento || 'PIX'}):
+                                </span>
                                 <span className="font-black text-lg text-emerald-600">{formatMoney(pedidoSelecionado.total || pedidoSelecionado.valorTotal)}</span>
-                            </div>
-
-                            <div className="pt-3 flex gap-2">
-                                <a
-                                    href={`https://wa.me/55${String(pedidoSelecionado.customerPhone || pedidoSelecionado.telefone || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${pedidoSelecionado.customerName || ''}! Estamos falando sobre o seu Pedido #${pedidoSelecionado.orderNumber || ''} na loja.`)}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-center"
-                                >
-                                    Chamar Cliente no WhatsApp
-                                </a>
-                                <button
-                                    onClick={() => excluirPedido(pedidoSelecionado.id)}
-                                    className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-black uppercase"
-                                >
-                                    Excluir
-                                </button>
                             </div>
                         </div>
                     </div>
