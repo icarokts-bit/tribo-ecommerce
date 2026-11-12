@@ -1,297 +1,370 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import Icon from '../../components/Icon';
 
-export default function Kanban({ user, permissoes }) {
-    const [orders, setOrders] = useState([]);
+const COLUNAS = [
+    {
+        id: 'novo',
+        titulo: 'NOVOS PEDIDOS',
+        icone: 'inbox',
+        corTopo: 'bg-blue-600',
+        statusAceitos: ['novo', 'pending', 'pendente', 'novos', 'aguardando', 'recebido']
+    },
+    {
+        id: 'producao',
+        titulo: 'NA IMPRESSORA / FABRICO',
+        icone: 'cpu',
+        corTopo: 'bg-amber-500',
+        statusAceitos: ['producao', 'impressora', 'fabrico', 'preparando', 'printing', 'em_producao']
+    },
+    {
+        id: 'embalagem',
+        titulo: 'EMBALAGEM / SEPARAÇÃO',
+        icone: 'package',
+        corTopo: 'bg-purple-600',
+        statusAceitos: ['embalagem', 'separacao', 'pronto', 'packing', 'ready']
+    },
+    {
+        id: 'enviado',
+        titulo: 'ENVIADO / AGUARD. RETIRADA',
+        icone: 'truck',
+        corTopo: 'bg-emerald-500',
+        statusAceitos: ['enviado', 'retirada', 'entregue', 'shipped', 'delivered', 'concluido']
+    }
+];
+
+export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
+    const [pedidos, setPedidos] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [selectedOrder, setSelectedOrder] = useState(null);
-    const audioRef = useRef(null);
-    const previousOrdersCount = useRef(0);
+    const [pedidoSelecionado, setPedidoSelecionado] = useState(null);
 
-    const donoUid = permissoes?.donoUid || user?.uid;
-
-    // Definição do funil de produção (Colunas do Kanban)
-    const columns = [
-        { id: 'pendente', title: 'Novos Pedidos', color: 'bg-blue-500', icon: 'inbox' },
-        { id: 'producao', title: 'Na Impressora / Fabrico', color: 'bg-amber-500', icon: 'cpu' },
-        { id: 'embalagem', title: 'Embalagem / Separação', color: 'bg-purple-500', icon: 'package' },
-        { id: 'enviado', title: 'Enviado / Aguard. Retirada', color: 'bg-emerald-500', icon: 'truck' }
-    ];
+    const donoUid = propDonoUid || permissoes?.donoUid || user?.uid;
 
     useEffect(() => {
         if (!donoUid) return;
 
-        // Cria o elemento de áudio para alertas de novos pedidos
-        audioRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+        // Escuta em tempo real a coleção 'orders' e mescla com 'pedidos' e 'ecommerce_orders'
+        const unsub = db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/orders`)
+            .onSnapshot(async (snapOrders) => {
+                const listaOrders = snapOrders.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Escuta os pedidos em tempo real (excluindo concluídos e cancelados do painel principal para não pesar)
-        const unsubscribe = db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery_orders`)
-            .where('status', 'in', ['pendente', 'producao', 'embalagem', 'enviado'])
-            .onSnapshot((snapshot) => {
-                const fetchedOrders = [];
-                snapshot.forEach(doc => {
-                    fetchedOrders.push({ id: doc.id, ...doc.data() });
-                });
+                try {
+                    const [snapPedidos, snapEco] = await Promise.all([
+                        db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/pedidos`).get(),
+                        db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_orders`).get()
+                    ]);
 
-                // Ordena por data (mais antigos primeiro para prioridade de produção)
-                fetchedOrders.sort((a, b) => {
-                    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
-                    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
-                    return dateA - dateB;
-                });
+                    const listaPedidos = snapPedidos.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const listaEco = snapEco.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-                setOrders(fetchedOrders);
-                setLoading(false);
+                    const mapa = new Map();
+                    [...listaEco, ...listaPedidos, ...listaOrders].forEach(p => {
+                        const chave = p.id || p.orderNumber || p.codigo;
+                        if (chave) mapa.set(chave, p);
+                    });
 
-                // Dispara o alerta sonoro se chegar um pedido novo (pendente)
-                const currentPending = fetchedOrders.filter(o => o.status === 'pendente').length;
-                if (currentPending > previousOrdersCount.current && previousOrdersCount.current !== 0) {
-                    audioRef.current?.play().catch(e => console.log('Áudio bloqueado pelo navegador', e));
+                    const unificados = Array.from(mapa.values()).sort((a, b) => {
+                        const tA = a.timestamp || new Date(a.createdAt || a.dataPedido || 0).getTime();
+                        const tB = b.timestamp || new Date(b.createdAt || b.dataPedido || 0).getTime();
+                        return tB - tA;
+                    });
+
+                    setPedidos(unificados);
+                } catch (err) {
+                    setPedidos(listaOrders);
                 }
-                previousOrdersCount.current = currentPending;
+                setLoading(false);
             }, (error) => {
-                console.error("Erro ao buscar pedidos:", error);
+                console.error("Erro ao escutar pedidos:", error);
                 setLoading(false);
             });
 
-        return () => unsubscribe();
+        return () => unsub();
     }, [donoUid]);
 
-    const updateOrderStatus = async (orderId, newStatus) => {
-        try {
-            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery_orders/${orderId}`).update({
-                status: newStatus,
-                updatedAt: new Date().toISOString()
-            });
-            if (selectedOrder && selectedOrder.id === orderId) {
-                setSelectedOrder(null); // Fecha o modal após mover o card
+    const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // Descobre em qual coluna o pedido deve entrar
+    const obterColunaDoPedido = (pedido) => {
+        const st = String(pedido.status || pedido.etapa || pedido.orderStatus || 'novo').toLowerCase().trim();
+        for (const col of COLUNAS) {
+            if (col.id === st || col.statusAceitos.includes(st)) {
+                return col.id;
             }
+        }
+        return 'novo';
+    };
+
+    // Move o pedido de uma coluna para outra no Firebase
+    const moverPedido = async (pedido, novoStatus) => {
+        if (!donoUid) return;
+        const atualizado = {
+            ...pedido,
+            status: novoStatus,
+            etapa: novoStatus,
+            orderStatus: novoStatus,
+            updatedAt: new Date().toISOString()
+        };
+
+        // Atualiza na tela imediatamente
+        setPedidos(prev => prev.map(p => p.id === pedido.id ? atualizado : p));
+        if (pedidoSelecionado?.id === pedido.id) {
+            setPedidoSelecionado(atualizado);
+        }
+
+        const colecoes = ['orders', 'pedidos', 'delivery_orders', 'ecommerce_orders'];
+        try {
+            await Promise.all(
+                colecoes.map(col =>
+                    db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/${col}`).doc(pedido.id).set(atualizado, { merge: true })
+                )
+            );
         } catch (error) {
-            console.error("Erro ao atualizar status:", error);
-            alert("Erro ao mover o pedido. Tente novamente.");
+            console.error("Erro ao mover pedido:", error);
         }
     };
 
-    const formatMoney = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-    if (loading) {
-        return <div className="min-h-screen bg-slate-100 flex items-center justify-center"><Icon name="loader" size={40} className="animate-spin text-slate-400" /></div>;
-    }
+    const excluirPedido = async (pedidoId) => {
+        if (!window.confirm("Deseja arquivar/remover este pedido do painel?")) return;
+        const colecoes = ['orders', 'pedidos', 'delivery_orders', 'ecommerce_orders'];
+        try {
+            await Promise.all(
+                colecoes.map(col =>
+                    db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/${col}`).doc(pedidoId).delete()
+                )
+            );
+            setPedidos(prev => prev.filter(p => p.id !== pedidoId));
+            setPedidoSelecionado(null);
+        } catch (error) {
+            console.error("Erro ao excluir pedido:", error);
+        }
+    };
 
     return (
-        <div className="h-screen bg-slate-100 flex flex-col font-sans overflow-hidden">
-            {/* Cabeçalho do Admin */}
-            <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0">
+        <div className="p-4 md:p-6 space-y-6 font-sans min-h-screen bg-slate-100">
+            
+            {/* CABEÇALHO DO PAINEL DE PRODUÇÃO */}
+            <header className="bg-white rounded-2xl border border-slate-200 px-6 py-4 flex items-center justify-between shadow-xs">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center text-white"><Icon name="trello" size={20}/></div>
+                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white">
+                        <Icon name="box" size={20} />
+                    </div>
                     <div>
-                        <h1 className="font-black text-slate-800 text-lg uppercase tracking-widest leading-none">Painel de Produção</h1>
-                        <span className="text-xs font-bold text-slate-500">Gestão de E-commerce 3D</span>
+                        <h1 className="font-black text-slate-800 text-base md:text-lg uppercase tracking-wider leading-none">
+                            Painel de Produção
+                        </h1>
+                        <span className="text-xs font-bold text-slate-400">Gestão de E-commerce 3D</span>
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="text-right hidden sm:block">
-                        <p className="text-sm font-black text-slate-800">{user?.displayName || 'Administrador'}</p>
-                        <p className="text-xs font-bold text-emerald-600">Online</p>
-                    </div>
+
+                <div className="text-right">
+                    <span className="font-black text-xs text-slate-800 block">{user?.displayName || 'Icaro Suzuki'}</span>
+                    <span className="text-[11px] font-black text-emerald-500">Online</span>
                 </div>
             </header>
 
-            {/* Quadro Kanban */}
-            <main className="flex-1 overflow-x-auto p-6">
-                <div className="flex gap-6 h-full items-start min-w-max">
-                    {columns.map(col => {
-                        const colOrders = orders.filter(o => o.status === col.id);
-                        return (
-                            <div key={col.id} className="w-80 h-full flex flex-col bg-slate-200/50 rounded-2xl border border-slate-200 overflow-hidden shrink-0">
-                                <div className={`p-4 ${col.color} text-white flex items-center justify-between shrink-0 shadow-sm`}>
-                                    <h2 className="font-black uppercase tracking-widest text-sm flex items-center gap-2">
-                                        <Icon name={col.icon} size={16} /> {col.title}
-                                    </h2>
-                                    <span className="bg-white/20 px-2 py-0.5 rounded text-xs font-black">{colOrders.length}</span>
-                                </div>
+            {/* QUADRO KANBAN DE 4 COLUNAS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
+                {COLUNAS.map((coluna, colIndex) => {
+                    const pedidosDaColuna = pedidos.filter(p => obterColunaDoPedido(p) === coluna.id);
 
-                                <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                                    {colOrders.length === 0 ? (
-                                        <div className="h-24 flex items-center justify-center text-slate-400 font-bold text-xs uppercase border-2 border-dashed border-slate-300 rounded-xl">
-                                            Vazio
-                                        </div>
-                                    ) : (
-                                        colOrders.map(order => (
-                                            <div 
-                                                key={order.id} 
-                                                onClick={() => setSelectedOrder(order)}
-                                                className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:border-black hover:shadow-md transition-all group"
-                                            >
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <span className="bg-slate-800 text-white text-[10px] font-black uppercase px-2 py-1 rounded tracking-widest">
-                                                        #{order.orderNumber || order.id.slice(-5)}
+                    return (
+                        <div key={coluna.id} className="bg-slate-200/70 rounded-2xl overflow-hidden flex flex-col min-h-[650px] border border-slate-200/80">
+                            
+                            {/* Cabeçalho colorido da Coluna */}
+                            <div className={`${coluna.corTopo} text-white px-4 py-3.5 flex items-center justify-between shadow-xs`}>
+                                <div className="flex items-center gap-2">
+                                    <Icon name={coluna.icone} size={16} />
+                                    <h2 className="font-black text-xs uppercase tracking-wider">{coluna.titulo}</h2>
+                                </div>
+                                <span className="bg-white/25 text-white text-[11px] font-black px-2 py-0.5 rounded-md">
+                                    {pedidosDaColuna.length}
+                                </span>
+                            </div>
+
+                            {/* Lista de Cards de Pedidos */}
+                            <div className="p-3 space-y-3 flex-1">
+                                {loading ? (
+                                    <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-xs font-black uppercase text-slate-400">
+                                        Carregando...
+                                    </div>
+                                ) : pedidosDaColuna.length === 0 ? (
+                                    <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                                        Vazio
+                                    </div>
+                                ) : (
+                                    pedidosDaColuna.map(ped => {
+                                        const codigo = ped.orderNumber || ped.numeroPedido || ped.codigo || ped.id?.slice(0, 6).toUpperCase();
+                                        const nomeCli = ped.customerName || ped.clienteNome || ped.nomeCliente || ped.nome || 'Cliente';
+                                        const foneCli = ped.customerPhone || ped.clienteTelefone || ped.telefone || ped.whatsapp || '';
+                                        const total = ped.total || ped.valorTotal || ped.totalAmount || 0;
+                                        const listaItens = Array.isArray(ped.items) ? ped.items : Array.isArray(ped.itens) ? ped.itens : [];
+                                        const dataHora = ped.createdAt ? new Date(ped.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+
+                                        const proxColuna = COLUNAS[colIndex + 1];
+                                        const antColuna = COLUNAS[colIndex - 1];
+
+                                        return (
+                                            <div key={ped.id} className="bg-white rounded-xl p-4 border border-slate-200 shadow-xs hover:shadow-md transition-all space-y-3">
+                                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                                    <span className="bg-slate-900 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md">
+                                                        #{codigo}
                                                     </span>
-                                                    <span className="text-[10px] font-bold text-slate-400">
-                                                        {new Date(order.createdAt?.toDate ? order.createdAt.toDate() : order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                                    <span className="text-[10px] font-bold text-slate-400">{dataHora}</span>
+                                                </div>
+
+                                                <div>
+                                                    <p className="font-black text-sm text-slate-800 uppercase">{nomeCli}</p>
+                                                    {foneCli && (
+                                                        <a
+                                                            href={`https://wa.me/55${String(foneCli).replace(/\D/g, '')}`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1 mt-0.5"
+                                                        >
+                                                            <Icon name="phone" size={12} /> {foneCli}
+                                                        </a>
+                                                    )}
+                                                </div>
+
+                                                {/* Itens do Pedido */}
+                                                <div className="bg-slate-50 rounded-lg p-2.5 space-y-1 border border-slate-100">
+                                                    {listaItens.length > 0 ? (
+                                                        listaItens.map((it, idx) => (
+                                                            <div key={idx} className="flex justify-between text-xs font-bold text-slate-700">
+                                                                <span>{it.qtd || it.quantity || 1}x {it.name || it.nome}</span>
+                                                                <span className="text-slate-500">{formatMoney((it.price || it.preco || 0) * (it.qtd || it.quantity || 1))}</span>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <p className="text-xs font-bold text-slate-700">{ped.resumoItens || '1x Produto'}</p>
+                                                    )}
+                                                    {(ped.observacao || ped.notes) && (
+                                                        <p className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded mt-1">
+                                                            Obs: {ped.observacao || ped.notes}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex items-center justify-between pt-1">
+                                                    <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1 rounded">
+                                                        {ped.formaPagamento || ped.paymentMethod || 'PIX'}
+                                                    </span>
+                                                    <span className="font-black text-base text-emerald-600">
+                                                        {formatMoney(total)}
                                                     </span>
                                                 </div>
-                                                
-                                                <h3 className="font-black text-slate-800 text-sm mb-1">{order.clienteInfo?.name}</h3>
-                                                <p className="text-xs font-bold text-slate-500 mb-3 truncate">
-                                                    {order.tipoEntrega === 'delivery' ? order.clienteInfo?.bairro || 'Entrega' : 'Retirada/Local'}
-                                                </p>
-                                                
-                                                <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
-                                                    <span className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1">
-                                                        <Icon name="package" size={12} /> {order.items?.length || 0} Itens
-                                                    </span>
-                                                    <span className="font-black text-emerald-600">{formatMoney(order.totalGeral)}</span>
+
+                                                {/* Botões de Ação e Movimentação entre Colunas */}
+                                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                                                    {antColuna ? (
+                                                        <button
+                                                            onClick={() => moverPedido(ped, antColuna.id)}
+                                                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-black text-[10px] uppercase"
+                                                            title={`Voltar para ${antColuna.titulo}`}
+                                                        >
+                                                            ←
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => excluirPedido(ped.id)}
+                                                            className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg font-black text-[10px]"
+                                                            title="Excluir Pedido"
+                                                        >
+                                                            <Icon name="trash-2" size={13} />
+                                                        </button>
+                                                    )}
+
+                                                    <button
+                                                        onClick={() => setPedidoSelecionado(ped)}
+                                                        className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-black text-[10px] uppercase"
+                                                    >
+                                                        Detalhes
+                                                    </button>
+
+                                                    {proxColuna && (
+                                                        <button
+                                                            onClick={() => moverPedido(ped, proxColuna.id)}
+                                                            className="px-3 py-1.5 bg-slate-900 hover:bg-black text-white rounded-lg font-black text-[10px] uppercase flex items-center gap-1"
+                                                            title={`Avançar para ${proxColuna.titulo}`}
+                                                        >
+                                                            Avançar →
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
-                                        ))
-                                    )}
-                                </div>
+                                        );
+                                    })
+                                )}
                             </div>
-                        );
-                    })}
-                </div>
-            </main>
+                        </div>
+                    );
+                })}
+            </div>
 
-            {/* Modal de Detalhes do Pedido */}
-            {selectedOrder && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-scale-up">
-                        <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+            {/* MODAL DE DETALHES DO PEDIDO */}
+            {pedidoSelecionado && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
                             <div>
-                                <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                                    Pedido #{selectedOrder.orderNumber || selectedOrder.id.slice(-5)}
+                                <h3 className="font-black text-base uppercase">
+                                    Pedido #{pedidoSelecionado.orderNumber || pedidoSelecionado.codigo || pedidoSelecionado.id?.slice(0, 6).toUpperCase()}
                                 </h3>
-                                <p className="text-xs font-bold text-slate-500 mt-1">
-                                    {new Date(selectedOrder.createdAt?.toDate ? selectedOrder.createdAt.toDate() : selectedOrder.createdAt).toLocaleString('pt-BR')}
-                                </p>
+                                <span className="text-xs text-slate-400">Detalhes completos para produção e envio</span>
                             </div>
-                            <button onClick={() => setSelectedOrder(null)} className="w-8 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-400 hover:text-black hover:border-black transition-colors">
-                                <Icon name="x" size={16} />
-                            </button>
+                            <button onClick={() => setPedidoSelecionado(null)} className="text-white/70 hover:text-white text-xl">✕</button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                            
-                            {/* Dados do Cliente e Entrega */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</h4>
-                                    <p className="font-black text-slate-800">{selectedOrder.clienteInfo?.name}</p>
-                                    <p className="text-sm font-bold text-slate-600 mt-1"><Icon name="phone" size={12} className="inline mr-1" /> {selectedOrder.clienteInfo?.phone}</p>
-                                </div>
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
-                                        {selectedOrder.tipoEntrega === 'delivery' ? 'Endereço de Entrega' : 'Retirada na Loja'}
-                                    </h4>
-                                    <p className="font-black text-slate-800 text-sm">{selectedOrder.clienteInfo?.address}</p>
-                                    {selectedOrder.tipoEntrega === 'delivery' && (
-                                        <p className="text-xs font-bold text-slate-600 mt-1">
-                                            Nº {selectedOrder.clienteInfo?.numero} {selectedOrder.clienteInfo?.complemento && `- ${selectedOrder.clienteInfo?.complemento}`}
-                                            <br/>Bairro: {selectedOrder.clienteInfo?.bairro}
-                                        </p>
-                                    )}
-                                </div>
+                        <div className="p-6 space-y-4 text-xs">
+                            <div>
+                                <span className="text-[10px] font-black uppercase text-slate-400 block">Cliente</span>
+                                <p className="font-black text-sm text-slate-800">{pedidoSelecionado.customerName || pedidoSelecionado.nome}</p>
+                                <p className="font-bold text-emerald-600">{pedidoSelecionado.customerPhone || pedidoSelecionado.telefone}</p>
                             </div>
 
-                            {/* Itens do Pedido */}
                             <div>
-                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3 border-b border-slate-200 pb-2">Itens para Produção</h4>
-                                <div className="space-y-3">
-                                    {(selectedOrder.items || []).map((item, idx) => (
-                                        <div key={idx} className="flex gap-4 items-start bg-white border border-slate-200 p-3 rounded-xl shadow-sm">
-                                            <div className="bg-slate-100 text-slate-800 font-black text-sm w-8 h-8 rounded flex items-center justify-center shrink-0">
-                                                {item.qty}x
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="flex justify-between items-start">
-                                                    <p className="font-black text-slate-800 text-sm">{item.name}</p>
-                                                    <span className="font-black text-slate-600">{formatMoney(item.price * item.qty)}</span>
-                                                </div>
-                                                <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">SKU: {item.sku}</p>
-                                                {item.variationsDesc && (
-                                                    <p className="text-xs font-bold text-indigo-600 bg-indigo-50 inline-block px-2 py-1 rounded mt-1 border border-indigo-100">
-                                                        {item.variationsDesc}
-                                                    </p>
-                                                )}
-                                                {item.observation && (
-                                                    <p className="text-xs font-bold text-amber-600 mt-2 bg-amber-50 p-2 rounded border border-amber-100">
-                                                        Obs: {item.observation}
-                                                    </p>
-                                                )}
-                                            </div>
+                                <span className="text-[10px] font-black uppercase text-slate-400 block">Endereço de Entrega</span>
+                                <p className="font-bold text-slate-700">{pedidoSelecionado.address || pedidoSelecionado.endereco || 'Não informado'}</p>
+                            </div>
+
+                            <div>
+                                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Itens do Pedido</span>
+                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                                    {(pedidoSelecionado.items || pedidoSelecionado.itens || []).map((it, i) => (
+                                        <div key={i} className="flex justify-between font-bold">
+                                            <span>{it.qtd || it.quantity || 1}x {it.name || it.nome}</span>
+                                            <span>{formatMoney((it.price || it.preco || 0) * (it.qtd || it.quantity || 1))}</span>
                                         </div>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Observação Geral e Pagamento */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {selectedOrder.clienteInfo?.observation && (
-                                    <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl md:col-span-2">
-                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-1">Observação do Cliente</h4>
-                                        <p className="text-sm font-bold text-amber-800">{selectedOrder.clienteInfo?.observation}</p>
-                                    </div>
-                                )}
-                                
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Pagamento</h4>
-                                    <p className="font-black text-slate-800 uppercase">{selectedOrder.clienteInfo?.paymentMethod}</p>
-                                    {selectedOrder.clienteInfo?.troco > 0 && (
-                                        <p className="text-xs font-bold text-emerald-600 mt-1">Troco para {formatMoney(selectedOrder.clienteInfo?.troco)}</p>
-                                    )}
-                                </div>
-
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1">
-                                    <div className="flex justify-between text-xs font-bold text-slate-500"><span>Subtotal</span><span>{formatMoney(selectedOrder.subtotal)}</span></div>
-                                    <div className="flex justify-between text-xs font-bold text-slate-500"><span>Frete</span><span>{formatMoney(selectedOrder.deliveryFee)}</span></div>
-                                    {selectedOrder.discountAmount > 0 && <div className="flex justify-between text-xs font-bold text-blue-500"><span>Desconto</span><span>-{formatMoney(selectedOrder.discountAmount)}</span></div>}
-                                    <div className="flex justify-between text-sm font-black text-slate-800 pt-2 border-t border-slate-200 mt-2">
-                                        <span>Total</span><span>{formatMoney(selectedOrder.totalGeral)}</span>
-                                    </div>
-                                </div>
+                            <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                                <span className="font-black uppercase text-slate-500">Valor Total ({pedidoSelecionado.formaPagamento || 'PIX'}):</span>
+                                <span className="font-black text-lg text-emerald-600">{formatMoney(pedidoSelecionado.total || pedidoSelecionado.valorTotal)}</span>
                             </div>
-                        </div>
 
-                        {/* Botões de Ação do Kanban */}
-                        <div className="p-5 border-t border-slate-200 bg-slate-50 grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
-                            {selectedOrder.status === 'pendente' && (
-                                <button onClick={() => updateOrderStatus(selectedOrder.id, 'producao')} className="col-span-2 sm:col-span-4 bg-amber-500 hover:bg-amber-600 text-white font-black uppercase tracking-widest text-xs py-4 rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2">
-                                    <Icon name="cpu" size={16}/> Mandar para Impressora
+                            <div className="pt-3 flex gap-2">
+                                <a
+                                    href={`https://wa.me/55${String(pedidoSelecionado.customerPhone || pedidoSelecionado.telefone || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${pedidoSelecionado.customerName || ''}! Estamos falando sobre o seu Pedido #${pedidoSelecionado.orderNumber || ''} na loja.`)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-center"
+                                >
+                                    Chamar Cliente no WhatsApp
+                                </a>
+                                <button
+                                    onClick={() => excluirPedido(pedidoSelecionado.id)}
+                                    className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-black uppercase"
+                                >
+                                    Excluir
                                 </button>
-                            )}
-                            {selectedOrder.status === 'producao' && (
-                                <button onClick={() => updateOrderStatus(selectedOrder.id, 'embalagem')} className="col-span-2 sm:col-span-4 bg-purple-500 hover:bg-purple-600 text-white font-black uppercase tracking-widest text-xs py-4 rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2">
-                                    <Icon name="package" size={16}/> Peça Pronta (Mandar p/ Embalagem)
-                                </button>
-                            )}
-                            {selectedOrder.status === 'embalagem' && (
-                                <button onClick={() => updateOrderStatus(selectedOrder.id, 'enviado')} className="col-span-2 sm:col-span-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-widest text-xs py-4 rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2">
-                                    <Icon name="truck" size={16}/> Enviar / Liberar para Retirada
-                                </button>
-                            )}
-                            {selectedOrder.status === 'enviado' && (
-                                <button onClick={() => updateOrderStatus(selectedOrder.id, 'concluido')} className="col-span-2 sm:col-span-4 bg-slate-800 hover:bg-black text-white font-black uppercase tracking-widest text-xs py-4 rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2">
-                                    <Icon name="check-circle" size={16}/> Marcar como Concluído
-                                </button>
-                            )}
-                            
-                            <button onClick={() => updateOrderStatus(selectedOrder.id, 'cancelado')} className="col-span-2 sm:col-span-4 mt-2 bg-white hover:bg-red-50 text-red-500 border border-red-200 font-black uppercase tracking-widest text-xs py-3 rounded-xl transition-colors">
-                                Cancelar Pedido
-                            </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
-
-            <style jsx>{`
-                @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-                .animate-scale-up { animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-                .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
-            `}</style>
         </div>
     );
 }
