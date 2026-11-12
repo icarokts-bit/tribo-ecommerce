@@ -60,7 +60,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
     const [editandoId, setEditandoId] = useState(null);
 
     const [formData, setFormData] = useState({
-        tipoRegistro: 'pedido', // 'pedido' | 'orcamento'
+        tipoRegistro: 'pedido',
         orderNumber: '0001',
         customerName: '',
         customerPhone: '',
@@ -77,7 +77,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
         items: []
     });
 
-    // Campos temporários para adicionar item dentro do modal de Pedido/Orçamento
+    // Campos temporários para adicionar item dentro do modal
     const [produtoSelectId, setProdutoSelectId] = useState('');
     const [itemNomeTemp, setItemNomeTemp] = useState('');
     const [itemQtdTemp, setItemQtdTemp] = useState(1);
@@ -87,11 +87,9 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
 
     const formatarNumeroPedido = (num) => String(Math.max(1, Number(num || 1))).padStart(4, '0');
 
-    // 1. Escuta o Contador Sequencial, Pedidos, Catálogo e Clientes
     useEffect(() => {
         if (!donoUid) return;
 
-        // Escuta em tempo real o contador de pedidos e a senha de segurança
         const unsubCounter = db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/order_counter`)
             .onSnapshot(doc => {
                 if (doc.exists) {
@@ -157,7 +155,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
         };
     }, [donoUid]);
 
-    // Confirma a senha de administrador e ZERA a sequência para 0001
     const handleConfirmarZerarComSenha = async (e) => {
         e.preventDefault();
         if (!donoUid) return;
@@ -189,7 +186,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
         }
     };
 
-    // Gera e reserva o próximo número sequencial (0001, 0002...) no banco
     const gerarProximoNumeroNoBanco = async () => {
         const counterRef = db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/order_counter`);
         try {
@@ -573,19 +569,19 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
     return (
         <div className="p-4 md:p-6 space-y-6 font-sans min-h-screen bg-slate-100">
             
-            {/* CABEÇALHO DO PAINEL DE PRODUÇÃO COM CONTADOR SEQUENCIAL E BOTÃO ZERAR C/ SENHA */}
-            <header className="bg-white rounded-2xl border border-slate-200 px-6 py-4 flex flex-wrap items-center justify-between gap-4 shadow-xs">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white">
-                        <Icon name="box" size={20} />
+            {/* CABEÇALHO DO PAINEL DE PRODUÇÃO COM LETRAS MAIORES E BEM LEGÍVEIS */}
+            <header className="bg-white rounded-2xl border border-slate-200 px-6 py-5 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white shrink-0">
+                        <Icon name="box" size={24} />
                     </div>
                     <div>
-                        <h1 className="font-black text-slate-800 text-base md:text-lg uppercase tracking-wider leading-none">
+                        <h1 className="font-black text-slate-900 text-lg md:text-xl uppercase tracking-wider leading-tight">
                             Painel de Produção & Orçamentos
                         </h1>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs font-bold text-slate-400">
-                                Próximo Nº da Sequência: <strong className="text-slate-700">#{formatarNumeroPedido(ultimoNumeroSequencial + 1)}</strong>
+                        <div className="flex flex-wrap items-center gap-3 mt-1">
+                            <span className="text-sm font-bold text-slate-500">
+                                Próximo Nº da Sequência: <strong className="text-slate-900 font-black">#{formatarNumeroPedido(ultimoNumeroSequencial + 1)}</strong>
                             </span>
                             <button
                                 type="button"
@@ -594,7 +590,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                     setModoTrocarSenha(false);
                                     setModalResetOpen(true);
                                 }}
-                                className="text-[10px] font-black uppercase bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1"
+                                className="text-xs font-black uppercase bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                                 title="Reiniciar contagem de pedidos para 0001 (Requer Senha)"
                             >
                                 🔒 Zerar Nº (0001)
@@ -603,24 +599,24 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                     </div>
                 </div>
 
-                {/* Filtros Rápidos + Botões de Ação */}
-                <div className="flex flex-wrap items-center gap-2.5">
-                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-[11px] font-black uppercase">
+                {/* Filtros Rápidos + Botões de Ação com Fontes Maiores */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs md:text-sm font-black uppercase">
                         <button
                             onClick={() => setFiltroTipo('todos')}
-                            className={`px-3 py-1.5 rounded-lg transition-colors ${filtroTipo === 'todos' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                            className={`px-3.5 py-2 rounded-lg transition-colors cursor-pointer ${filtroTipo === 'todos' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
                         >
                             Todos
                         </button>
                         <button
                             onClick={() => setFiltroTipo('pedidos')}
-                            className={`px-3 py-1.5 rounded-lg transition-colors ${filtroTipo === 'pedidos' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                            className={`px-3.5 py-2 rounded-lg transition-colors cursor-pointer ${filtroTipo === 'pedidos' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
                         >
                             Pedidos
                         </button>
                         <button
                             onClick={() => setFiltroTipo('orcamentos')}
-                            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${filtroTipo === 'orcamentos' ? 'bg-orange-500 text-white shadow-xs' : 'text-orange-600 hover:bg-orange-50'}`}
+                            className={`px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${filtroTipo === 'orcamentos' ? 'bg-orange-500 text-white shadow-xs' : 'text-orange-600 hover:bg-orange-50'}`}
                         >
                             Orçamentos ({totalOrcamentosAtivos})
                         </button>
@@ -628,44 +624,44 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
 
                     <button
                         onClick={() => abrirModalNovo('orcamento')}
-                        className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-xl font-black uppercase text-xs tracking-wider flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-3 rounded-xl font-black uppercase text-xs md:text-sm tracking-wider flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
                     >
-                        <Icon name="file-text" size={15} /> + Novo Orçamento
+                        <Icon name="file-text" size={18} /> + Novo Orçamento
                     </button>
 
                     <button
                         onClick={() => abrirModalNovo('pedido')}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-black uppercase text-xs tracking-wider flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-black uppercase text-xs md:text-sm tracking-wider flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
                     >
-                        <Icon name="plus" size={16} /> + Novo Pedido
+                        <Icon name="plus" size={18} /> + Novo Pedido
                     </button>
                 </div>
             </header>
 
-            {/* QUADRO KANBAN DE 4 COLUNAS */}
+            {/* QUADRO KANBAN DE 4 COLUNAS COM FONTES AMPLIADAS */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
                 {COLUNAS.map((coluna, colIndex) => {
                     const pedidosDaColuna = pedidosVisiveisNoQuadro.filter(p => obterColunaDoPedido(p) === coluna.id);
 
                     return (
-                        <div key={coluna.id} className="bg-slate-200/70 rounded-2xl overflow-hidden flex flex-col min-h-[650px] border border-slate-200/80">
-                            <div className={`${coluna.corTopo} text-white px-4 py-3.5 flex items-center justify-between shadow-xs`}>
-                                <div className="flex items-center gap-2">
-                                    <Icon name={coluna.icone} size={16} />
-                                    <h2 className="font-black text-xs uppercase tracking-wider">{coluna.titulo}</h2>
+                        <div key={coluna.id} className="bg-slate-200/75 rounded-2xl overflow-hidden flex flex-col min-h-[680px] border border-slate-300/80">
+                            <div className={`${coluna.corTopo} text-white px-4 py-4 flex items-center justify-between shadow-xs`}>
+                                <div className="flex items-center gap-2.5">
+                                    <Icon name={coluna.icone} size={18} />
+                                    <h2 className="font-black text-xs md:text-sm uppercase tracking-wider">{coluna.titulo}</h2>
                                 </div>
-                                <span className="bg-white/25 text-white text-[11px] font-black px-2 py-0.5 rounded-md">
+                                <span className="bg-white/25 text-white text-xs md:text-sm font-black px-2.5 py-0.5 rounded-lg">
                                     {pedidosDaColuna.length}
                                 </span>
                             </div>
 
-                            <div className="p-3 space-y-3 flex-1">
+                            <div className="p-3.5 space-y-3.5 flex-1">
                                 {loading ? (
-                                    <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-xs font-black uppercase text-slate-400">
+                                    <div className="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center text-sm font-black uppercase text-slate-500">
                                         Carregando...
                                     </div>
                                 ) : pedidosDaColuna.length === 0 ? (
-                                    <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                                    <div className="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center text-sm font-black uppercase text-slate-400 tracking-wider">
                                         Vazio
                                     </div>
                                 ) : (
@@ -682,107 +678,107 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                         const antColuna = COLUNAS[colIndex - 1];
 
                                         return (
-                                            <div key={ped.id} className={`bg-white rounded-xl p-4 border-2 shadow-xs hover:shadow-md transition-all space-y-3 ${isOrc ? 'border-orange-300 bg-orange-50/10' : 'border-slate-200'}`}>
+                                            <div key={ped.id} className={`bg-white rounded-2xl p-4 border-2 shadow-sm hover:shadow-md transition-all space-y-3.5 ${isOrc ? 'border-orange-300 bg-orange-50/10' : 'border-slate-200'}`}>
                                                 
-                                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <span className="bg-slate-900 text-white text-[11px] font-black uppercase px-2.5 py-1 rounded-md">
+                                                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="bg-slate-900 text-white text-xs font-black uppercase px-3 py-1 rounded-lg">
                                                             #{codigo}
                                                         </span>
                                                         {isOrc && (
-                                                            <span className="bg-orange-500 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded">
+                                                            <span className="bg-orange-500 text-white text-[11px] font-black uppercase px-2.5 py-1 rounded-lg">
                                                                 ORÇAMENTO
                                                             </span>
                                                         )}
                                                     </div>
 
                                                     <div className="flex items-center gap-1">
-                                                        <span className="text-[10px] font-bold text-slate-400 mr-1">{dataHora}</span>
+                                                        <span className="text-xs font-bold text-slate-400 mr-1">{dataHora}</span>
                                                         <button
                                                             onClick={() => abrirModalEditar(ped)}
-                                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                                                             title="Editar Pedido / Orçamento"
                                                         >
-                                                            <Icon name="edit" size={14} />
+                                                            <Icon name="edit" size={16} />
                                                         </button>
                                                         <button
                                                             onClick={() => excluirPedido(ped.id)}
-                                                            className="p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                                                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                                                             title="Excluir"
                                                         >
-                                                            <Icon name="trash-2" size={14} />
+                                                            <Icon name="trash-2" size={16} />
                                                         </button>
                                                     </div>
                                                 </div>
 
                                                 <div>
-                                                    <p className="font-black text-sm text-slate-800 uppercase">{nomeCli}</p>
+                                                    <p className="font-black text-base text-slate-900 uppercase leading-snug">{nomeCli}</p>
                                                     {foneCli && (
                                                         <a
                                                             href={`https://wa.me/55${String(foneCli).replace(/\D/g, '')}`}
                                                             target="_blank"
                                                             rel="noreferrer"
-                                                            className="text-xs font-bold text-emerald-600 hover:underline inline-flex items-center gap-1 mt-0.5"
+                                                            className="text-xs md:text-sm font-bold text-emerald-600 hover:underline inline-flex items-center gap-1.5 mt-1"
                                                         >
-                                                            <Icon name="phone" size={12} /> {foneCli}
+                                                            <Icon name="phone" size={14} /> {foneCli}
                                                         </a>
                                                     )}
                                                     {(ped.endereco || ped.address) && (
-                                                        <p className="text-[11px] text-slate-500 font-semibold line-clamp-2 mt-0.5">
+                                                        <p className="text-xs text-slate-500 font-semibold line-clamp-2 mt-1">
                                                             📍 {ped.endereco || ped.address}
                                                         </p>
                                                     )}
                                                 </div>
 
-                                                <div className="bg-slate-50 rounded-lg p-2.5 space-y-1 border border-slate-100">
+                                                <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 border border-slate-200/70">
                                                     {listaItens.length > 0 ? (
                                                         listaItens.map((it, idx) => (
-                                                            <div key={idx} className="flex justify-between text-xs font-bold text-slate-700">
+                                                            <div key={idx} className="flex justify-between text-xs md:text-sm font-bold text-slate-800">
                                                                 <span>{it.qtd || it.quantity || 1}x {it.name || it.nome}</span>
-                                                                <span className="text-slate-500">{formatMoney((it.price || it.preco || 0) * (it.qtd || it.quantity || 1))}</span>
+                                                                <span className="text-slate-600 font-black">{formatMoney((it.price || it.preco || 0) * (it.qtd || it.quantity || 1))}</span>
                                                             </div>
                                                         ))
                                                     ) : (
-                                                        <p className="text-xs font-bold text-slate-700">{ped.resumoItens || '1x Produto'}</p>
+                                                        <p className="text-xs md:text-sm font-bold text-slate-800">{ped.resumoItens || '1x Produto'}</p>
                                                     )}
                                                     {(ped.observacao || ped.notes) && (
-                                                        <p className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded mt-1">
+                                                        <p className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1.5 rounded-lg mt-1.5 border border-amber-200">
                                                             Obs: {ped.observacao || ped.notes}
                                                         </p>
                                                     )}
                                                 </div>
 
                                                 <div className="flex items-center justify-between pt-1">
-                                                    <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1 rounded">
+                                                    <span className="text-xs font-black uppercase bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg">
                                                         {ped.modalidadeFrete || 'Envio'} • {ped.formaPagamento || ped.paymentMethod || 'PIX'}
                                                     </span>
-                                                    <span className="font-black text-base text-emerald-600">
+                                                    <span className="font-black text-lg text-emerald-600">
                                                         {formatMoney(total)}
                                                     </span>
                                                 </div>
 
                                                 {isOrc && (
-                                                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                                                    <div className="grid grid-cols-2 gap-2 pt-1">
                                                         <button
                                                             onClick={() => enviarOrcamentoWhatsApp(ped)}
-                                                            className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg font-black text-[10px] uppercase flex items-center justify-center gap-1"
+                                                            className="py-2 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl font-black text-xs uppercase flex items-center justify-center gap-1 cursor-pointer"
                                                         >
                                                             WhatsApp
                                                         </button>
                                                         <button
                                                             onClick={() => moverPedido(ped, 'producao')}
-                                                            className="py-1.5 px-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-black text-[10px] uppercase"
+                                                            className="py-2 px-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-xs uppercase cursor-pointer"
                                                         >
-                                                            ✓ Aprovar Orçamento
+                                                            ✓ Aprovar
                                                         </button>
                                                     </div>
                                                 )}
 
-                                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                                                <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
                                                     {antColuna && (
                                                         <button
                                                             onClick={() => moverPedido(ped, antColuna.id)}
-                                                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-black text-[10px] uppercase"
+                                                            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs uppercase cursor-pointer"
                                                             title={`Voltar para ${antColuna.titulo}`}
                                                         >
                                                             ←
@@ -794,7 +790,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                                             setPedidoSelecionado(ped);
                                                             setRastreioInput(ped.trackingCode || ped.codigoRastreio || '');
                                                         }}
-                                                        className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-black text-[10px] uppercase"
+                                                        className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-black text-xs uppercase cursor-pointer"
                                                     >
                                                         Detalhes
                                                     </button>
@@ -802,7 +798,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                                     {proxColuna ? (
                                                         <button
                                                             onClick={() => moverPedido(ped, proxColuna.id)}
-                                                            className="px-3 py-1.5 bg-slate-900 hover:bg-black text-white rounded-lg font-black text-[10px] uppercase flex items-center gap-1"
+                                                            className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white rounded-xl font-black text-xs uppercase flex items-center gap-1 cursor-pointer"
                                                             title={`Avançar para ${proxColuna.titulo}`}
                                                         >
                                                             Avançar →
@@ -810,7 +806,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                                     ) : (
                                                         <button
                                                             onClick={() => moverPedido(ped, 'concluido')}
-                                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black text-[10px] uppercase flex items-center gap-1 shadow-xs"
+                                                            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase flex items-center gap-1 shadow-xs cursor-pointer"
                                                             title="Finalizar pedido como Entregue e enviar para o Histórico"
                                                         >
                                                             ✓ Entregue
@@ -827,26 +823,24 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                 })}
             </div>
 
-            {/* ========================================================================= */}
-            {/* MODAL DE SEGURANÇA COM SENHA PARA ZERAR O CONTADOR DE PEDIDOS (0001)      */}
-            {/* ========================================================================= */}
+            {/* MODAL DE SEGURANÇA COM SENHA PARA ZERAR O CONTADOR DE PEDIDOS (0001) */}
             {modalResetOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="bg-red-600 text-white p-5 text-center relative">
-                            <button onClick={() => setModalResetOpen(false)} className="absolute top-4 right-4 text-white/80 hover:text-white">✕</button>
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="bg-red-600 text-white p-6 text-center relative">
+                            <button onClick={() => setModalResetOpen(false)} className="absolute top-4 right-4 text-white/80 hover:text-white text-xl">✕</button>
                             <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-2 text-2xl">
                                 🔒
                             </div>
-                            <h3 className="font-black text-base uppercase tracking-wider">Zerar Sequência para #0001</h3>
-                            <p className="text-[11px] opacity-90 mt-1">
+                            <h3 className="font-black text-lg uppercase tracking-wider">Zerar Sequência para #0001</h3>
+                            <p className="text-xs opacity-90 mt-1">
                                 Contador atual: #{formatarNumeroPedido(ultimoNumeroSequencial + 1)}
                             </p>
                         </div>
 
                         <form onSubmit={handleConfirmarZerarComSenha} className="p-6 space-y-4">
                             <div>
-                                <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                                <label className="text-xs font-black uppercase text-slate-600 block mb-1.5">
                                     Digite a Senha de Administrador *
                                 </label>
                                 <input
@@ -856,7 +850,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                     value={senhaResetInput}
                                     onChange={e => setSenhaResetInput(e.target.value)}
                                     placeholder="Senha (padrão: 1234)"
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-center tracking-widest outline-none focus:border-red-500"
+                                    className="w-full p-3.5 bg-slate-50 border border-slate-300 rounded-xl text-base font-black text-center tracking-widest outline-none focus:border-red-500"
                                 />
                             </div>
 
@@ -864,14 +858,14 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                 <button
                                     type="button"
                                     onClick={() => setModoTrocarSenha(!modoTrocarSenha)}
-                                    className="text-[11px] font-bold text-blue-600 hover:underline"
+                                    className="text-xs font-bold text-blue-600 hover:underline"
                                 >
                                     {modoTrocarSenha ? '✕ Cancelar troca de senha' : '⚙️ Alterar senha padrão ao salvar'}
                                 </button>
 
                                 {modoTrocarSenha && (
-                                    <div className="mt-2">
-                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                                    <div className="mt-2.5">
+                                        <label className="text-xs font-black uppercase text-slate-600 block mb-1">
                                             Nova Senha de Segurança
                                         </label>
                                         <input
@@ -879,23 +873,23 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                             value={novaSenhaAdminInput}
                                             onChange={e => setNovaSenhaAdminInput(e.target.value)}
                                             placeholder="Digite a nova senha..."
-                                            className="w-full p-2.5 bg-blue-50/50 border border-blue-200 rounded-xl text-xs font-black text-center"
+                                            className="w-full p-3 bg-blue-50/50 border border-blue-200 rounded-xl text-sm font-black text-center"
                                         />
                                     </div>
                                 )}
                             </div>
 
-                            <div className="flex gap-2 pt-2">
+                            <div className="flex gap-3 pt-2">
                                 <button
                                     type="button"
                                     onClick={() => setModalResetOpen(false)}
-                                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase"
+                                    className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs uppercase cursor-pointer"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-xs uppercase shadow-md cursor-pointer"
+                                    className="flex-1 py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-xs uppercase shadow-md cursor-pointer"
                                 >
                                     Confirmar e Zerar
                                 </button>
@@ -905,352 +899,362 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                 </div>
             )}
 
-            {/* MODAL DE CRIAÇÃO E EDIÇÃO COMPLETA DE PEDIDOS E ORÇAMENTOS */}
+            {/* ========================================================================= */}
+            {/* MODAL DE CRIAÇÃO E EDIÇÃO CORRIGIDO (SEM CORTES E TOTALMENTE ALINHADO)     */}
+            {/* ========================================================================= */}
             {isFormOpen && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+                <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
                         
-                        <div className="p-5 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                        {/* TOPO FIXO DO MODAL */}
+                        <div className="px-6 py-5 bg-slate-900 text-white flex justify-between items-center shrink-0">
                             <div>
-                                <h3 className="font-black text-base md:text-lg uppercase tracking-wider">
+                                <h3 className="font-black text-lg md:text-xl uppercase tracking-wider">
                                     {editandoId ? `Editar ${formData.tipoRegistro === 'orcamento' ? 'Orçamento' : 'Pedido'} #${formData.orderNumber}` : `Novo ${formData.tipoRegistro === 'orcamento' ? 'Orçamento' : 'Pedido'} #${formData.orderNumber}`}
                                 </h3>
-                                <span className="text-xs text-slate-400">Numeração sequencial automática</span>
+                                <span className="text-xs md:text-sm text-slate-300 font-medium">Numeração sequencial automática</span>
                             </div>
-                            <button onClick={() => setIsFormOpen(false)} className="text-white/70 hover:text-white text-xl">✕</button>
+                            <button type="button" onClick={() => setIsFormOpen(false)} className="text-white/70 hover:text-white text-2xl leading-none px-2 cursor-pointer">✕</button>
                         </div>
 
-                        <form onSubmit={handleSalvarPedidoOuOrcamento} className="p-6 overflow-y-auto space-y-6 flex-1">
+                        {/* FORMULÁRIO COM MIOLO ROLÁVEL E RODAPÉ FIXO */}
+                        <form onSubmit={handleSalvarPedidoOuOrcamento} className="flex flex-col flex-1 min-h-0 overflow-hidden">
                             
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Tipo de Registro</label>
-                                    <select
-                                        value={formData.tipoRegistro}
-                                        onChange={e => setFormData({ ...formData, tipoRegistro: e.target.value })}
-                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-black text-xs uppercase outline-none"
-                                    >
-                                        <option value="pedido">📦 Pedido de Venda</option>
-                                        <option value="orcamento">📄 Orçamento / Cotação</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Etapa / Status</label>
-                                    <select
-                                        value={formData.status}
-                                        onChange={e => setFormData({ ...formData, status: e.target.value })}
-                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-black text-xs uppercase outline-none"
-                                    >
-                                        <option value="orcamento">Orçamento em Aberto</option>
-                                        <option value="novo">Novos Pedidos</option>
-                                        <option value="producao">Na Impressora / Fabrico</option>
-                                        <option value="embalagem">Embalagem / Separação</option>
-                                        <option value="enviado">Enviado / Aguard. Retirada</option>
-                                        <option value="concluido">✓ Finalizado / Entregue</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nº do Pedido (Sequencial)</label>
-                                    <input
-                                        type="text"
-                                        value={formData.orderNumber}
-                                        onChange={e => setFormData({ ...formData, orderNumber: e.target.value })}
-                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-black text-xs uppercase"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Dados do Cliente */}
-                            <div className="space-y-3">
-                                <div className="flex flex-wrap justify-between items-center gap-2">
-                                    <h4 className="font-black text-xs uppercase text-slate-800 tracking-wider">1. Dados do Cliente e Entrega</h4>
-                                    {listaClientes.length > 0 && (
+                            {/* ÁREA CENTRAL DE ROLAGEM COM ESPAÇAMENTO SEGURO */}
+                            <div className="p-6 md:p-7 overflow-y-auto space-y-6 flex-1">
+                                
+                                {/* BLOCO SUPERIOR: TIPO, ETAPA E NÚMERO */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 items-end">
+                                    <div>
+                                        <label className="text-xs font-black uppercase text-slate-600 block mb-1.5">Tipo de Registro</label>
                                         <select
-                                            onChange={handleSelecionarClienteExistente}
-                                            defaultValue=""
-                                            className="p-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-bold text-indigo-700 outline-none cursor-pointer"
+                                            value={formData.tipoRegistro}
+                                            onChange={e => setFormData({ ...formData, tipoRegistro: e.target.value })}
+                                            className="w-full h-11 px-3 bg-white border border-slate-300 rounded-xl font-black text-sm uppercase outline-none focus:border-slate-900"
                                         >
-                                            <option value="">Puxar cliente já cadastrado...</option>
-                                            {listaClientes.map(c => (
-                                                <option key={c.id} value={c.id}>{c.nome || c.name} ({c.telefone || c.phone || ''})</option>
-                                            ))}
+                                            <option value="pedido">📦 Pedido de Venda</option>
+                                            <option value="orcamento">📄 Orçamento / Cotação</option>
                                         </select>
-                                    )}
-                                </div>
+                                    </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div>
-                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nome do Cliente *</label>
+                                        <label className="text-xs font-black uppercase text-slate-600 block mb-1.5">Etapa / Status</label>
+                                        <select
+                                            value={formData.status}
+                                            onChange={e => setFormData({ ...formData, status: e.target.value })}
+                                            className="w-full h-11 px-3 bg-white border border-slate-300 rounded-xl font-black text-sm uppercase outline-none focus:border-slate-900"
+                                        >
+                                            <option value="orcamento">Orçamento em Aberto</option>
+                                            <option value="novo">Novos Pedidos</option>
+                                            <option value="producao">Na Impressora / Fabrico</option>
+                                            <option value="embalagem">Embalagem / Separação</option>
+                                            <option value="enviado">Enviado / Aguard. Retirada</option>
+                                            <option value="concluido">✓ Finalizado / Entregue</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-black uppercase text-slate-600 block mb-1.5">Nº do Pedido (Sequencial)</label>
                                         <input
                                             type="text"
-                                            required
-                                            value={formData.customerName}
-                                            onChange={e => setFormData({ ...formData, customerName: e.target.value })}
-                                            placeholder="Nome completo"
-                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">WhatsApp / Telefone *</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={formData.customerPhone}
-                                            onChange={e => setFormData({ ...formData, customerPhone: e.target.value })}
-                                            placeholder="(11) 99999-9999"
-                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">E-mail (p/ Histórico no Site)</label>
-                                        <input
-                                            type="email"
-                                            value={formData.customerEmail}
-                                            onChange={e => setFormData({ ...formData, customerEmail: e.target.value })}
-                                            placeholder="cliente@email.com"
-                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                                            value={formData.orderNumber}
+                                            onChange={e => setFormData({ ...formData, orderNumber: e.target.value })}
+                                            className="w-full h-11 px-3 bg-white border border-slate-300 rounded-xl font-black text-sm uppercase outline-none focus:border-slate-900"
                                         />
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase text-orange-600 block mb-1">CEP</label>
-                                        <input
-                                            type="text"
-                                            value={formData.cep}
-                                            onChange={e => {
-                                                setFormData({ ...formData, cep: e.target.value });
-                                                consultarCepNoFormulario(e.target.value);
-                                            }}
-                                            placeholder="00000-000"
-                                            className="w-full p-2.5 bg-orange-50/40 border border-orange-200 rounded-xl text-xs font-black"
-                                        />
-                                    </div>
-                                    <div className="sm:col-span-3">
-                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Endereço Completo de Entrega</label>
-                                        <input
-                                            type="text"
-                                            value={formData.address}
-                                            onChange={e => setFormData({ ...formData, address: e.target.value })}
-                                            placeholder="Rua, Número, Bairro, Cidade - UF"
-                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Itens do Pedido / Orçamento */}
-                            <div className="space-y-3 pt-2 border-t border-slate-200">
-                                <h4 className="font-black text-xs uppercase text-slate-800 tracking-wider">2. Itens do Pedido / Orçamento</h4>
-
-                                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
-                                    {catalogoProdutos.length > 0 && (
-                                        <div>
-                                            <label className="text-[10px] font-black uppercase text-emerald-700 block mb-1">Escolher Produto do Catálogo (Opcional)</label>
+                                {/* 1. DADOS DO CLIENTE E ENTREGA (ALINHADOS PELA BASE) */}
+                                <div className="space-y-4">
+                                    <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-200 pb-2">
+                                        <h4 className="font-black text-sm uppercase text-slate-900 tracking-wider">1. Dados do Cliente e Entrega</h4>
+                                        {listaClientes.length > 0 && (
                                             <select
-                                                value={produtoSelectId}
-                                                onChange={handleSelecionarProdutoCatalogo}
-                                                className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none cursor-pointer"
+                                                onChange={handleSelecionarClienteExistente}
+                                                defaultValue=""
+                                                className="px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-xl text-xs md:text-sm font-bold text-indigo-700 outline-none cursor-pointer"
                                             >
-                                                <option value="">-- Ou digite um item personalizado abaixo --</option>
-                                                {catalogoProdutos.map(prod => (
-                                                    <option key={prod.id} value={prod.id}>
-                                                        {prod.name} ({formatMoney(prod.isPromo ? prod.promoPrice : prod.price)})
-                                                    </option>
+                                                <option value="">Puxar cliente já cadastrado...</option>
+                                                {listaClientes.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.nome || c.name} ({c.telefone || c.phone || ''})</option>
                                                 ))}
                                             </select>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                                        <div className="sm:col-span-6">
-                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Descrição do Item / Peça 3D</label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                                        <div>
+                                            <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">Nome do Cliente *</label>
                                             <input
                                                 type="text"
-                                                value={itemNomeTemp}
-                                                onChange={e => setItemNomeTemp(e.target.value)}
-                                                placeholder="Ex: 50x Chaveiros Personalizados NFC"
-                                                className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                                                required
+                                                value={formData.customerName}
+                                                onChange={e => setFormData({ ...formData, customerName: e.target.value })}
+                                                placeholder="Nome completo"
+                                                className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-slate-900"
                                             />
                                         </div>
-                                        <div className="sm:col-span-2">
-                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Qtd</label>
+                                        <div>
+                                            <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">WhatsApp / Telefone *</label>
                                             <input
-                                                type="number"
-                                                min="1"
-                                                value={itemQtdTemp}
-                                                onChange={e => setItemQtdTemp(e.target.value)}
-                                                className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center"
+                                                type="text"
+                                                required
+                                                value={formData.customerPhone}
+                                                onChange={e => setFormData({ ...formData, customerPhone: e.target.value })}
+                                                placeholder="(11) 99999-9999"
+                                                className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-slate-900"
                                             />
                                         </div>
-                                        <div className="sm:col-span-2">
-                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Preço Unit. (R$)</label>
+                                        <div>
+                                            <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">E-mail do Cliente</label>
                                             <input
-                                                type="number"
-                                                step="0.01"
-                                                value={itemPrecoTemp}
-                                                onChange={e => setItemPrecoTemp(e.target.value)}
-                                                placeholder="0,00"
-                                                className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                                                type="email"
+                                                value={formData.customerEmail}
+                                                onChange={e => setFormData({ ...formData, customerEmail: e.target.value })}
+                                                placeholder="cliente@email.com"
+                                                className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-slate-900"
                                             />
                                         </div>
-                                        <div className="sm:col-span-2">
-                                            <button
-                                                type="button"
-                                                onClick={adicionarItemAoFormulario}
-                                                className="w-full py-2.5 bg-slate-900 hover:bg-black text-white rounded-lg font-black text-xs uppercase cursor-pointer"
-                                            >
-                                                + Incluir
-                                            </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+                                        <div>
+                                            <label className="text-xs font-black uppercase text-orange-600 block mb-1.5">CEP</label>
+                                            <input
+                                                type="text"
+                                                value={formData.cep}
+                                                onChange={e => {
+                                                    setFormData({ ...formData, cep: e.target.value });
+                                                    consultarCepNoFormulario(e.target.value);
+                                                }}
+                                                placeholder="00000-000"
+                                                className="w-full h-11 px-3.5 bg-orange-50/40 border border-orange-300 rounded-xl text-sm font-black outline-none focus:border-orange-500"
+                                            />
+                                        </div>
+                                        <div className="sm:col-span-3">
+                                            <label className="text-xs font-black uppercase text-slate-600 block mb-1.5">Endereço Completo de Entrega</label>
+                                            <input
+                                                type="text"
+                                                value={formData.address}
+                                                onChange={e => setFormData({ ...formData, address: e.target.value })}
+                                                placeholder="Rua, Número, Bairro, Cidade - UF"
+                                                className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-slate-900"
+                                            />
                                         </div>
                                     </div>
                                 </div>
 
-                                {formData.items.length === 0 ? (
-                                    <p className="text-center py-4 text-xs font-bold text-slate-400 border border-dashed border-slate-200 rounded-xl">
-                                        Nenhum item incluído ainda.
-                                    </p>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {formData.items.map(it => (
-                                            <div key={it.id} className="grid grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200">
-                                                <div className="col-span-6">
-                                                    <input
-                                                        type="text"
-                                                        value={it.name}
-                                                        onChange={e => atualizarItemDoFormulario(it.id, 'name', e.target.value)}
-                                                        className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-bold"
-                                                    />
-                                                </div>
-                                                <div className="col-span-2">
-                                                    <input
-                                                        type="number"
-                                                        min="1"
-                                                        value={it.qtd}
-                                                        onChange={e => atualizarItemDoFormulario(it.id, 'qtd', e.target.value)}
-                                                        className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-center"
-                                                    />
-                                                </div>
-                                                <div className="col-span-3">
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        value={it.price}
-                                                        onChange={e => atualizarItemDoFormulario(it.id, 'price', e.target.value)}
-                                                        className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-bold"
-                                                    />
-                                                </div>
-                                                <div className="col-span-1 text-right">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removerItemDoFormulario(it.id)}
-                                                        className="text-red-400 hover:text-red-600 p-1"
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                </div>
+                                {/* 2. ITENS DO PEDIDO / ORÇAMENTO (ALINHADOS PELA BASE) */}
+                                <div className="space-y-4 pt-2 border-t border-slate-200">
+                                    <h4 className="font-black text-sm uppercase text-slate-900 tracking-wider">2. Itens do Pedido / Orçamento</h4>
+
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                                        {catalogoProdutos.length > 0 && (
+                                            <div>
+                                                <label className="text-xs font-black uppercase text-emerald-700 block mb-1.5">Escolher Produto do Catálogo (Opcional)</label>
+                                                <select
+                                                    value={produtoSelectId}
+                                                    onChange={handleSelecionarProdutoCatalogo}
+                                                    className="w-full h-11 px-3 bg-white border border-slate-300 rounded-xl text-sm font-bold outline-none cursor-pointer"
+                                                >
+                                                    <option value="">-- Ou digite um item personalizado abaixo --</option>
+                                                    {catalogoProdutos.map(prod => (
+                                                        <option key={prod.id} value={prod.id}>
+                                                            {prod.name} ({formatMoney(prod.isPromo ? prod.promoPrice : prod.price)})
+                                                        </option>
+                                                    ))}
+                                                </select>
                                             </div>
-                                        ))}
+                                        )}
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                                            <div className="sm:col-span-6">
+                                                <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">Descrição do Item / Peça 3D</label>
+                                                <input
+                                                    type="text"
+                                                    value={itemNomeTemp}
+                                                    onChange={e => setItemNomeTemp(e.target.value)}
+                                                    placeholder="Ex: 50x Chaveiros Personalizados NFC"
+                                                    className="w-full h-11 px-3.5 bg-white border border-slate-300 rounded-xl text-sm font-bold outline-none focus:border-slate-900"
+                                                />
+                                            </div>
+                                            <div className="sm:col-span-2">
+                                                <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">Qtd</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={itemQtdTemp}
+                                                    onChange={e => setItemQtdTemp(e.target.value)}
+                                                    className="w-full h-11 px-3 bg-white border border-slate-300 rounded-xl text-sm font-bold text-center outline-none focus:border-slate-900"
+                                                />
+                                            </div>
+                                            <div className="sm:col-span-2">
+                                                <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">Preço Unit. (R$)</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={itemPrecoTemp}
+                                                    onChange={e => setItemPrecoTemp(e.target.value)}
+                                                    placeholder="0,00"
+                                                    className="w-full h-11 px-3 bg-white border border-slate-300 rounded-xl text-sm font-bold outline-none focus:border-slate-900"
+                                                />
+                                            </div>
+                                            <div className="sm:col-span-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={adicionarItemAoFormulario}
+                                                    className="w-full h-11 bg-slate-900 hover:bg-black text-white rounded-xl font-black text-xs md:text-sm uppercase cursor-pointer transition-colors"
+                                                >
+                                                    + Incluir
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
+
+                                    {formData.items.length === 0 ? (
+                                        <p className="text-center py-5 text-sm font-bold text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
+                                            Nenhum item incluído ainda.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-2.5">
+                                            {formData.items.map(it => (
+                                                <div key={it.id} className="grid grid-cols-12 gap-3 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                                                    <div className="col-span-6">
+                                                        <input
+                                                            type="text"
+                                                            value={it.name}
+                                                            onChange={e => atualizarItemDoFormulario(it.id, 'name', e.target.value)}
+                                                            className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
+                                                        />
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            value={it.qtd}
+                                                            onChange={e => atualizarItemDoFormulario(it.id, 'qtd', e.target.value)}
+                                                            className="w-full h-10 px-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-center"
+                                                        />
+                                                    </div>
+                                                    <div className="col-span-3">
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={it.price}
+                                                            onChange={e => atualizarItemDoFormulario(it.id, 'price', e.target.value)}
+                                                            className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
+                                                        />
+                                                    </div>
+                                                    <div className="col-span-1 text-right">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removerItemDoFormulario(it.id)}
+                                                            className="text-red-500 hover:text-red-700 p-1.5 font-black text-base cursor-pointer"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 3. FRETE, DESCONTO, PAGAMENTO E OBSERVAÇÕES (ALINHADOS PELA BASE) */}
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3 border-t border-slate-200 items-end">
+                                    <div>
+                                        <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">Modalidade de Envio</label>
+                                        <select
+                                            value={formData.shippingMethod}
+                                            onChange={e => setFormData({ ...formData, shippingMethod: e.target.value })}
+                                            className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none"
+                                        >
+                                            <option value="Retirada">Retirada na Loja</option>
+                                            <option value="PAC">Correios PAC</option>
+                                            <option value="SEDEX">Correios SEDEX</option>
+                                            <option value="Jadlog">Transportadora Jadlog</option>
+                                            <option value="Motoboy">Entrega Local / Motoboy</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">Valor do Frete (R$)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.deliveryFee}
+                                            onChange={e => setFormData({ ...formData, deliveryFee: e.target.value })}
+                                            className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">Desconto (R$)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.discount}
+                                            onChange={e => setFormData({ ...formData, discount: e.target.value })}
+                                            className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">Forma de Pagamento</label>
+                                        <select
+                                            value={formData.paymentMethod}
+                                            onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })}
+                                            className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none"
+                                        >
+                                            <option value="PIX">PIX</option>
+                                            <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                            <option value="Cartão de Débito">Cartão de Débito</option>
+                                            <option value="Boleto">Boleto</option>
+                                            <option value="Dinheiro">Dinheiro</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                                    <div>
+                                        <label className="text-xs font-black uppercase text-slate-600 block mb-1.5 truncate">Observações Internas / Personalização</label>
+                                        <input
+                                            type="text"
+                                            value={formData.notes}
+                                            onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                                            placeholder="Cor do filamento, link da logo, prazo combinado..."
+                                            className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black uppercase text-blue-700 block mb-1.5 truncate">Código de Rastreio (Opcional)</label>
+                                        <input
+                                            type="text"
+                                            value={formData.trackingCode}
+                                            onChange={e => setFormData({ ...formData, trackingCode: e.target.value })}
+                                            placeholder="Ex: AA123456789BR"
+                                            className="w-full h-11 px-3.5 bg-blue-50/40 border border-blue-300 rounded-xl text-sm font-black uppercase outline-none"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
-                            {/* Frete, Desconto, Pagamento e Observações */}
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-200">
+                            {/* RODAPÉ FIXO DO MODAL */}
+                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4 shrink-0">
                                 <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Modalidade de Envio</label>
-                                    <select
-                                        value={formData.shippingMethod}
-                                        onChange={e => setFormData({ ...formData, shippingMethod: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                                    >
-                                        <option value="Retirada">Retirada na Loja</option>
-                                        <option value="PAC">Correios PAC</option>
-                                        <option value="SEDEX">Correios SEDEX</option>
-                                        <option value="Jadlog">Transportadora Jadlog</option>
-                                        <option value="Motoboy">Entrega Local / Motoboy</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Valor do Frete (R$)</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={formData.deliveryFee}
-                                        onChange={e => setFormData({ ...formData, deliveryFee: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Desconto (R$)</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={formData.discount}
-                                        onChange={e => setFormData({ ...formData, discount: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Forma de Pagamento</label>
-                                    <select
-                                        value={formData.paymentMethod}
-                                        onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                                    >
-                                        <option value="PIX">PIX</option>
-                                        <option value="Cartão de Crédito">Cartão de Crédito</option>
-                                        <option value="Cartão de Débito">Cartão de Débito</option>
-                                        <option value="Boleto">Boleto</option>
-                                        <option value="Dinheiro">Dinheiro</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Observações Internas / Personalização</label>
-                                    <input
-                                        type="text"
-                                        value={formData.notes}
-                                        onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                        placeholder="Cor do filamento, link da logo, prazo combinado..."
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-blue-700 block mb-1">Código de Rastreio (Opcional)</label>
-                                    <input
-                                        type="text"
-                                        value={formData.trackingCode}
-                                        onChange={e => setFormData({ ...formData, trackingCode: e.target.value })}
-                                        placeholder="Ex: AA123456789BR"
-                                        className="w-full p-2.5 bg-blue-50/40 border border-blue-200 rounded-xl text-xs font-black uppercase"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
-                                <div>
-                                    <span className="text-[10px] font-black uppercase text-slate-400 block">Valor Total Calculado</span>
-                                    <span className="text-2xl font-black text-emerald-600">{formatMoney(totalFinalForm)}</span>
+                                    <span className="text-xs font-black uppercase text-slate-400 block">Valor Total Calculado</span>
+                                    <span className="text-2xl md:text-3xl font-black text-emerald-600">{formatMoney(totalFinalForm)}</span>
                                 </div>
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-3">
                                     <button
                                         type="button"
                                         onClick={() => setIsFormOpen(false)}
-                                        className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase"
+                                        className="px-6 py-3.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-black text-xs md:text-sm uppercase cursor-pointer transition-colors"
                                     >
                                         Cancelar
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={salvandoForm}
-                                        className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase shadow-md cursor-pointer"
+                                        className="px-7 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs md:text-sm uppercase shadow-md cursor-pointer transition-colors"
                                     >
                                         {salvandoForm ? 'Salvando...' : editandoId ? 'Salvar Alterações' : `Criar ${formData.tipoRegistro === 'orcamento' ? 'Orçamento' : 'Pedido'}`}
                                     </button>
@@ -1264,41 +1268,41 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
             {/* MODAL DE DETALHES RÁPIDOS + RASTREIO + MARCAR COMO ENTREGUE */}
             {pedidoSelecionado && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
                         <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
                             <div>
-                                <h3 className="font-black text-base uppercase">
+                                <h3 className="font-black text-lg uppercase">
                                     {ehOrcamento(pedidoSelecionado) ? 'Orçamento' : 'Pedido'} #{pedidoSelecionado.orderNumber || pedidoSelecionado.codigo}
                                 </h3>
-                                <span className="text-xs text-slate-400">Gerenciar entrega, edição e rastreio</span>
+                                <span className="text-xs text-slate-300">Gerenciar entrega, edição e rastreio</span>
                             </div>
-                            <button onClick={() => setPedidoSelecionado(null)} className="text-white/70 hover:text-white text-xl">✕</button>
+                            <button onClick={() => setPedidoSelecionado(null)} className="text-white/70 hover:text-white text-2xl">✕</button>
                         </div>
 
-                        <div className="p-6 space-y-4 text-xs">
+                        <div className="p-6 space-y-4 text-sm">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <span className="text-[10px] font-black uppercase text-slate-400 block">Cliente / Contato</span>
-                                    <p className="font-black text-sm text-slate-800">{pedidoSelecionado.customerName || pedidoSelecionado.nome}</p>
+                                    <span className="text-xs font-black uppercase text-slate-400 block">Cliente / Contato</span>
+                                    <p className="font-black text-base text-slate-900">{pedidoSelecionado.customerName || pedidoSelecionado.nome}</p>
                                     <p className="font-bold text-emerald-600">{pedidoSelecionado.customerPhone || pedidoSelecionado.telefone}</p>
                                 </div>
                                 <button
                                     onClick={() => abrirModalEditar(pedidoSelecionado)}
-                                    className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-black text-[11px] uppercase flex items-center gap-1"
+                                    className="px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-black text-xs uppercase flex items-center gap-1.5 cursor-pointer"
                                 >
-                                    <Icon name="edit" size={14} /> Editar Tudo
+                                    <Icon name="edit" size={16} /> Editar Tudo
                                 </button>
                             </div>
 
                             <div>
-                                <span className="text-[10px] font-black uppercase text-slate-400 block">Endereço Completo e CEP</span>
-                                <p className="font-bold text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-200 mt-1">
+                                <span className="text-xs font-black uppercase text-slate-400 block">Endereço Completo e CEP</span>
+                                <p className="font-bold text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200 mt-1">
                                     {pedidoSelecionado.address || pedidoSelecionado.endereco || 'Não informado'}
                                 </p>
                             </div>
 
-                            <div className="bg-blue-50/60 p-3.5 rounded-xl border border-blue-200 space-y-2">
-                                <label className="text-[10px] font-black uppercase text-blue-800 block">
+                            <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-200 space-y-2">
+                                <label className="text-xs font-black uppercase text-blue-800 block">
                                     Código de Rastreio (Correios / Transportadora)
                                 </label>
                                 <div className="flex gap-2">
@@ -1307,12 +1311,12 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                         value={rastreioInput}
                                         onChange={e => setRastreioInput(e.target.value)}
                                         placeholder="Ex: AA123456789BR"
-                                        className="flex-1 p-2 bg-white border border-blue-200 rounded-lg font-black text-xs uppercase outline-none"
+                                        className="flex-1 p-2.5 bg-white border border-blue-200 rounded-lg font-black text-sm uppercase outline-none"
                                     />
                                     <button
                                         type="button"
                                         onClick={salvarCodigoRastreio}
-                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-black text-xs uppercase"
+                                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-black text-xs uppercase cursor-pointer"
                                     >
                                         Salvar
                                     </button>
@@ -1323,21 +1327,21 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                 <span className="font-black uppercase text-slate-500">
                                     Total ({pedidoSelecionado.modalidadeFrete || 'Frete'} • {pedidoSelecionado.formaPagamento || 'PIX'}):
                                 </span>
-                                <span className="font-black text-lg text-emerald-600">{formatMoney(pedidoSelecionado.total || pedidoSelecionado.valorTotal)}</span>
+                                <span className="font-black text-xl text-emerald-600">{formatMoney(pedidoSelecionado.total || pedidoSelecionado.valorTotal)}</span>
                             </div>
 
-                            <div className="pt-2 flex flex-col gap-2">
+                            <div className="pt-2 flex flex-col gap-2.5">
                                 <button
                                     type="button"
                                     onClick={() => moverPedido(pedidoSelecionado, 'concluido')}
-                                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs md:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
                                 >
                                     ✓ Finalizar Pedido (Marcar como Entregue)
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => enviarOrcamentoWhatsApp(pedidoSelecionado)}
-                                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase text-xs"
+                                    className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase text-xs md:text-sm cursor-pointer"
                                 >
                                     Enviar Resumo no WhatsApp do Cliente
                                 </button>
