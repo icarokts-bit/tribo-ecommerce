@@ -1,273 +1,464 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { auth, db } from '../../firebase';
+import { db } from '../../firebase';
 import Icon from '../../components/Icon';
 
-export default function HistoricoPedidos() {
-    const [orders, setOrders] = useState([]);
+export default function HistoricoPedidos({ user, permissoes, donoUid: propDonoUid }) {
+    const [pedidos, setPedidos] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
+    const [busca, setBusca] = useState('');
+    const [filtroStatus, setFiltroStatus] = useState('todos');
+    const [filtroPeriodo, setFiltroPeriodo] = useState('todos');
+    const [pedidoDetalhes, setPedidoDetalhes] = useState(null);
 
-    // Filtros de Data (Padrão: Mês Atual)
-    const dataAtual = new Date();
-    const primeiroDiaMes = new Date(dataAtual.getFullYear(), dataAtual.getMonth(), 1).toISOString().split('T')[0];
-    const ultimoDiaMes = new Date(dataAtual.getFullYear(), dataAtual.getMonth() + 1, 0).toISOString().split('T')[0];
-
-    const [startDate, setStartDate] = useState(primeiroDiaMes);
-    const [endDate, setEndDate] = useState(ultimoDiaMes);
-
-    const formatMoney = (value) => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    
-    const formatDateTime = (isoString) => {
-        if (!isoString) return '-';
-        const date = new Date(isoString);
-        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
-    };
+    const donoUid = propDonoUid || permissoes?.donoUid || user?.uid;
 
     useEffect(() => {
-        const user = auth.currentUser;
-        if (!user) return;
+        if (!donoUid) return;
 
-        const ordersPath = `artifacts/tribo-burger-financeiro/users/${user.uid}/delivery_orders`;
-        
-        // Busca todos os pedidos
-        const unsubscribe = db.collection(ordersPath)
-            .orderBy('createdAt', 'desc')
-            .onSnapshot(snapshot => {
-                const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setOrders(fetchedOrders);
+        // Escuta em tempo real a coleção 'orders' e unifica com 'pedidos' e 'ecommerce_orders'
+        const unsub = db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/orders`)
+            .onSnapshot(async (snapOrders) => {
+                const listaOrders = snapOrders.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                try {
+                    const [snapPedidos, snapEco] = await Promise.all([
+                        db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/pedidos`).get(),
+                        db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_orders`).get()
+                    ]);
+
+                    const listaPedidos = snapPedidos.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const listaEco = snapEco.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                    const mapa = new Map();
+                    [...listaEco, ...listaPedidos, ...listaOrders].forEach(p => {
+                        const chave = p.id || p.orderNumber || p.codigo;
+                        if (chave) mapa.set(chave, p);
+                    });
+
+                    const unificados = Array.from(mapa.values()).sort((a, b) => {
+                        const tA = a.timestamp || new Date(a.createdAt || a.dataPedido || 0).getTime();
+                        const tB = b.timestamp || new Date(b.createdAt || b.dataPedido || 0).getTime();
+                        return tB - tA;
+                    });
+
+                    setPedidos(unificados);
+                } catch (err) {
+                    setPedidos(listaOrders);
+                }
                 setLoading(false);
-            }, error => {
-                console.error("Erro ao buscar histórico:", error);
+            }, (error) => {
+                console.error("Erro ao carregar histórico:", error);
                 setLoading(false);
             });
 
-        return () => unsubscribe();
-    }, []);
+        return () => unsub();
+    }, [donoUid]);
 
-    const handleSort = (key) => {
-        let direction = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setSortConfig({ key, direction });
+    const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    const normalizarStatus = (ped) => {
+        const st = String(ped.status || ped.etapa || ped.orderStatus || 'novo').toLowerCase().trim();
+        if (['concluido', 'finalizado', 'entregue', 'delivered', 'completed'].includes(st)) return 'concluido';
+        if (['enviado', 'retirada', 'shipped'].includes(st)) return 'enviado';
+        if (['embalagem', 'separacao', 'pronto', 'packing'].includes(st)) return 'embalagem';
+        if (['producao', 'impressora', 'fabrico', 'printing'].includes(st)) return 'producao';
+        if (['cancelado', 'cancelled', 'canceled'].includes(st)) return 'cancelado';
+        return 'novo';
     };
 
-    // Filtra e ordena os pedidos
-    const processedOrders = useMemo(() => {
-        let filtered = orders.filter(order => {
-            if (!order.createdAt) return false;
-            const orderDate = order.createdAt.split('T')[0];
-            const isWithinDate = orderDate >= startDate && orderDate <= endDate;
-            const isConcluido = order.status === 'concluido'; // Mostra apenas finalizados no histórico
-            
-            const matchSearch = searchQuery === '' || 
-                (order.customerName && order.customerName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                (order.orderNumber && String(order.orderNumber).includes(searchQuery));
+    const getBadgeStatus = (statusNorm) => {
+        switch (statusNorm) {
+            case 'concluido':
+                return { label: 'Finalizado / Entregue', classe: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+            case 'enviado':
+                return { label: 'Enviado / Aguard. Retirada', classe: 'bg-teal-100 text-teal-800 border-teal-200' };
+            case 'embalagem':
+                return { label: 'Embalagem / Separação', classe: 'bg-purple-100 text-purple-800 border-purple-200' };
+            case 'producao':
+                return { label: 'Na Impressora / Fabrico', classe: 'bg-amber-100 text-amber-800 border-amber-200' };
+            case 'cancelado':
+                return { label: 'Cancelado', classe: 'bg-red-100 text-red-700 border-red-200' };
+            default:
+                return { label: 'Novo Pedido', classe: 'bg-blue-100 text-blue-800 border-blue-200' };
+        }
+    };
 
-            return isWithinDate && isConcluido && matchSearch;
-        });
+    const alterarStatusPedido = async (pedido, novoStatus) => {
+        if (!donoUid) return;
+        const atualizado = {
+            ...pedido,
+            status: novoStatus,
+            etapa: novoStatus,
+            orderStatus: novoStatus,
+            updatedAt: new Date().toISOString()
+        };
 
-        filtered.sort((a, b) => {
-            if (a[sortConfig.key] < b[sortConfig.key]) {
-                return sortConfig.direction === 'asc' ? -1 : 1;
+        setPedidos(prev => prev.map(p => p.id === pedido.id ? atualizado : p));
+        if (pedidoDetalhes?.id === pedido.id) setPedidoDetalhes(atualizado);
+
+        const colecoes = ['orders', 'pedidos', 'delivery_orders', 'ecommerce_orders'];
+        try {
+            await Promise.all(
+                colecoes.map(col =>
+                    db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/${col}`).doc(pedido.id).set(atualizado, { merge: true })
+                )
+            );
+        } catch (error) {
+            console.error("Erro ao atualizar status:", error);
+        }
+    };
+
+    const excluirPedido = async (pedidoId) => {
+        if (!window.confirm("Tem certeza que deseja excluir permanentemente este pedido do histórico?")) return;
+        const colecoes = ['orders', 'pedidos', 'delivery_orders', 'ecommerce_orders'];
+        try {
+            await Promise.all(
+                colecoes.map(col =>
+                    db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/${col}`).doc(pedidoId).delete()
+                )
+            );
+            setPedidos(prev => prev.filter(p => p.id !== pedidoId));
+            setPedidoDetalhes(null);
+        } catch (error) {
+            console.error("Erro ao excluir:", error);
+        }
+    };
+
+    // Filtragem por busca, status e período
+    const pedidosFiltrados = useMemo(() => {
+        const termo = busca.toLowerCase().trim();
+        const agora = new Date();
+
+        return pedidos.filter(p => {
+            const codigo = String(p.orderNumber || p.numeroPedido || p.codigo || p.id || '').toLowerCase();
+            const nome = String(p.customerName || p.clienteNome || p.nomeCliente || p.nome || '').toLowerCase();
+            const fone = String(p.customerPhone || p.clienteTelefone || p.telefone || p.whatsapp || '').toLowerCase();
+            const itensTxt = String(p.resumoItens || '').toLowerCase();
+
+            const bateBusca = !termo || codigo.includes(termo) || nome.includes(termo) || fone.includes(termo) || itensTxt.includes(termo);
+
+            const stNorm = normalizarStatus(p);
+            const bateStatus =
+                filtroStatus === 'todos' ||
+                (filtroStatus === 'finalizados' && (stNorm === 'concluido' || stNorm === 'enviado')) ||
+                filtroStatus === stNorm;
+
+            let batePeriodo = true;
+            if (filtroPeriodo !== 'todos') {
+                const dataPed = new Date(p.createdAt || p.dataPedido || p.timestamp || 0);
+                const diffDias = (agora - dataPed) / (1000 * 60 * 60 * 24);
+                if (filtroPeriodo === 'hoje') {
+                    batePeriodo = dataPed.toDateString() === agora.toDateString();
+                } else if (filtroPeriodo === '7dias') {
+                    batePeriodo = diffDias <= 7;
+                } else if (filtroPeriodo === '30dias') {
+                    batePeriodo = diffDias <= 30;
+                }
             }
-            if (a[sortConfig.key] > b[sortConfig.key]) {
-                return sortConfig.direction === 'asc' ? 1 : -1;
-            }
-            return 0;
+
+            return bateBusca && bateStatus && batePeriodo;
         });
+    }, [pedidos, busca, filtroStatus, filtroPeriodo]);
 
-        return filtered;
-    }, [orders, startDate, endDate, searchQuery, sortConfig]);
+    // Métricas Resumo do Histórico
+    const metricas = useMemo(() => {
+        const validos = pedidosFiltrados.filter(p => normalizarStatus(p) !== 'cancelado');
+        const totalPedidos = pedidosFiltrados.length;
+        const faturamentoTotal = validos.reduce((acc, p) => acc + Number(p.total || p.valorTotal || p.totalAmount || 0), 0);
+        const concluidos = pedidosFiltrados.filter(p => ['concluido', 'enviado'].includes(normalizarStatus(p))).length;
+        const ticketMedio = validos.length > 0 ? faturamentoTotal / validos.length : 0;
 
-    // Cálculos de Métricas do Período
-    const totalFaturado = processedOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    const totalTaxasEntrega = processedOrders.reduce((sum, order) => sum + (order.deliveryFee || 0), 0);
-    const totalPedidos = processedOrders.length;
-    const ticketMedio = totalPedidos > 0 ? totalFaturado / totalPedidos : 0;
-
-    if (loading) return <div className="p-10 text-center font-black text-emerald-500 uppercase">Carregando Histórico...</div>;
-
-    const SortIcon = ({ columnKey }) => (
-        <span className={`ml-1 inline-block transition-colors cursor-pointer ${sortConfig.key === columnKey ? 'text-emerald-500' : 'text-slate-300'}`}>
-            {sortConfig.key === columnKey ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
-        </span>
-    );
+        return { totalPedidos, faturamentoTotal, concluidos, ticketMedio };
+    }, [pedidosFiltrados]);
 
     return (
-        // Alterado de max-w-7xl para w-full
-        <div className="w-full px-4 lg:px-8 mx-auto mt-2 pb-10 fade-in">
+        <div className="p-4 md:p-6 space-y-6 font-sans min-h-screen bg-slate-100 text-slate-800">
             
-            {/* CABEÇALHO E FILTROS */}
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-6 justify-between items-center mb-4">
-                <div>
-                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2 mb-1">
-                        <Icon name="clock" size={20} className="text-emerald-500" /> Histórico de Pedidos
-                    </h2>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                        Relatório de Vendas do Delivery
-                    </p>
+            {/* CABEÇALHO E MÉTRICAS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+                    <div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Total no Histórico</span>
+                        <span className="text-2xl font-black text-slate-800 mt-1 block">{metricas.totalPedidos} pedido(s)</span>
+                    </div>
+                    <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center">
+                        <Icon name="archive" size={20} />
+                    </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4">
-                    {/* Pesquisa */}
-                    <div className="relative">
-                        <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input 
-                            type="text" 
-                            placeholder="Buscar cliente ou pedido..." 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-64 pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 transition-colors bg-slate-50"
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+                    <div>
+                        <span className="text-[10px] font-black uppercase text-emerald-600 tracking-wider block">Faturamento do Período</span>
+                        <span className="text-2xl font-black text-emerald-600 mt-1 block">{formatMoney(metricas.faturamentoTotal)}</span>
+                    </div>
+                    <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-lg">
+                        R$
+                    </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+                    <div>
+                        <span className="text-[10px] font-black uppercase text-blue-600 tracking-wider block">Enviados / Finalizados</span>
+                        <span className="text-2xl font-black text-blue-600 mt-1 block">{metricas.concluidos}</span>
+                    </div>
+                    <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <Icon name="check-circle" size={20} />
+                    </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+                    <div>
+                        <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider block">Ticket Médio</span>
+                        <span className="text-2xl font-black text-purple-600 mt-1 block">{formatMoney(metricas.ticketMedio)}</span>
+                    </div>
+                    <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                        <Icon name="trending-up" size={20} />
+                    </div>
+                </div>
+            </div>
+
+            {/* BARRA DE FILTROS E TABELA DE HISTÓRICO */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+                    
+                    {/* Busca */}
+                    <div className="relative flex-1 max-w-md">
+                        <input
+                            type="text"
+                            value={busca}
+                            onChange={e => setBusca(e.target.value)}
+                            placeholder="Buscar por código (#A4302A), cliente, telefone ou produto..."
+                            className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-slate-800"
                         />
+                        <Icon name="search" size={15} className="absolute left-3 top-3 text-slate-400" />
                     </div>
 
-                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-2 rounded-xl">
-                        <Icon name="calendar" size={16} className="text-slate-400 ml-2" />
-                        <div className="flex items-center gap-2">
-                            <input 
-                                type="date" 
-                                value={startDate} 
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="bg-transparent text-sm font-black text-slate-700 outline-none cursor-pointer"
-                            />
-                            <span className="text-slate-300 font-black">até</span>
-                            <input 
-                                type="date" 
-                                value={endDate} 
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="bg-transparent text-sm font-black text-slate-700 outline-none cursor-pointer"
-                            />
-                        </div>
+                    {/* Seletores de Status e Período */}
+                    <div className="flex flex-wrap items-center gap-3">
+                        <select
+                            value={filtroStatus}
+                            onChange={e => setFiltroStatus(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-black text-slate-700 outline-none cursor-pointer"
+                        >
+                            <option value="todos">Todos os Status</option>
+                            <option value="finalizados">✓ Apenas Finalizados / Enviados</option>
+                            <option value="novo">Novos Pedidos</option>
+                            <option value="producao">Na Impressora / Fabrico</option>
+                            <option value="embalagem">Embalagem / Separação</option>
+                            <option value="enviado">Enviado / Aguard. Retirada</option>
+                            <option value="concluido">Finalizado / Entregue</option>
+                            <option value="cancelado">Cancelados</option>
+                        </select>
+
+                        <select
+                            value={filtroPeriodo}
+                            onChange={e => setFiltroPeriodo(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-black text-slate-700 outline-none cursor-pointer"
+                        >
+                            <option value="todos">Todo o Período</option>
+                            <option value="hoje">Hoje</option>
+                            <option value="7dias">Últimos 7 dias</option>
+                            <option value="30dias">Últimos 30 dias</option>
+                        </select>
                     </div>
                 </div>
-            </div>
 
-            {/* CARDS DE MÉTRICAS */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between border-l-4 border-l-emerald-500">
-                    <div>
-                        <span className="block text-[10px] font-black uppercase text-slate-400 mb-1">Total Faturado</span>
-                        <span className="text-2xl font-black text-slate-800">{formatMoney(totalFaturado)}</span>
-                    </div>
-                    <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500"><Icon name="dollar-sign" size={18} /></div>
-                </div>
-
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between border-l-4 border-l-indigo-500">
-                    <div>
-                        <span className="block text-[10px] font-black uppercase text-slate-400 mb-1">Pedidos Concluídos</span>
-                        <span className="text-2xl font-black text-slate-800">{totalPedidos}</span>
-                    </div>
-                    <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500"><Icon name="shopping-bag" size={18} /></div>
-                </div>
-
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between border-l-4 border-l-amber-500">
-                    <div>
-                        <span className="block text-[10px] font-black uppercase text-slate-400 mb-1">Ticket Médio</span>
-                        <span className="text-2xl font-black text-slate-800">{formatMoney(ticketMedio)}</span>
-                    </div>
-                    <div className="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center text-amber-500"><Icon name="pie-chart" size={18} /></div>
-                </div>
-
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between border-l-4 border-l-blue-500">
-                    <div>
-                        <span className="block text-[10px] font-black uppercase text-slate-400 mb-1">Taxas de Entrega</span>
-                        <span className="text-2xl font-black text-slate-800">{formatMoney(totalTaxasEntrega)}</span>
-                    </div>
-                    <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-500"><Icon name="truck" size={18} /></div>
-                </div>
-            </div>
-
-            {/* TABELA DE PEDIDOS */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden w-full">
-                <div className="overflow-x-auto w-full">
+                {/* Tabela */}
+                <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 select-none">
-                                <th onClick={() => handleSort('createdAt')} className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest cursor-pointer hover:bg-slate-100 transition-colors w-32">
-                                    Data / Hora <SortIcon columnKey="createdAt" />
-                                </th>
-                                <th onClick={() => handleSort('customerName')} className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest cursor-pointer hover:bg-slate-100 transition-colors">
-                                    Cliente <SortIcon columnKey="customerName" />
-                                </th>
-                                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest min-w-[250px]">
-                                    Resumo do Pedido
-                                </th>
-                                <th onClick={() => handleSort('paymentMethod')} className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-center cursor-pointer hover:bg-slate-100 transition-colors">
-                                    Pagamento <SortIcon columnKey="paymentMethod" />
-                                </th>
-                                <th onClick={() => handleSort('total')} className="p-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right cursor-pointer hover:bg-slate-100 transition-colors">
-                                    Valor Total <SortIcon columnKey="total" />
-                                </th>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                <th className="p-4">Pedido / Data</th>
+                                <th className="p-4">Cliente / Contato</th>
+                                <th className="p-4">Itens do Pedido</th>
+                                <th className="p-4">Pagamento</th>
+                                <th className="p-4 text-center">Status Atual</th>
+                                <th className="p-4 text-right">Total</th>
+                                <th className="p-4 text-right">Ações</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {processedOrders.length === 0 ? (
+                        <tbody>
+                            {loading ? (
                                 <tr>
-                                    <td colSpan="5" className="p-10 text-center">
-                                        <Icon name="inbox" size={48} className="mx-auto text-slate-200 mb-3" />
-                                        <p className="text-slate-400 font-bold text-sm uppercase">Nenhum pedido encontrado.</p>
+                                    <td colSpan="7" className="p-12 text-center text-slate-400 font-bold text-xs">
+                                        Carregando histórico de pedidos...
+                                    </td>
+                                </tr>
+                            ) : pedidosFiltrados.length === 0 ? (
+                                <tr>
+                                    <td colSpan="7" className="p-14 text-center">
+                                        <Icon name="inbox" size={32} className="mx-auto text-slate-300 mb-2" />
+                                        <p className="text-xs font-black uppercase text-slate-400">Nenhum pedido encontrado neste filtro.</p>
                                     </td>
                                 </tr>
                             ) : (
-                                processedOrders.map(order => (
-                                    <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
-                                        <td className="p-4">
-                                            <div className="text-xs font-black text-slate-600">
-                                                {formatDateTime(order.createdAt).split(' ')[0]}
-                                            </div>
-                                            <div className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                                {formatDateTime(order.createdAt).split(' ')[1]}
-                                                {order.orderNumber && <span className="ml-1 text-slate-300">#{order.orderNumber}</span>}
-                                            </div>
-                                        </td>
-                                        
-                                        <td className="p-4">
-                                            <div className="font-black text-slate-800 text-sm uppercase">{order.customerName}</div>
-                                            <div className="text-[10px] font-bold text-slate-500 mt-0.5 truncate max-w-[200px]" title={order.address}>
-                                                {order.address !== 'Retirada no Balcão' ? (
-                                                    <span className="flex items-center gap-1"><Icon name="map-pin" size={10}/> {order.address}</span>
-                                                ) : (
-                                                    <span className="flex items-center gap-1 text-amber-600"><Icon name="shopping-bag" size={10}/> Retirada</span>
+                                pedidosFiltrados.map(ped => {
+                                    const codigo = ped.orderNumber || ped.numeroPedido || ped.codigo || ped.id?.slice(0, 6).toUpperCase();
+                                    const nomeCli = ped.customerName || ped.clienteNome || ped.nomeCliente || ped.nome || 'Cliente';
+                                    const foneCli = ped.customerPhone || ped.clienteTelefone || ped.telefone || ped.whatsapp || '';
+                                    const total = ped.total || ped.valorTotal || ped.totalAmount || 0;
+                                    const listaItens = Array.isArray(ped.items) ? ped.items : Array.isArray(ped.itens) ? ped.itens : [];
+                                    const resumo = listaItens.length > 0
+                                        ? listaItens.map(i => `${i.qtd || i.quantity || 1}x ${i.name || i.nome}`).join(', ')
+                                        : (ped.resumoItens || '1x Produto');
+                                    const dataFormatada = ped.createdAt
+                                        ? new Date(ped.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                        : '-';
+
+                                    const stNorm = normalizarStatus(ped);
+                                    const badge = getBadgeStatus(stNorm);
+
+                                    return (
+                                        <tr key={ped.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                                            <td className="p-4">
+                                                <span className="font-black text-xs bg-slate-900 text-white px-2.5 py-1 rounded">
+                                                    #{codigo}
+                                                </span>
+                                                <span className="block text-[11px] font-bold text-slate-400 mt-1">{dataFormatada}</span>
+                                            </td>
+
+                                            <td className="p-4">
+                                                <p className="font-black text-sm text-slate-800">{nomeCli}</p>
+                                                {foneCli && (
+                                                    <a
+                                                        href={`https://wa.me/55${String(foneCli).replace(/\D/g, '')}`}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="text-xs font-bold text-emerald-600 hover:underline inline-flex items-center gap-1"
+                                                    >
+                                                        <Icon name="phone" size={12} /> {foneCli}
+                                                    </a>
                                                 )}
-                                            </div>
-                                        </td>
-                                        
-                                        <td className="p-4">
-                                            <div className="text-xs font-bold text-slate-600 whitespace-pre-wrap leading-tight">
-                                                {order.items}
-                                            </div>
-                                        </td>
-                                        
-                                        <td className="p-4 text-center">
-                                            <span className={`inline-flex px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${
-                                                order.paymentMethod === 'Pix' ? 'bg-teal-50 text-teal-600 border border-teal-100' :
-                                                order.paymentMethod === 'Dinheiro' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                                'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                                            }`}>
-                                                {order.paymentMethod}
-                                            </span>
-                                        </td>
-                                        
-                                        <td className="p-4 text-right">
-                                            <div className="font-black text-emerald-600 text-base">
-                                                {formatMoney(order.total)}
-                                            </div>
-                                            {order.deliveryFee > 0 && (
-                                                <div className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase">
-                                                    Inclui {formatMoney(order.deliveryFee)} entrega
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))
+                                            </td>
+
+                                            <td className="p-4 max-w-xs">
+                                                <p className="text-xs font-bold text-slate-700 line-clamp-2">{resumo}</p>
+                                                {(ped.address || ped.endereco) && (
+                                                    <span className="text-[10px] font-semibold text-slate-400 block truncate mt-0.5">
+                                                        📍 {ped.address || ped.endereco}
+                                                    </span>
+                                                )}
+                                            </td>
+
+                                            <td className="p-4">
+                                                <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-700 px-2.5 py-1 rounded">
+                                                    {ped.formaPagamento || ped.paymentMethod || 'PIX'}
+                                                </span>
+                                            </td>
+
+                                            <td className="p-4 text-center">
+                                                <select
+                                                    value={stNorm}
+                                                    onChange={e => alterarStatusPedido(ped, e.target.value)}
+                                                    className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-full border outline-none cursor-pointer ${badge.classe}`}
+                                                >
+                                                    <option value="novo">Novo Pedido</option>
+                                                    <option value="producao">Na Impressora / Fabrico</option>
+                                                    <option value="embalagem">Embalagem / Separação</option>
+                                                    <option value="enviado">Enviado / Aguard. Retirada</option>
+                                                    <option value="concluido">✓ Finalizado / Entregue</option>
+                                                    <option value="cancelado">✕ Cancelado</option>
+                                                </select>
+                                            </td>
+
+                                            <td className="p-4 text-right font-black text-sm text-emerald-600">
+                                                {formatMoney(total)}
+                                            </td>
+
+                                            <td className="p-4 text-right whitespace-nowrap">
+                                                <button
+                                                    onClick={() => setPedidoDetalhes(ped)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg mr-1"
+                                                    title="Ver Detalhes"
+                                                >
+                                                    <Icon name="eye" size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => excluirPedido(ped.id)}
+                                                    className="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg"
+                                                    title="Excluir"
+                                                >
+                                                    <Icon name="trash-2" size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
                 </div>
             </div>
 
+            {/* MODAL DE VISUALIZAÇÃO COMPLETA DO PEDIDO */}
+            {pedidoDetalhes && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
+                            <div>
+                                <h3 className="font-black text-base uppercase">
+                                    Pedido #{pedidoDetalhes.orderNumber || pedidoDetalhes.codigo || pedidoDetalhes.id?.slice(0, 6).toUpperCase()}
+                                </h3>
+                                <span className="text-xs text-slate-400">Ficha completa do histórico</span>
+                            </div>
+                            <button onClick={() => setPedidoDetalhes(null)} className="text-white/70 hover:text-white text-xl">✕</button>
+                        </div>
+
+                        <div className="p-6 space-y-4 text-xs">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <span className="text-[10px] font-black uppercase text-slate-400 block">Cliente</span>
+                                    <p className="font-black text-sm text-slate-800">{pedidoDetalhes.customerName || pedidoDetalhes.nome}</p>
+                                    <p className="font-bold text-emerald-600">{pedidoDetalhes.customerPhone || pedidoDetalhes.telefone}</p>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] font-black uppercase text-slate-400 block">Pagamento</span>
+                                    <p className="font-black text-sm text-slate-800">{pedidoDetalhes.formaPagamento || pedidoDetalhes.paymentMethod || 'PIX'}</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <span className="text-[10px] font-black uppercase text-slate-400 block">Endereço de Entrega</span>
+                                <p className="font-bold text-slate-700">{pedidoDetalhes.address || pedidoDetalhes.endereco || 'Não informado'}</p>
+                            </div>
+
+                            <div>
+                                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Itens Comprados</span>
+                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                                    {(pedidoDetalhes.items || pedidoDetalhes.itens || []).map((it, i) => (
+                                        <div key={i} className="flex justify-between font-bold">
+                                            <span>{it.qtd || it.quantity || 1}x {it.name || it.nome}</span>
+                                            <span>{formatMoney((it.price || it.preco || 0) * (it.qtd || it.quantity || 1))}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                                <span className="font-black uppercase text-slate-500">Valor Total:</span>
+                                <span className="font-black text-xl text-emerald-600">{formatMoney(pedidoDetalhes.total || pedidoDetalhes.valorTotal)}</span>
+                            </div>
+
+                            <div className="pt-2 flex gap-2">
+                                {normalizarStatus(pedidoDetalhes) !== 'concluido' && (
+                                    <button
+                                        onClick={() => alterarStatusPedido(pedidoDetalhes, 'concluido')}
+                                        className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-center"
+                                    >
+                                        ✓ Marcar como Entregue
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => setPedidoDetalhes(null)}
+                                    className="px-5 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-black uppercase"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
