@@ -3,7 +3,7 @@
 
 /* ================= ESCALA PADRÃO PROFISSIONAL E LEGÍVEL ================= */
 html { 
-    font-size: 11px; /* Corrigido de 10px para 15px: restaura o tamanho normal de todo o sistema e modais */
+    font-size: 10px; /* Corrigido de 10px para 15px: restaura o tamanho normal de todo o sistema e modais */
 } 
 
 body { 
