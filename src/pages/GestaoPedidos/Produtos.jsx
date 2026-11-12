@@ -13,18 +13,24 @@ export default function Produtos({ user, permissoes }) {
     const [isCatModalOpen, setIsCatModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     
-    // Estado do formulário de Produto
+    // Estado do formulário de Produto (com novos selos: novidade e maisVendido)
     const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({
         name: '', sku: '', description: '', category: '', imageUrl: '',
         price: 0, promoPrice: 0, isPromo: false,
-        isActive: true, destaque: false,
+        isActive: true, destaque: false, novidade: false, maisVendido: false,
         weight: 0, dimensions: { length: 0, width: 0, height: 0 },
         variations: []
     });
 
-    // Estado do formulário de Categoria com Foto
-    const [catForm, setCatForm] = useState({ id: '', name: '', imageUrl: '' });
+    // Estado do formulário de Categoria com Foto e Selo Laranja (Tag)
+    const [catForm, setCatForm] = useState({
+        id: '',
+        name: '',
+        imageUrl: '',
+        tagOption: 'DESTAQUE',
+        customTag: ''
+    });
 
     const [newVarName, setNewVarName] = useState('');
     const [newVarOptions, setNewVarOptions] = useState('');
@@ -52,7 +58,7 @@ export default function Produtos({ user, permissoes }) {
         fetchData();
     }, [donoUid]);
 
-    // COMPRESSOR DE IMAGEM INTELIGENTE (Serve para Produto e Categoria)
+    // COMPRESSOR DE IMAGEM INTELIGENTE
     const compressImage = (file, maxWidth = 800, callback) => {
         if (!file) return;
         const reader = new FileReader();
@@ -91,17 +97,36 @@ export default function Produtos({ user, permissoes }) {
     };
 
     // ==========================================
-    // GESTÃO DE CATEGORIAS COM FOTO
+    // GESTÃO DE CATEGORIAS COM FOTO E SELO LARANJA
     // ==========================================
+    const opcoesPadraoTag = ['DESTAQUE', 'LANÇAMENTOS', 'OFERTAS', 'MAIS VENDIDOS', 'NOVIDADES', 'PERSONALIZADOS', 'DEPARTAMENTO', ''];
+
+    const selecionarCategoriaParaEditar = (cat) => {
+        const tagAtual = cat.tag !== undefined ? cat.tag : 'DESTAQUE';
+        const ehPadrao = opcoesPadraoTag.includes(tagAtual);
+        setCatForm({
+            id: cat.id,
+            name: cat.name || '',
+            imageUrl: cat.imageUrl || '',
+            tagOption: ehPadrao ? tagAtual : 'OUTRO',
+            customTag: ehPadrao ? '' : tagAtual
+        });
+    };
+
     const handleSaveCategory = async (e) => {
         e.preventDefault();
         if (!catForm.name.trim()) return;
         setSaving(true);
 
+        const tagFinal = catForm.tagOption === 'OUTRO'
+            ? catForm.customTag.trim().toUpperCase()
+            : catForm.tagOption;
+
         const newCat = {
             id: catForm.id || crypto.randomUUID(),
             name: catForm.name.trim(),
-            imageUrl: catForm.imageUrl || ''
+            imageUrl: catForm.imageUrl || '',
+            tag: tagFinal
         };
 
         const updatedCats = catForm.id
@@ -113,7 +138,7 @@ export default function Produtos({ user, permissoes }) {
                 categories: updatedCats
             }, { merge: true });
             setCategoriesList(updatedCats);
-            setCatForm({ id: '', name: '', imageUrl: '' });
+            setCatForm({ id: '', name: '', imageUrl: '', tagOption: 'DESTAQUE', customTag: '' });
         } catch (error) {
             alert("Erro ao salvar categoria.");
         }
@@ -139,7 +164,10 @@ export default function Produtos({ user, permissoes }) {
                 name: product.name || '', sku: product.sku || '', description: product.description || '',
                 category: product.category || '', imageUrl: product.imageUrl || '',
                 price: product.price || 0, promoPrice: product.promoPrice || 0, isPromo: product.isPromo || false,
-                isActive: product.isActive !== false, destaque: product.destaque || false,
+                isActive: product.isActive !== false,
+                destaque: product.destaque || false,
+                novidade: product.novidade || false,
+                maisVendido: product.maisVendido || false,
                 weight: product.weight || 0, dimensions: product.dimensions || { length: 0, width: 0, height: 0 },
                 variations: product.variations || []
             });
@@ -147,7 +175,8 @@ export default function Produtos({ user, permissoes }) {
             setEditingId(null);
             setFormData({
                 name: '', sku: '', description: '', category: categoriesList[0]?.name || '', imageUrl: '',
-                price: 0, promoPrice: 0, isPromo: false, isActive: true, destaque: false,
+                price: 0, promoPrice: 0, isPromo: false, isActive: true,
+                destaque: false, novidade: false, maisVendido: false,
                 weight: 0, dimensions: { length: 0, width: 0, height: 0 }, variations: []
             });
         }
@@ -246,7 +275,7 @@ export default function Produtos({ user, permissoes }) {
                     <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center text-white"><Icon name="box" size={20}/></div>
                     <div>
                         <h1 className="font-black text-slate-800 text-lg uppercase tracking-widest leading-none">Meus Produtos</h1>
-                        <span className="text-xs font-bold text-slate-500">Gestão de Catálogo, Categorias e SKUs</span>
+                        <span className="text-xs font-bold text-slate-500">Gestão de Catálogo, Categorias, Selos e SKUs</span>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -264,7 +293,7 @@ export default function Produtos({ user, permissoes }) {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-widest text-slate-500 font-black">
-                                <th className="p-4">Produto</th>
+                                <th className="p-4">Produto / Selos</th>
                                 <th className="p-4">SKU / Categoria</th>
                                 <th className="p-4">Preço</th>
                                 <th className="p-4">Logística</th>
@@ -282,7 +311,11 @@ export default function Produtos({ user, permissoes }) {
                                             <img src={product.imageUrl || 'https://via.placeholder.com/150?text=3D'} alt={product.name} className="w-12 h-12 rounded-lg object-cover border border-slate-200 bg-white" />
                                             <div>
                                                 <p className="font-black text-slate-800 text-sm">{product.name}</p>
-                                                {product.destaque && <span className="text-[9px] bg-amber-100 text-amber-700 font-black px-1.5 py-0.5 rounded uppercase mt-1 inline-block">Top / Destaque</span>}
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {product.destaque && <span className="text-[9px] bg-emerald-100 text-emerald-700 font-black px-1.5 py-0.5 rounded uppercase">Top / Destaque</span>}
+                                                    {product.novidade && <span className="text-[9px] bg-blue-100 text-blue-700 font-black px-1.5 py-0.5 rounded uppercase">Novidade</span>}
+                                                    {product.maisVendido && <span className="text-[9px] bg-amber-100 text-amber-700 font-black px-1.5 py-0.5 rounded uppercase">Mais Vendido</span>}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="p-4">
@@ -316,48 +349,83 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             </main>
 
-            {/* MODAL DE CATEGORIAS COM FOTO */}
+            {/* MODAL DE CATEGORIAS COM FOTO E SELO LARANJA */}
             {isCatModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
                         <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                             <div>
                                 <h3 className="font-black text-slate-800 text-lg uppercase">Categorias da Vitrine</h3>
-                                <p className="text-xs font-bold text-slate-400">Adicione fotos para criar o mosaico visual no topo da loja</p>
+                                <p className="text-xs font-bold text-slate-400">Escolha a foto, o nome e o selo em laranja (Destaque, Lançamentos, etc.)</p>
                             </div>
                             <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-black"><Icon name="x" size={24} /></button>
                         </div>
 
                         <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
-                            <form onSubmit={handleSaveCategory} className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-4 items-center">
-                                <div className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-300 bg-white flex items-center justify-center relative overflow-hidden shrink-0 cursor-pointer group">
-                                    {catForm.imageUrl ? (
-                                        <img src={catForm.imageUrl} alt="Cat" className="w-full h-full object-contain p-1" />
-                                    ) : (
-                                        <div className="text-center">
-                                            <Icon name="camera" size={20} className="text-slate-300 mx-auto group-hover:text-indigo-500"/>
-                                            <span className="text-[8px] font-black uppercase text-slate-400 block">Foto</span>
+                            <form onSubmit={handleSaveCategory} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                                <div className="flex flex-col md:flex-row gap-4 items-center">
+                                    <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-white flex items-center justify-center relative overflow-hidden shrink-0 cursor-pointer group">
+                                        {catForm.imageUrl ? (
+                                            <img src={catForm.imageUrl} alt="Cat" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="text-center">
+                                                <Icon name="camera" size={22} className="text-slate-300 mx-auto group-hover:text-indigo-500"/>
+                                                <span className="text-[8px] font-black uppercase text-slate-400 block mt-1">Foto</span>
+                                            </div>
+                                        )}
+                                        <input type="file" accept="image/*" onChange={handleCatImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                    </div>
+
+                                    <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nome da Categoria *</label>
+                                            <input 
+                                                type="text" required value={catForm.name} 
+                                                onChange={e => setCatForm({...catForm, name: e.target.value})} 
+                                                placeholder="Ex: Chaveiros, Combos..."
+                                                className="w-full p-2.5 bg-white border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-indigo-500"
+                                            />
                                         </div>
-                                    )}
-                                    <input type="file" accept="image/*" onChange={handleCatImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-orange-600 block mb-1">Texto em Laranja (Selo)</label>
+                                            <select
+                                                value={catForm.tagOption}
+                                                onChange={e => setCatForm({...catForm, tagOption: e.target.value})}
+                                                className="w-full p-2.5 bg-white border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-orange-500 cursor-pointer"
+                                            >
+                                                <option value="DESTAQUE">DESTAQUE</option>
+                                                <option value="LANÇAMENTOS">LANÇAMENTOS</option>
+                                                <option value="NOVIDADES">NOVIDADES</option>
+                                                <option value="OFERTAS">OFERTAS</option>
+                                                <option value="MAIS VENDIDOS">MAIS VENDIDOS</option>
+                                                <option value="PERSONALIZADOS">PERSONALIZADOS</option>
+                                                <option value="DEPARTAMENTO">DEPARTAMENTO</option>
+                                                <option value="">Sem Texto Laranja</option>
+                                                <option value="OUTRO">Digitar Outro Texto...</option>
+                                            </select>
+                                        </div>
+
+                                        {catForm.tagOption === 'OUTRO' && (
+                                            <div className="sm:col-span-2">
+                                                <label className="text-[10px] font-black uppercase text-orange-600 block mb-1">Digite o Texto Personalizado do Selo *</label>
+                                                <input 
+                                                    type="text" required value={catForm.customTag} 
+                                                    onChange={e => setCatForm({...catForm, customTag: e.target.value})} 
+                                                    placeholder="Ex: EDIÇÃO LIMITADA, PROMOÇÃO..."
+                                                    className="w-full p-2.5 bg-white border border-orange-300 rounded-lg font-bold text-sm outline-none focus:border-orange-500"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
-                                <div className="flex-1 w-full space-y-2">
-                                    <label className="text-[10px] font-black uppercase text-slate-500">Nome do Departamento / Categoria</label>
-                                    <input 
-                                        type="text" required value={catForm.name} 
-                                        onChange={e => setCatForm({...catForm, name: e.target.value})} 
-                                        placeholder="Ex: Chaveiros, Displays NFC, Luminárias..."
-                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-indigo-500"
-                                    />
-                                </div>
-
-                                <div className="flex gap-2 w-full md:w-auto mt-auto">
+                                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200/70">
                                     {catForm.id && (
-                                        <button type="button" onClick={() => setCatForm({ id: '', name: '', imageUrl: '' })} className="px-3 py-2.5 bg-slate-200 text-slate-600 rounded-lg font-black text-xs uppercase">Cancelar</button>
+                                        <button type="button" onClick={() => setCatForm({ id: '', name: '', imageUrl: '', tagOption: 'DESTAQUE', customTag: '' })} className="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg font-black text-xs uppercase">Cancelar</button>
                                     )}
-                                    <button type="submit" disabled={saving} className="w-full md:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-xs uppercase whitespace-nowrap">
-                                        {catForm.id ? 'Atualizar' : 'Adicionar'}
+                                    <button type="submit" disabled={saving} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-xs uppercase">
+                                        {catForm.id ? 'Atualizar Categoria' : 'Adicionar Categoria'}
                                     </button>
                                 </div>
                             </form>
@@ -366,13 +434,16 @@ export default function Produtos({ user, permissoes }) {
                                 {categoriesList.map(cat => (
                                     <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
-                                                {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-contain p-1" alt={cat.name} /> : <Icon name="image" size={18} className="text-slate-300" />}
+                                            <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
+                                                {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-cover" alt={cat.name} /> : <Icon name="image" size={18} className="text-slate-300" />}
                                             </div>
-                                            <span className="font-black text-slate-800 text-sm">{cat.name}</span>
+                                            <div>
+                                                {cat.tag && <span className="text-[9px] font-black uppercase text-orange-500 block leading-none mb-0.5">{cat.tag}</span>}
+                                                <span className="font-black text-slate-800 text-sm">{cat.name}</span>
+                                            </div>
                                         </div>
                                         <div className="flex gap-1">
-                                            <button onClick={() => setCatForm(cat)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"><Icon name="edit-2" size={15}/></button>
+                                            <button onClick={() => selecionarCategoriaParaEditar(cat)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"><Icon name="edit-2" size={15}/></button>
                                             <button onClick={() => handleDeleteCategory(cat.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Icon name="trash" size={15}/></button>
                                         </div>
                                     </div>
@@ -446,7 +517,7 @@ export default function Produtos({ user, permissoes }) {
                             <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase text-slate-500 ml-1 flex justify-between">
                                     <span>Categoria *</span>
-                                    <button type="button" onClick={() => setIsCatModalOpen(true)} className="text-indigo-600 hover:underline">+ Gerenciar Categorias com Fotos</button>
+                                    <button type="button" onClick={() => setIsCatModalOpen(true)} className="text-indigo-600 hover:underline">+ Gerenciar Categorias com Fotos e Selos</button>
                                 </label>
                                 {categoriesList.length > 0 ? (
                                     <select required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black">
@@ -463,26 +534,55 @@ export default function Produtos({ user, permissoes }) {
                                 <textarea rows="2" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black resize-none" />
                             </div>
 
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Preço Normal (R$)</label>
-                                    <input type="number" step="0.01" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:border-black" />
+                            {/* PREÇOS E SELOS VISUAIS DO PRODUTO */}
+                            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Preço Normal (R$)</label>
+                                        <input type="number" step="0.01" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:border-black" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 ml-1 flex items-center justify-between">
+                                            <span>Preço Promo (Oferta)</span>
+                                            <input type="checkbox" checked={formData.isPromo} onChange={e => setFormData({...formData, isPromo: e.target.checked})} className="w-4 h-4 accent-rose-600" title="Ativar Promoção"/>
+                                        </label>
+                                        <input type="number" step="0.01" disabled={!formData.isPromo} value={formData.promoPrice} onChange={e => setFormData({...formData, promoPrice: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:border-rose-500 disabled:opacity-50" />
+                                    </div>
+                                    <div className="space-y-1 flex flex-col justify-end">
+                                        <label className="flex items-center gap-2 cursor-pointer bg-white p-3 rounded-xl border border-slate-200 h-[46px]">
+                                            <input type="checkbox" checked={formData.isActive} onChange={e => setFormData({...formData, isActive: e.target.checked})} className="w-4 h-4 accent-black" />
+                                            <span className="text-xs font-black uppercase text-slate-700">Produto Visível / Ativo</span>
+                                        </label>
+                                    </div>
                                 </div>
-                                <div className="space-y-1 relative">
-                                    <label className="text-[10px] font-black uppercase text-slate-500 ml-1 flex items-center justify-between">
-                                        Preço Promo <input type="checkbox" checked={formData.isPromo} onChange={e => setFormData({...formData, isPromo: e.target.checked})} className="accent-emerald-500" title="Ativar Promoção"/>
-                                    </label>
-                                    <input type="number" step="0.01" disabled={!formData.isPromo} value={formData.promoPrice} onChange={e => setFormData({...formData, promoPrice: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:border-emerald-500 disabled:opacity-50" />
-                                </div>
-                                <div className="flex items-center gap-2 md:col-span-2 pt-5">
-                                    <label className="flex items-center gap-2 cursor-pointer bg-white p-3 rounded-xl border border-slate-200 flex-1">
-                                        <input type="checkbox" checked={formData.isActive} onChange={e => setFormData({...formData, isActive: e.target.checked})} className="w-4 h-4 accent-black" />
-                                        <span className="text-xs font-black uppercase text-slate-700">Ativo</span>
-                                    </label>
-                                    <label className="flex items-center gap-2 cursor-pointer bg-white p-3 rounded-xl border border-slate-200 flex-1">
-                                        <input type="checkbox" checked={formData.destaque} onChange={e => setFormData({...formData, destaque: e.target.checked})} className="w-4 h-4 accent-amber-500" />
-                                        <span className="text-xs font-black uppercase text-amber-600">Selo TOP</span>
-                                    </label>
+
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-500 ml-1 block mb-2">Selos de Destaque na Vitrine</label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-xl border transition-all ${formData.destaque ? 'bg-emerald-50 border-emerald-400' : 'bg-white border-slate-200'}`}>
+                                            <input type="checkbox" checked={formData.destaque} onChange={e => setFormData({...formData, destaque: e.target.checked})} className="w-4 h-4 accent-emerald-600" />
+                                            <div>
+                                                <span className="text-xs font-black uppercase text-emerald-700 block leading-none">★ Selo TOP</span>
+                                                <span className="text-[10px] text-slate-400 font-bold">Vai p/ Carrossel Destaque</span>
+                                            </div>
+                                        </label>
+
+                                        <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-xl border transition-all ${formData.novidade ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200'}`}>
+                                            <input type="checkbox" checked={formData.novidade} onChange={e => setFormData({...formData, novidade: e.target.checked})} className="w-4 h-4 accent-blue-600" />
+                                            <div>
+                                                <span className="text-xs font-black uppercase text-blue-700 block leading-none">✨ Selo NOVIDADE</span>
+                                                <span className="text-[10px] text-slate-400 font-bold">Destaca lançamento</span>
+                                            </div>
+                                        </label>
+
+                                        <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-xl border transition-all ${formData.maisVendido ? 'bg-amber-50 border-amber-400' : 'bg-white border-slate-200'}`}>
+                                            <input type="checkbox" checked={formData.maisVendido} onChange={e => setFormData({...formData, maisVendido: e.target.checked})} className="w-4 h-4 accent-amber-600" />
+                                            <div>
+                                                <span className="text-xs font-black uppercase text-amber-700 block leading-none">🔥 MAIS VENDIDO</span>
+                                                <span className="text-[10px] text-slate-400 font-bold">Campeão de vendas</span>
+                                            </div>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
 

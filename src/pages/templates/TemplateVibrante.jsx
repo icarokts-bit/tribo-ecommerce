@@ -23,10 +23,19 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [busca, setBusca] = useState('');
     const [categoriaFiltro, setCategoriaFiltro] = useState('todas');
 
-    // Estados de Interação
+    // Estados de Interação e Checkout do Carrinho
     const [favoritos, setFavoritos] = useState([]);
     const [carrinho, setCarrinho] = useState([]);
     const [copiadoId, setCopiadoId] = useState(null);
+    const [enviandoPedido, setEnviandoPedido] = useState(false);
+    const [pedidoConfirmado, setPedidoConfirmado] = useState(null);
+
+    // Campos de Checkout dentro do Carrinho
+    const [checkoutNome, setCheckoutNome] = useState('');
+    const [checkoutTelefone, setCheckoutTelefone] = useState('');
+    const [checkoutEndereco, setCheckoutEndereco] = useState('');
+    const [checkoutPagamento, setCheckoutPagamento] = useState('PIX');
+    const [checkoutObs, setCheckoutObs] = useState('');
 
     // Estados dos Carrosséis
     const [catSlidePage, setCatSlidePage] = useState(0);
@@ -46,7 +55,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     // =====================================================
     // PREPARAÇÃO DO CARROSSEL MOSAICO DE CATEGORIAS (SEM DUPLICAR)
     // =====================================================
-    const ITEMS_POR_PAGINA_MOSAICO = 8; // 4 blocos na linha de cima + 4 blocos na linha de baixo
+    const ITEMS_POR_PAGINA_MOSAICO = 8;
     const totalPaginasMosaico = Math.max(1, Math.ceil(categorias.length / ITEMS_POR_PAGINA_MOSAICO));
 
     useEffect(() => {
@@ -55,7 +64,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         }
     }, [categorias.length, totalPaginasMosaico, catSlidePage]);
 
-    // Fatia exata da página atual sem repetir itens da página anterior
     const inicioSlice = catSlidePage * ITEMS_POR_PAGINA_MOSAICO;
     const categoriasMosaicoAtual = categorias.slice(inicioSlice, inicioSlice + ITEMS_POR_PAGINA_MOSAICO);
 
@@ -94,6 +102,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 setRegWhatsapp(parsed.telefone || parsed.phone || '');
                 setRegEmail(parsed.email || '');
                 setRegEndereco(parsed.endereco || parsed.address || '');
+                setCheckoutNome(parsed.nome || parsed.name || '');
+                setCheckoutTelefone(parsed.telefone || parsed.phone || '');
+                setCheckoutEndereco(parsed.endereco || parsed.address || '');
             } catch (e) {}
         }
     }, [uidLoja]);
@@ -128,7 +139,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
     const exibirNotificacao = (msg) => {
         setMensagemTopo(msg);
-        setTimeout(() => setMensagemTopo(''), 6000);
+        setTimeout(() => setMensagemTopo(''), 5000);
     };
 
     const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -185,6 +196,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             await salvarClienteNasColecoes(clientId, novoCliente);
 
             setClienteLogado(novoCliente);
+            setCheckoutNome(novoCliente.nome);
+            setCheckoutTelefone(novoCliente.telefone);
+            setCheckoutEndereco(novoCliente.endereco);
             localStorage.setItem(`cliente_${uidLoja}`, JSON.stringify(novoCliente));
             setAuthModal({ open: false, mode: 'login' });
             exibirNotificacao(`Bem-vindo(a), ${novoCliente.nome}! Seu cadastro foi realizado com sucesso.`);
@@ -231,6 +245,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 setRegWhatsapp(encontrado.telefone || encontrado.phone || '');
                 setRegEmail(encontrado.email || '');
                 setRegEndereco(encontrado.endereco || encontrado.address || '');
+                setCheckoutNome(encontrado.nome || encontrado.name || '');
+                setCheckoutTelefone(encontrado.telefone || encontrado.phone || '');
+                setCheckoutEndereco(encontrado.endereco || encontrado.address || '');
                 localStorage.setItem(`cliente_${uidLoja}`, JSON.stringify(encontrado));
                 setAuthModal({ open: false, mode: 'login' });
                 exibirNotificacao(`Olá novamente, ${encontrado.nome || encontrado.name}! Login efetuado com sucesso.`);
@@ -266,6 +283,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
             await salvarClienteNasColecoes(clienteLogado.id, atualizado);
             setClienteLogado(atualizado);
+            setCheckoutNome(atualizado.nome);
+            setCheckoutTelefone(atualizado.telefone);
+            setCheckoutEndereco(atualizado.endereco);
             localStorage.setItem(`cliente_${uidLoja}`, JSON.stringify(atualizado));
             exibirNotificacao("Seus dados cadastrais foram atualizados com sucesso!");
             setClientAreaModal({ ...clientAreaModal, open: false });
@@ -283,7 +303,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     };
 
     // =====================================================
-    // INTERAÇÕES DE PRODUTO E PEDIDO
+    // CARRINHO E ENVIO DIRETO PARA A ABA GESTÃO DE PEDIDOS
     // =====================================================
     const toggleFavorito = (id) => {
         setFavoritos(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -305,52 +325,185 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         }
     };
 
-    const adicionarAoCarrinho = (produto) => {
+    const adicionarAoCarrinho = (produto, abrirModalCarrinho = false) => {
+        setPedidoConfirmado(null);
         setCarrinho(prev => {
             const existe = prev.find(item => item.id === produto.id);
             if (existe) return prev.map(item => item.id === produto.id ? { ...item, qtd: item.qtd + 1 } : item);
             return [...prev, { ...produto, qtd: 1 }];
         });
-        exibirNotificacao(`"${produto.name}" foi adicionado ao seu carrinho!`);
+        if (abrirModalCarrinho) {
+            setShowCartModal(true);
+        } else {
+            exibirNotificacao(`"${produto.name}" foi adicionado ao seu carrinho!`);
+        }
     };
 
-    const registrarPedidoDoCliente = async (itensPedido, valorTotal) => {
-        const novoPedido = {
-            id: crypto.randomUUID().slice(0, 8).toUpperCase(),
-            data: new Date().toLocaleDateString('pt-BR'),
-            itens: itensPedido,
-            total: valorTotal,
-            status: 'Enviado via WhatsApp'
-        };
-        setMeusPedidos(prev => [novoPedido, ...prev]);
+    const alterarQtdCarrinho = (id, delta) => {
+        setCarrinho(prev =>
+            prev
+                .map(item => item.id === id ? { ...item, qtd: item.qtd + delta } : item)
+                .filter(item => item.qtd > 0)
+        );
+    };
 
-        if (clienteLogado && uidLoja) {
-            const novoTotalGasto = Number(clienteLogado.totalGasto || clienteLogado.totalSpent || 0) + Number(valorTotal);
-            const novaQtdPedidos = Number(clienteLogado.pedidos || clienteLogado.orderCount || 0) + 1;
+    // Botão Comprar / Aproveitar Oferta: Adiciona ao carrinho e abre a gaveta do Carrinho para finalizar!
+    const handleComprarDireto = (produto) => {
+        adicionarAoCarrinho(produto, true);
+    };
+
+    const totalCarrinho = carrinho.reduce((acc, item) => acc + (Number(item.sellingPrice || 0) * item.qtd), 0);
+    const qtdTotalCarrinho = carrinho.reduce((acc, item) => acc + item.qtd, 0);
+
+    // Finaliza o Pedido no Carrinho e envia direto para a aba Gestão de Pedidos (Kanban) no Firebase
+    const handleFinalizarPedidoNoSistema = async (e) => {
+        e.preventDefault();
+        if (carrinho.length === 0) return;
+        if (!uidLoja) return alert("Erro: Loja não identificada.");
+
+        const nomeFinal = (checkoutNome || clienteLogado?.nome || clienteLogado?.name || '').trim();
+        const foneFinal = (checkoutTelefone || clienteLogado?.telefone || clienteLogado?.phone || '').trim();
+        const enderecoFinal = (checkoutEndereco || clienteLogado?.endereco || clienteLogado?.address || '').trim();
+
+        if (!nomeFinal || !foneFinal || !enderecoFinal) {
+            return alert("Por favor, preencha seu Nome, WhatsApp e Endereço de entrega para concluir o pedido.");
+        }
+
+        setEnviandoPedido(true);
+        try {
+            const orderId = crypto.randomUUID();
+            const codigoCurto = orderId.slice(0, 6).toUpperCase();
+            const agora = new Date().toISOString();
+
+            const itensFormatados = carrinho.map(item => ({
+                id: item.id,
+                productId: item.id,
+                name: item.name,
+                nome: item.name,
+                sku: item.sku || '',
+                price: Number(item.sellingPrice || item.price || 0),
+                preco: Number(item.sellingPrice || item.price || 0),
+                unitPrice: Number(item.sellingPrice || item.price || 0),
+                quantity: Number(item.qtd),
+                quantidade: Number(item.qtd),
+                qtd: Number(item.qtd),
+                total: Number(item.sellingPrice || 0) * Number(item.qtd),
+                imageUrl: item.imageUrl || ''
+            }));
+
+            const resumoTexto = carrinho.map(i => `${i.qtd}x ${i.name}`).join(', ');
+
+            // Objeto completo compatível com o Kanban / Gestão de Pedidos e Histórico
+            const payloadPedido = {
+                id: orderId,
+                orderNumber: codigoCurto,
+                numeroPedido: codigoCurto,
+                codigo: codigoCurto,
+                // Dados do Cliente
+                clientId: clienteLogado?.id || foneFinal.replace(/\D/g, ''),
+                customerName: nomeFinal,
+                clienteNome: nomeFinal,
+                nomeCliente: nomeFinal,
+                clientName: nomeFinal,
+                nome: nomeFinal,
+                customerPhone: foneFinal,
+                clienteTelefone: foneFinal,
+                telefone: foneFinal,
+                phone: foneFinal,
+                whatsapp: foneFinal,
+                address: enderecoFinal,
+                endereco: enderecoFinal,
+                deliveryAddress: enderecoFinal,
+                // Itens e Valores
+                items: itensFormatados,
+                itens: itensFormatados,
+                products: itensFormatados,
+                resumoItens: resumoTexto,
+                subtotal: totalCarrinho,
+                deliveryFee: 0,
+                taxaEntrega: 0,
+                total: totalCarrinho,
+                valorTotal: totalCarrinho,
+                totalAmount: totalCarrinho,
+                // Pagamento e Observações
+                paymentMethod: checkoutPagamento,
+                formaPagamento: checkoutPagamento,
+                pagamento: checkoutPagamento,
+                notes: checkoutObs.trim(),
+                observacao: checkoutObs.trim(),
+                observacoes: checkoutObs.trim(),
+                // Status para aparecer na primeira coluna do Kanban (Gestão de Pedidos)
+                status: 'novo',
+                orderStatus: 'pending',
+                etapa: 'novo',
+                origem: 'E-commerce',
+                source: 'ecommerce',
+                createdAt: agora,
+                updatedAt: agora,
+                dataPedido: agora,
+                timestamp: Date.now()
+            };
+
+            // Salva nas coleções de pedidos lidas pelo painel (Gestão de Pedidos / Kanban)
+            const colecoesPedidos = ['orders', 'pedidos', 'delivery_orders', 'ecommerce_orders'];
+            await Promise.all(
+                colecoesPedidos.map(col =>
+                    db.collection(`artifacts/tribo-burger-financeiro/users/${uidLoja}/${col}`).doc(orderId).set(payloadPedido, { merge: true })
+                )
+            );
+
+            // Atualiza ou cria o cliente na aba Clientes somando o pedido e o valor gasto
+            const idCli = clienteLogado?.id || foneFinal.replace(/\D/g, '') || crypto.randomUUID();
+            const novoTotalGasto = Number(clienteLogado?.totalGasto || clienteLogado?.totalSpent || 0) + Number(totalCarrinho);
+            const novaQtdPedidos = Number(clienteLogado?.pedidos || clienteLogado?.orderCount || 0) + 1;
+
             const clienteAtualizado = {
-                ...clienteLogado,
+                ...(clienteLogado || {}),
+                id: idCli,
+                nome: nomeFinal,
+                name: nomeFinal,
+                telefone: foneFinal,
+                phone: foneFinal,
+                whatsapp: foneFinal,
+                endereco: enderecoFinal,
+                address: enderecoFinal,
+                enderecoPrincipal: enderecoFinal,
                 totalGasto: novoTotalGasto,
                 totalSpent: novoTotalGasto,
                 receitaGerada: novoTotalGasto,
                 pedidos: novaQtdPedidos,
                 orderCount: novaQtdPedidos,
-                ultimoPedido: new Date().toISOString()
+                fidelidade: novaQtdPedidos,
+                pontos: novaQtdPedidos,
+                ultimoPedido: agora,
+                updatedAt: agora,
+                createdAt: clienteLogado?.createdAt || agora
             };
+
+            await salvarClienteNasColecoes(idCli, clienteAtualizado);
             setClienteLogado(clienteAtualizado);
             localStorage.setItem(`cliente_${uidLoja}`, JSON.stringify(clienteAtualizado));
-            await salvarClienteNasColecoes(clienteLogado.id, clienteAtualizado);
+
+            // Atualiza lista local de Meus Pedidos do cliente
+            const pedidoLocal = {
+                id: codigoCurto,
+                data: new Date().toLocaleDateString('pt-BR'),
+                itens: resumoTexto,
+                total: totalCarrinho,
+                status: 'Recebido pela Loja'
+            };
+            setMeusPedidos(prev => [pedidoLocal, ...prev]);
+
+            setCarrinho([]);
+            setCheckoutObs('');
+            setPedidoConfirmado(pedidoLocal);
+            exibirNotificacao(`Pedido #${codigoCurto} enviado com sucesso para a loja!`);
+        } catch (error) {
+            console.error("Erro ao finalizar pedido:", error);
+            alert("Ocorreu um erro ao enviar seu pedido. Tente novamente.");
         }
+        setEnviandoPedido(false);
     };
-
-    const handleComprarDireto = (produto) => {
-        registrarPedidoDoCliente(`${produto.name} (1x)`, produto.sellingPrice);
-        const identificacao = clienteLogado ? `\nCliente: *${clienteLogado.nome || clienteLogado.name}* (${clienteLogado.telefone || clienteLogado.phone})` : '';
-        const msg = `Olá! Quero comprar agora o produto *${produto.name}* (${formatMoney(produto.sellingPrice)}) que vi no site da ${loja.nomeLoja}.${identificacao}`;
-        window.open(getWppLink(msg), '_blank');
-    };
-
-    const totalCarrinho = carrinho.reduce((acc, item) => acc + (Number(item.sellingPrice || 0) * item.qtd), 0);
-    const qtdTotalCarrinho = carrinho.reduce((acc, item) => acc + item.qtd, 0);
 
     const produtosFiltrados = produtos.filter(p => {
         const matchNome = p.name?.toLowerCase().includes(busca.toLowerCase());
@@ -574,7 +727,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </div>
                         )}
 
-                        <button onClick={() => setShowCartModal(true)} className="flex items-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-xl transition-colors">
+                        <button onClick={() => { setPedidoConfirmado(null); setShowCartModal(true); }} className="flex items-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-xl transition-colors">
                             <div className="relative">
                                 <Icon name="shopping-cart" size={24} className="text-slate-800" />
                                 <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-[11px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow">{qtdTotalCarrinho}</span>
@@ -643,12 +796,10 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             <main className="w-full px-4 md:px-10 xl:px-16 py-8 space-y-12 flex-1">
                 
                 {/* ========================================================================= */}
-                {/* 5. MENU MOSAICO BENTO GRID SEM DUPLICAR CATEGORIAS ENTRE AS PÁGINAS       */}
+                {/* 5. MENU MOSAICO BENTO GRID COM SELO LARANJA DINÂMICO DE CADA CATEGORIA     */}
                 {/* ========================================================================= */}
                 {categorias.length > 0 && (
                     <section className="relative py-2">
-                        
-                        {/* Setas Laterais: Só aparecem quando a 1ª página encher (mais de 8 categorias) */}
                         {totalPaginasMosaico > 1 && (
                             <>
                                 <button 
@@ -697,9 +848,13 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 <Icon name="box" size={64} />
                                             </div>
                                         )}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                         <div className="absolute bottom-4 left-4 right-4 z-10 text-left">
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block">Departamento</span>
+                                            {(categoriasMosaicoAtual[0].tag !== undefined ? categoriasMosaicoAtual[0].tag : 'DEPARTAMENTO') && (
+                                                <span className="text-[11px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">
+                                                    {categoriasMosaicoAtual[0].tag !== undefined ? categoriasMosaicoAtual[0].tag : 'DEPARTAMENTO'}
+                                                </span>
+                                            )}
                                             <h3 className="text-xl font-black text-white tracking-tight leading-tight drop-shadow-sm">
                                                 {categoriasMosaicoAtual[0].name}
                                             </h3>
@@ -728,8 +883,13 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                         <Icon name="box" size={44} />
                                                     </div>
                                                 )}
-                                                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                                 <div className="absolute bottom-3.5 left-4 right-4 z-10">
+                                                    {categoriasMosaicoAtual[1].tag && (
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">
+                                                            {categoriasMosaicoAtual[1].tag}
+                                                        </span>
+                                                    )}
                                                     <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
                                                         {categoriasMosaicoAtual[1].name}
                                                     </h3>
@@ -755,8 +915,13 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                         <Icon name="box" size={44} />
                                                     </div>
                                                 )}
-                                                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                                 <div className="absolute bottom-3.5 left-4 right-4 z-10">
+                                                    {categoriasMosaicoAtual[2].tag && (
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">
+                                                            {categoriasMosaicoAtual[2].tag}
+                                                        </span>
+                                                    )}
                                                     <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
                                                         {categoriasMosaicoAtual[2].name}
                                                     </h3>
@@ -785,9 +950,13 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 <Icon name="box" size={80} />
                                             </div>
                                         )}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                         <div className="absolute bottom-5 left-6 right-6 z-10">
-                                            <span className="text-xs font-black uppercase tracking-widest text-orange-400 block">Destaque</span>
+                                            {(categoriasMosaicoAtual[3].tag !== undefined ? categoriasMosaicoAtual[3].tag : 'DESTAQUE') && (
+                                                <span className="text-xs font-black uppercase tracking-widest text-orange-400 block mb-0.5">
+                                                    {categoriasMosaicoAtual[3].tag !== undefined ? categoriasMosaicoAtual[3].tag : 'DESTAQUE'}
+                                                </span>
+                                            )}
                                             <h3 className="text-2xl md:text-3xl font-black text-white leading-snug drop-shadow-sm">
                                                 {categoriasMosaicoAtual[3].name}
                                             </h3>
@@ -818,8 +987,13 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                     <Icon name="box" size={44} />
                                                 </div>
                                             )}
-                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/15 to-transparent" />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                             <div className="absolute bottom-3.5 left-4 right-4 z-10">
+                                                {cat.tag && (
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">
+                                                        {cat.tag}
+                                                    </span>
+                                                )}
                                                 <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
                                                     {cat.name}
                                                 </h3>
@@ -830,7 +1004,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             )}
                         </div>
 
-                        {/* Paginadores Inferiores (Só aparecem quando há mais de 1 página) + Limpar Filtro */}
                         <div className="flex flex-col items-center justify-center gap-3 mt-6">
                             {totalPaginasMosaico > 1 && (
                                 <div className="flex items-center gap-2">
@@ -913,7 +1086,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </section>
                 )}
 
-                {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES */}
+                {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES (COMPRAR VAI DIRETO PARA O CARRINHO) */}
                 {(listaCarrosselDestaque.length > 0 || listaCarrosselPromo.length > 0) && categoriaFiltro === 'todas' && !busca && (
                     <section className={`grid grid-cols-1 ${listaCarrosselDestaque.length > 0 && listaCarrosselPromo.length > 0 ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
                         
@@ -936,7 +1109,11 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
                                     <div className="p-6 grid grid-cols-1 sm:grid-cols-12 gap-6 items-center flex-1 bg-gradient-to-br from-white via-slate-50 to-amber-50/30">
                                         <div className="sm:col-span-5 flex items-center justify-center bg-white rounded-2xl p-4 border border-slate-200/80 h-52 shadow-inner relative">
-                                            <span className="absolute top-2 left-2 bg-emerald-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">TOP</span>
+                                            <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                                <span className="bg-emerald-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">TOP</span>
+                                                {prodSlide.novidade && <span className="bg-blue-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">NOVO</span>}
+                                                {prodSlide.maisVendido && <span className="bg-amber-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">MAIS VENDIDO</span>}
+                                            </div>
                                             {prodSlide.imageUrl ? (
                                                 <img src={prodSlide.imageUrl} alt={prodSlide.name} className="max-h-full max-w-full object-contain hover:scale-105 transition-transform" />
                                             ) : (
@@ -952,8 +1129,10 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 {prodSlide.isPromo && <span className="text-xs text-slate-400 line-through font-bold">{formatMoney(prodSlide.price)}</span>}
                                             </div>
                                             <div className="flex flex-wrap items-center gap-2 pt-2">
-                                                <button onClick={() => handleComprarDireto(prodSlide)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm transition-colors">Comprar</button>
-                                                <button onClick={() => adicionarAoCarrinho(prodSlide)} className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors">
+                                                <button onClick={() => handleComprarDireto(prodSlide)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm transition-colors">
+                                                    Comprar Agora
+                                                </button>
+                                                <button onClick={() => adicionarAoCarrinho(prodSlide, false)} className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors">
                                                     <Icon name="shopping-cart" size={14} /> + Carrinho
                                                 </button>
                                             </div>
@@ -985,7 +1164,11 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
                                     <div className="p-6 grid grid-cols-1 sm:grid-cols-12 gap-6 items-center flex-1 bg-gradient-to-br from-white via-rose-50/20 to-orange-50/30">
                                         <div className="sm:col-span-5 flex items-center justify-center bg-white rounded-2xl p-4 border border-rose-100 h-52 shadow-inner relative">
-                                            <span className="absolute top-2 left-2 bg-rose-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">-{descPerc}% OFF</span>
+                                            <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                                <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">-{descPerc}% OFF</span>
+                                                {promoSlide.novidade && <span className="bg-blue-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">NOVO</span>}
+                                                {promoSlide.maisVendido && <span className="bg-amber-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">MAIS VENDIDO</span>}
+                                            </div>
                                             {promoSlide.imageUrl ? (
                                                 <img src={promoSlide.imageUrl} alt={promoSlide.name} className="max-h-full max-w-full object-contain hover:scale-105 transition-transform" />
                                             ) : (
@@ -1001,8 +1184,10 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 <span className="text-xs text-slate-400 line-through font-bold">{formatMoney(promoSlide.price)}</span>
                                             </div>
                                             <div className="flex flex-wrap items-center gap-2 pt-2">
-                                                <button onClick={() => handleComprarDireto(promoSlide)} className="bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm transition-colors">Aproveitar Oferta</button>
-                                                <button onClick={() => adicionarAoCarrinho(promoSlide)} className="bg-slate-900 hover:bg-black text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors">
+                                                <button onClick={() => handleComprarDireto(promoSlide)} className="bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm transition-colors">
+                                                    Aproveitar Oferta
+                                                </button>
+                                                <button onClick={() => adicionarAoCarrinho(promoSlide, false)} className="bg-slate-900 hover:bg-black text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors">
                                                     <Icon name="shopping-cart" size={14} /> + Carrinho
                                                 </button>
                                             </div>
@@ -1050,7 +1235,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </div>
                 </section>
 
-                {/* 9. GRADE DE PRODUTOS */}
+                {/* 9. GRADE DE PRODUTOS COM OS NOVOS SELOS (NOVIDADE E MAIS VENDIDO) */}
                 <section id="vitrine" className="space-y-6">
                     <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-3 gap-2">
                         <div>
@@ -1077,10 +1262,15 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 const isFav = favoritos.includes(p.id);
                                 return (
                                     <div key={p.id} className="bg-white rounded-2xl p-4 border border-slate-200/80 hover:border-[var(--cor-primaria)] hover:shadow-xl transition-all duration-300 flex flex-col justify-between group relative">
-                                        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
+                                        
+                                        {/* SELOS DO PRODUTO: DESCONTO, TOP, NOVIDADE E MAIS VENDIDO */}
+                                        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 items-start">
                                             {descontoPerc > 0 && <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm">-{descontoPerc}%</span>}
-                                            {p.destaque && <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm">Top</span>}
+                                            {p.destaque && <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase">Top</span>}
+                                            {p.novidade && <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase">Novidade</span>}
+                                            {p.maisVendido && <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase">Mais Vendido</span>}
                                         </div>
+
                                         <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
                                             <button onClick={() => toggleFavorito(p.id)} title="Favoritar" className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-sm transition-all ${isFav ? 'bg-rose-500 border-rose-500 text-white scale-110' : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500'}`}>
                                                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -1111,10 +1301,10 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                         </div>
 
                                         <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
-                                            <button onClick={() => adicionarAoCarrinho(p)} className="py-2.5 px-2 bg-orange-50 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200 font-black text-[11px] uppercase rounded-xl flex items-center justify-center gap-1 transition-colors">
+                                            <button onClick={() => adicionarAoCarrinho(p, false)} className="py-2.5 px-2 bg-orange-50 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200 font-black text-[11px] uppercase rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer">
                                                 <Icon name="shopping-cart" size={13} /> + Carrinho
                                             </button>
-                                            <button onClick={() => handleComprarDireto(p)} className="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase rounded-xl flex items-center justify-center gap-1 shadow-xs transition-colors">
+                                            <button onClick={() => handleComprarDireto(p)} className="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase rounded-xl flex items-center justify-center gap-1 shadow-xs transition-colors cursor-pointer">
                                                 Comprar
                                             </button>
                                         </div>
@@ -1356,21 +1546,18 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     <div className="text-center py-10 space-y-2">
                                         <Icon name="package" size={40} className="mx-auto text-slate-300" />
                                         <p className="font-black text-slate-600 text-sm uppercase">Você ainda não realizou pedidos nesta sessão</p>
-                                        <p className="text-xs text-slate-400">Adicione produtos ao carrinho e finalize pelo WhatsApp para acompanhar por aqui.</p>
+                                        <p className="text-xs text-slate-400">Adicione produtos ao carrinho e finalize o pedido pelo site para acompanhar por aqui.</p>
                                     </div>
                                 ) : (
                                     meusPedidos.map(ped => (
                                         <div key={ped.id} className="border border-slate-200 rounded-xl p-4 flex justify-between items-center bg-slate-50">
                                             <div>
-                                                <span className="text-[10px] font-black uppercase bg-orange-100 text-orange-700 px-2 py-0.5 rounded">Pedido #{ped.id}</span>
+                                                <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">Pedido #{ped.id}</span>
                                                 <p className="font-bold text-xs text-slate-800 mt-1">{ped.itens}</p>
                                                 <span className="text-[11px] text-slate-400">{ped.data} • {ped.status}</span>
                                             </div>
                                             <div className="text-right">
                                                 <span className="font-black text-sm text-emerald-600 block">{formatMoney(ped.total)}</span>
-                                                <a href={getWppLink(`Olá! Gostaria de saber o status do meu Pedido #${ped.id}.`)} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-blue-600 hover:underline">
-                                                    Consultar no WhatsApp
-                                                </a>
                                             </div>
                                         </div>
                                     ))
@@ -1381,49 +1568,153 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             )}
 
-            {/* 15. MODAL DO CARRINHO */}
+            {/* ========================================================================= */}
+            {/* 15. MODAL DO CARRINHO COM CHECKOUT QUE ENVIA DIRETO PARA GESTÃO DE PEDIDOS*/}
+            {/* ========================================================================= */}
             {showCartModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-end">
-                    <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between p-6">
-                        <div className="flex justify-between items-center border-b border-slate-200 pb-4">
-                            <h3 className="font-black text-lg uppercase text-slate-800">Meu Carrinho ({qtdTotalCarrinho})</h3>
+                    <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between p-6 overflow-y-auto">
+                        <div className="flex justify-between items-center border-b border-slate-200 pb-4 shrink-0">
+                            <div>
+                                <h3 className="font-black text-lg uppercase text-slate-800">Finalizar Compra ({qtdTotalCarrinho})</h3>
+                                <span className="text-xs font-bold text-slate-400">Confira seus itens e dados de entrega</span>
+                            </div>
                             <button onClick={() => setShowCartModal(false)} className="text-slate-400 hover:text-black text-xl">✕</button>
                         </div>
-                        <div className="flex-1 overflow-y-auto py-4 space-y-3">
-                            {carrinho.length === 0 ? (
-                                <p className="text-center text-slate-400 font-bold text-sm py-12">Seu carrinho está vazio.</p>
-                            ) : (
-                                carrinho.map(item => (
-                                    <div key={item.id} className="flex items-center justify-between border border-slate-200 p-3 rounded-xl">
-                                        <div className="flex items-center gap-3">
-                                            {item.imageUrl && <img src={item.imageUrl} className="w-12 h-12 object-contain rounded border" alt={item.name} />}
-                                            <div>
-                                                <p className="font-bold text-xs text-slate-800">{item.name}</p>
-                                                <p className="text-xs font-black text-rose-600">{item.qtd}x {formatMoney(item.sellingPrice)}</p>
-                                            </div>
-                                        </div>
-                                        <button onClick={() => setCarrinho(prev => prev.filter(i => i.id !== item.id))} className="text-red-400 hover:text-red-600 text-xs font-bold">Remover</button>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                        {carrinho.length > 0 && (
-                            <div className="border-t border-slate-200 pt-4 space-y-3">
-                                <div className="flex justify-between items-center font-black text-base">
-                                    <span>Total:</span>
-                                    <span className="text-emerald-600">{formatMoney(totalCarrinho)}</span>
+
+                        {pedidoConfirmado ? (
+                            <div className="my-auto text-center space-y-4 py-8">
+                                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-3xl font-black">
+                                    ✓
                                 </div>
-                                <button onClick={() => {
-                                    const resumo = carrinho.map(i => `${i.qtd}x ${i.name}`).join(', ');
-                                    registrarPedidoDoCliente(resumo, totalCarrinho);
-                                    const dadosCli = clienteLogado ? `\nCliente: *${clienteLogado.nome || clienteLogado.name}* - Endereço: ${clienteLogado.endereco || clienteLogado.address}` : '';
-                                    window.open(getWppLink(`Olá! Quero finalizar meu pedido na ${loja.nomeLoja}: ${resumo}. Total: ${formatMoney(totalCarrinho)}${dadosCli}`), '_blank');
-                                    setCarrinho([]);
-                                    setShowCartModal(false);
-                                }} className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs shadow-md">
-                                    Finalizar Pedido no WhatsApp
+                                <h4 className="font-black text-xl uppercase text-slate-800">Pedido #{pedidoConfirmado.id} Confirmado!</h4>
+                                <p className="text-xs font-bold text-slate-500 max-w-xs mx-auto leading-relaxed">
+                                    Seu pedido já foi enviado diretamente para o sistema da loja ({loja.nomeLoja}) e está em processamento.
+                                </p>
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left text-xs space-y-1">
+                                    <p><strong>Itens:</strong> {pedidoConfirmado.itens}</p>
+                                    <p><strong>Total:</strong> <span className="text-emerald-600 font-black">{formatMoney(pedidoConfirmado.total)}</span></p>
+                                    <p><strong>Status:</strong> {pedidoConfirmado.status}</p>
+                                </div>
+                                <div className="pt-3 space-y-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setPedidoConfirmado(null); setShowCartModal(false); }}
+                                        className="w-full py-3.5 bg-slate-900 hover:bg-black text-white rounded-xl font-black uppercase text-xs"
+                                    >
+                                        Voltar para a Loja
+                                    </button>
+                                </div>
+                            </div>
+                        ) : carrinho.length === 0 ? (
+                            <div className="my-auto text-center py-12 space-y-3">
+                                <Icon name="shopping-cart" size={44} className="mx-auto text-slate-300" />
+                                <p className="text-slate-400 font-bold text-sm">Seu carrinho está vazio.</p>
+                                <button onClick={() => setShowCartModal(false)} className="text-xs font-black uppercase text-orange-500 hover:underline">
+                                    Continuar Comprando
                                 </button>
                             </div>
+                        ) : (
+                            <form onSubmit={handleFinalizarPedidoNoSistema} className="flex-1 flex flex-col justify-between space-y-5 pt-4 overflow-y-auto">
+                                {/* Lista de Produtos no Carrinho */}
+                                <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                                    {carrinho.map(item => (
+                                        <div key={item.id} className="flex items-center justify-between border border-slate-200 p-3 rounded-xl bg-slate-50/50">
+                                            <div className="flex items-center gap-3">
+                                                {item.imageUrl && <img src={item.imageUrl} className="w-12 h-12 object-contain rounded border bg-white p-0.5" alt={item.name} />}
+                                                <div>
+                                                    <p className="font-bold text-xs text-slate-800 line-clamp-1">{item.name}</p>
+                                                    <p className="text-xs font-black text-rose-600">{formatMoney(item.sellingPrice)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button type="button" onClick={() => alterarQtdCarrinho(item.id, -1)} className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 font-black text-xs">-</button>
+                                                <span className="font-black text-xs w-5 text-center">{item.qtd}</span>
+                                                <button type="button" onClick={() => alterarQtdCarrinho(item.id, 1)} className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 font-black text-xs">+</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Dados de Entrega e Pagamento para a Gestão de Pedidos */}
+                                <div className="space-y-3 border-t border-slate-200 pt-4">
+                                    <h4 className="font-black text-xs uppercase text-slate-700 tracking-wider">Dados para Entrega e Pedido</h4>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Seu Nome *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={checkoutNome}
+                                            onChange={e => setCheckoutNome(e.target.value)}
+                                            placeholder="Nome completo"
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-emerald-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">WhatsApp / Telefone *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={checkoutTelefone}
+                                            onChange={e => setCheckoutTelefone(e.target.value)}
+                                            placeholder="(11) 99999-9999"
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-emerald-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Endereço Completo de Entrega *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={checkoutEndereco}
+                                            onChange={e => setCheckoutEndereco(e.target.value)}
+                                            placeholder="Rua, Número, Bairro, Cidade, CEP"
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-emerald-500"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Forma de Pagamento</label>
+                                            <select
+                                                value={checkoutPagamento}
+                                                onChange={e => setCheckoutPagamento(e.target.value)}
+                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                                            >
+                                                <option value="PIX">PIX</option>
+                                                <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                                <option value="Cartão de Débito">Cartão de Débito</option>
+                                                <option value="Boleto">Boleto</option>
+                                                <option value="Dinheiro">Dinheiro</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Observações</label>
+                                            <input
+                                                type="text"
+                                                value={checkoutObs}
+                                                onChange={e => setCheckoutObs(e.target.value)}
+                                                placeholder="Cor, detalhe, etc."
+                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Total e Botão de Finalizar */}
+                                <div className="border-t border-slate-200 pt-4 space-y-3 shrink-0">
+                                    <div className="flex justify-between items-center font-black text-base">
+                                        <span>Total do Pedido:</span>
+                                        <span className="text-emerald-600 text-xl">{formatMoney(totalCarrinho)}</span>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={enviandoPedido}
+                                        className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-lg transition-colors cursor-pointer"
+                                    >
+                                        {enviandoPedido ? 'Enviando Pedido...' : 'Finalizar Pedido'}
+                                    </button>
+                                </div>
+                            </form>
                         )}
                     </div>
                 </div>
