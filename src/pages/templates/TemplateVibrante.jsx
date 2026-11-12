@@ -116,7 +116,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const textoBannerSecundario = loja?.bannerSecundarioTexto || 'Displays NFC, chaveiros corporativos e peças exclusivas.';
     const botaoBannerSecundario = loja?.bannerSecundarioBotao || 'Solicitar Cotação';
 
-    // Sincroniza dados do cliente salvo no navegador
     const preencherEstadosComCliente = (cli) => {
         if (!cli) return;
         setRegNome(cli.nome || cli.name || '');
@@ -155,7 +154,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
     // =====================================================
     // ESCUTA EM TEMPO REAL DOS PEDIDOS DO CLIENTE NO FIREBASE
-    // (NUNCA MAIS SOME AO ATUALIZAR A PÁGINA E ATUALIZA O STATUS NA HORA)
     // =====================================================
     useEffect(() => {
         if (!uidLoja || !clienteLogado) {
@@ -227,7 +225,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         setBuscandoCep(false);
     };
 
-    // Calcula estimativa de frete com base no Peso dos produtos e UF do CEP
     const calcularOpcoesDeFrete = (cepLimpo, ufDestino = 'SP') => {
         const pesoTotal = carrinho.reduce((acc, item) => acc + (Number(item.weight || 0.2) * item.qtd), 0);
         const mesmoEstado = ufDestino.toUpperCase() === 'SP';
@@ -471,7 +468,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     };
 
     // =====================================================
-    // CARRINHO E ENVIO DIRETO PARA A ABA GESTÃO DE PEDIDOS
+    // CARRINHO E ENVIO DIRETO COM SEQUÊNCIA (0001, 0002...)
     // =====================================================
     const toggleFavorito = (id) => {
         setFavoritos(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -543,9 +540,27 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         setEnviandoPedido(true);
         try {
             const orderId = crypto.randomUUID();
-            const codigoCurto = orderId.slice(0, 6).toUpperCase();
             const agora = new Date().toISOString();
             const idCli = clienteLogado?.id || foneFinal.replace(/\D/g, '') || crypto.randomUUID();
+
+            // GERA O PRÓXIMO NÚMERO SEQUENCIAL (0001, 0002...) SINCRONIZADO COM O PAINEL
+            const counterRef = db.doc(`artifacts/tribo-burger-financeiro/users/${uidLoja}/settings/order_counter`);
+            let codigoCurto = '0001';
+            try {
+                const proximoNumero = await db.runTransaction(async (transaction) => {
+                    const doc = await transaction.get(counterRef);
+                    const atual = doc.exists ? Number(doc.data().lastOrderNumber || 0) : 0;
+                    const novo = atual + 1;
+                    transaction.set(counterRef, { lastOrderNumber: novo, updatedAt: agora }, { merge: true });
+                    return novo;
+                });
+                codigoCurto = String(proximoNumero).padStart(4, '0');
+            } catch (errCounter) {
+                const snapCounter = await counterRef.get();
+                const prox = (snapCounter.exists ? Number(snapCounter.data().lastOrderNumber || 0) : 0) + 1;
+                await counterRef.set({ lastOrderNumber: prox, updatedAt: agora }, { merge: true });
+                codigoCurto = String(prox).padStart(4, '0');
+            }
 
             const itensFormatados = carrinho.map(item => ({
                 id: item.id,
@@ -567,6 +582,8 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
             const payloadPedido = {
                 id: orderId,
+                tipoRegistro: 'pedido',
+                isQuote: false,
                 orderNumber: codigoCurto,
                 numeroPedido: codigoCurto,
                 codigo: codigoCurto,
@@ -582,7 +599,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 whatsapp: foneFinal,
                 customerEmail: emailFinal,
                 email: emailFinal,
-                // Dados completos de CEP e Endereço de Envio
                 cep: cepFinal,
                 rua: checkoutRua.trim(),
                 numero: checkoutNumero.trim(),
@@ -593,7 +609,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 address: enderecoFormatado,
                 endereco: enderecoFormatado,
                 deliveryAddress: enderecoFormatado,
-                // Frete / Logística
                 shippingMethod: checkoutModalidadeFrete,
                 modalidadeFrete: checkoutModalidadeFrete,
                 deliveryFee: Number(checkoutValorFrete || 0),
@@ -601,7 +616,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 valorFrete: Number(checkoutValorFrete || 0),
                 trackingCode: '',
                 codigoRastreio: '',
-                // Itens e Totais
                 items: itensFormatados,
                 itens: itensFormatados,
                 products: itensFormatados,
@@ -633,7 +647,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 )
             );
 
-            // Salva / Atualiza dados do Cliente e mantém ele logado para ver o histórico sempre que voltar
             const novoTotalGasto = Number(clienteLogado?.totalGasto || clienteLogado?.totalSpent || 0) + Number(totalComFrete);
             const novaQtdPedidos = Number(clienteLogado?.pedidos || clienteLogado?.orderCount || 0) + 1;
 
@@ -683,7 +696,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         setEnviandoPedido(false);
     };
 
-    // Descobre o índice da etapa atual do pedido para desenhar a barra de progresso
     const obterIndiceEtapa = (ped) => {
         const st = String(ped.status || ped.etapa || ped.orderStatus || 'novo').toLowerCase().trim();
         if (['concluido', 'finalizado', 'entregue', 'delivered'].includes(st)) return 4;
@@ -1613,9 +1625,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             )}
 
-            {/* ========================================================================= */}
             {/* 14. MODAL DO CLIENTE: HISTÓRICO PERMANENTE + BARRA DE PROGRESSO EM TEMPO REAL */}
-            {/* ========================================================================= */}
             {clientAreaModal.open && clienteLogado && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -1717,7 +1727,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     </div>
                                 ) : (
                                     meusPedidos.map(ped => {
-                                        const codigo = ped.orderNumber || ped.codigo || ped.id?.slice(0, 6).toUpperCase();
+                                        const codigo = ped.orderNumber || ped.codigo || '0001';
                                         const indiceEtapa = obterIndiceEtapa(ped);
                                         const dataPed = ped.createdAt ? new Date(ped.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
                                         const rastreio = ped.trackingCode || ped.codigoRastreio || '';
@@ -1739,7 +1749,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                     </div>
                                                 </div>
 
-                                                {/* BARRA DE PROGRESSO DO PEDIDO ESTILO E-COMMERCE */}
+                                                {/* BARRA DE PROGRESSO DO PEDIDO */}
                                                 <div className="grid grid-cols-5 gap-1 pt-1">
                                                     {ETAPAS_PEDIDO.map((etapa, idx) => {
                                                         const concluida = idx <= indiceEtapa;
@@ -1759,7 +1769,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                     })}
                                                 </div>
 
-                                                {/* Itens e Endereço */}
                                                 <div className="bg-white p-3 rounded-xl border border-slate-200/80 text-xs space-y-1">
                                                     <p className="font-black text-slate-800">{ped.resumoItens || (ped.items || []).map(i => `${i.qtd}x ${i.name}`).join(', ')}</p>
                                                     {(ped.endereco || ped.address) && (
@@ -1791,9 +1800,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             )}
 
-            {/* ========================================================================= */}
-            {/* 15. MODAL DO CARRINHO COM CEP AUTOMÁTICO, FRETE E ENVIO P/ O SISTEMA      */}
-            {/* ========================================================================= */}
+            {/* 15. MODAL DO CARRINHO COM CEP AUTOMÁTICO, FRETE E ENVIO P/ O SISTEMA */}
             {showCartModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-end">
                     <div className="bg-white w-full max-w-lg h-full shadow-2xl flex flex-col justify-between p-6 overflow-y-auto">
@@ -1850,7 +1857,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </div>
                         ) : (
                             <form onSubmit={handleFinalizarPedidoNoSistema} className="flex-1 flex flex-col justify-between space-y-4 pt-4 overflow-y-auto">
-                                {/* Lista de Produtos */}
                                 <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
                                     {carrinho.map(item => (
                                         <div key={item.id} className="flex items-center justify-between border border-slate-200 p-2.5 rounded-xl bg-slate-50/50">
@@ -1870,7 +1876,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     ))}
                                 </div>
 
-                                {/* Dados do Cliente + CEP e Endereço de Envio */}
                                 <div className="space-y-2.5 border-t border-slate-200 pt-3">
                                     <h4 className="font-black text-xs uppercase text-slate-700 tracking-wider">1. Dados do Cliente</h4>
                                     <div className="grid grid-cols-2 gap-2">
@@ -1931,7 +1936,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                         </div>
                                     </div>
 
-                                    {/* Opções de Frete (Correios / Transportadora) */}
                                     {opcoesFreteCalculadas.length > 0 && (
                                         <div className="pt-1 space-y-1.5">
                                             <label className="text-[10px] font-black uppercase text-emerald-700 block">Escolha a Modalidade de Entrega:</label>
@@ -1973,7 +1977,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     </div>
                                 </div>
 
-                                {/* Resumo Financeiro e Botão de Finalizar */}
                                 <div className="border-t border-slate-200 pt-3 space-y-2 shrink-0">
                                     <div className="flex justify-between text-xs font-bold text-slate-500">
                                         <span>Subtotal dos Produtos:</span>

@@ -39,6 +39,14 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
     const [listaClientes, setListaClientes] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // Estado do Contador Sequencial (0001, 0002...) e Senha Admin
+    const [ultimoNumeroSequencial, setUltimoNumeroSequencial] = useState(0);
+    const [senhaAdminSalva, setSenhaAdminSalva] = useState('1234');
+    const [modalResetOpen, setModalResetOpen] = useState(false);
+    const [senhaResetInput, setSenhaResetInput] = useState('');
+    const [modoTrocarSenha, setModoTrocarSenha] = useState(false);
+    const [novaSenhaAdminInput, setNovaSenhaAdminInput] = useState('');
+
     // Filtros de visualização no topo ('todos' | 'pedidos' | 'orcamentos')
     const [filtroTipo, setFiltroTipo] = useState('todos');
 
@@ -53,7 +61,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
 
     const [formData, setFormData] = useState({
         tipoRegistro: 'pedido', // 'pedido' | 'orcamento'
-        orderNumber: '',
+        orderNumber: '0001',
         customerName: '',
         customerPhone: '',
         customerEmail: '',
@@ -77,11 +85,24 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
 
     const donoUid = propDonoUid || permissoes?.donoUid || user?.uid;
 
-    // 1. Escuta os Pedidos e Orçamentos em Tempo Real + Carrega Catálogo e Clientes para o formulário
+    const formatarNumeroPedido = (num) => String(Math.max(1, Number(num || 1))).padStart(4, '0');
+
+    // 1. Escuta o Contador Sequencial, Pedidos, Catálogo e Clientes
     useEffect(() => {
         if (!donoUid) return;
 
-        // Carrega produtos do catálogo e clientes para facilitar preenchimento rápido
+        // Escuta em tempo real o contador de pedidos e a senha de segurança
+        const unsubCounter = db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/order_counter`)
+            .onSnapshot(doc => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    setUltimoNumeroSequencial(Number(data.lastOrderNumber || 0));
+                    if (data.resetPassword) setSenhaAdminSalva(String(data.resetPassword));
+                } else {
+                    setUltimoNumeroSequencial(0);
+                }
+            });
+
         const carregarAuxiliares = async () => {
             try {
                 const catDoc = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get();
@@ -130,8 +151,62 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                 setLoading(false);
             });
 
-        return () => unsub();
+        return () => {
+            unsubCounter();
+            unsub();
+        };
     }, [donoUid]);
+
+    // Confirma a senha de administrador e ZERA a sequência para 0001
+    const handleConfirmarZerarComSenha = async (e) => {
+        e.preventDefault();
+        if (!donoUid) return;
+
+        if (senhaResetInput.trim() !== senhaAdminSalva) {
+            return alert("Senha incorreta! Digite a senha de administrador correta para zerar o contador.");
+        }
+
+        try {
+            const payload = {
+                lastOrderNumber: 0,
+                resetAt: new Date().toISOString()
+            };
+            if (modoTrocarSenha && novaSenhaAdminInput.trim()) {
+                payload.resetPassword = novaSenhaAdminInput.trim();
+                setSenhaAdminSalva(novaSenhaAdminInput.trim());
+            }
+
+            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/order_counter`).set(payload, { merge: true });
+            setUltimoNumeroSequencial(0);
+            setSenhaResetInput('');
+            setNovaSenhaAdminInput('');
+            setModoTrocarSenha(false);
+            setModalResetOpen(false);
+            alert("Sequência zerada com sucesso! O próximo pedido será o #0001.");
+        } catch (error) {
+            console.error("Erro ao zerar sequência:", error);
+            alert("Erro ao zerar a numeração.");
+        }
+    };
+
+    // Gera e reserva o próximo número sequencial (0001, 0002...) no banco
+    const gerarProximoNumeroNoBanco = async () => {
+        const counterRef = db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/order_counter`);
+        try {
+            const proximoNumero = await db.runTransaction(async (transaction) => {
+                const doc = await transaction.get(counterRef);
+                const atual = doc.exists ? Number(doc.data().lastOrderNumber || 0) : 0;
+                const novo = atual + 1;
+                transaction.set(counterRef, { lastOrderNumber: novo, updatedAt: new Date().toISOString() }, { merge: true });
+                return novo;
+            });
+            return formatarNumeroPedido(proximoNumero);
+        } catch (e) {
+            const fallback = ultimoNumeroSequencial + 1;
+            await counterRef.set({ lastOrderNumber: fallback, updatedAt: new Date().toISOString() }, { merge: true });
+            return formatarNumeroPedido(fallback);
+        }
+    };
 
     const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -141,7 +216,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
 
     const obterColunaDoPedido = (pedido) => {
         const st = String(pedido.status || pedido.etapa || pedido.orderStatus || 'novo').toLowerCase().trim();
-        // Pedidos marcados como concluídos/entregues saem do quadro ativo e ficam no Histórico
         if (['concluido', 'finalizado', 'entregue', 'delivered', 'cancelado'].includes(st)) {
             return 'arquivado_historico';
         }
@@ -162,7 +236,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
         );
     };
 
-    // Move o pedido de coluna ou finaliza como ENTREGUE
     const moverPedido = async (pedido, novoStatus) => {
         if (!donoUid) return;
         const agora = new Date().toISOString();
@@ -228,10 +301,11 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
     // FUNÇÕES DE CRIAÇÃO E EDIÇÃO DE PEDIDOS E ORÇAMENTOS
     // =========================================================
     const abrirModalNovo = (tipo = 'pedido') => {
+        const proximoPrevisto = formatarNumeroPedido(ultimoNumeroSequencial + 1);
         setEditandoId(null);
         setFormData({
             tipoRegistro: tipo,
-            orderNumber: Math.random().toString(36).substring(2, 8).toUpperCase(),
+            orderNumber: proximoPrevisto,
             customerName: '',
             customerPhone: '',
             customerEmail: '',
@@ -262,7 +336,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
             price: Number(it.price || it.preco || it.unitPrice || 0)
         }));
 
-        // Se for um pedido antigo que só tinha resumoItens em texto, cria 1 item editável
         if (itensNormalizados.length === 0 && ped.resumoItens) {
             itensNormalizados.push({
                 id: 'item-0',
@@ -275,7 +348,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
         setEditandoId(ped.id);
         setFormData({
             tipoRegistro: ehOrcamento(ped) ? 'orcamento' : 'pedido',
-            orderNumber: ped.orderNumber || ped.numeroPedido || ped.codigo || ped.id?.slice(0, 6).toUpperCase(),
+            orderNumber: ped.orderNumber || ped.numeroPedido || ped.codigo || '0001',
             customerName: ped.customerName || ped.clienteNome || ped.nomeCliente || ped.nome || '',
             customerPhone: ped.customerPhone || ped.clienteTelefone || ped.telefone || ped.whatsapp || '',
             customerEmail: ped.customerEmail || ped.email || '',
@@ -395,7 +468,12 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
         try {
             const idRegistro = editandoId || crypto.randomUUID();
             const agora = new Date().toISOString();
-            const codigoCurto = (formData.orderNumber || idRegistro.slice(0, 6)).toUpperCase();
+
+            let codigoSequencial = formData.orderNumber;
+            if (!editandoId) {
+                codigoSequencial = await gerarProximoNumeroNoBanco();
+            }
+
             const resumoTexto = formData.items.map(i => `${i.qtd}x ${i.name}`).join(', ');
 
             const statusCalculado = formData.tipoRegistro === 'orcamento' && formData.status === 'novo'
@@ -409,9 +487,9 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                 id: idRegistro,
                 tipoRegistro: formData.tipoRegistro,
                 isQuote: formData.tipoRegistro === 'orcamento',
-                orderNumber: codigoCurto,
-                numeroPedido: codigoCurto,
-                codigo: codigoCurto,
+                orderNumber: codigoSequencial,
+                numeroPedido: codigoSequencial,
+                codigo: codigoSequencial,
                 customerName: formData.customerName.trim(),
                 clienteNome: formData.customerName.trim(),
                 nomeCliente: formData.customerName.trim(),
@@ -470,7 +548,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
 
     const enviarOrcamentoWhatsApp = (ped) => {
         const fone = String(ped.customerPhone || ped.telefone || '').replace(/\D/g, '');
-        const codigo = ped.orderNumber || ped.codigo || ped.id?.slice(0, 6).toUpperCase();
+        const codigo = ped.orderNumber || ped.codigo || '0001';
         const itensTxt = (ped.items || ped.itens || []).map(i => `• ${i.qtd || 1}x ${i.name || i.nome}: ${formatMoney((i.price || 0) * (i.qtd || 1))}`).join('\n');
         const freteTxt = Number(ped.deliveryFee || ped.valorFrete || 0) > 0 ? `\nFrete (${ped.modalidadeFrete || 'Envio'}): ${formatMoney(ped.deliveryFee || ped.valorFrete)}` : '';
         const descTxt = Number(ped.discount || ped.desconto || 0) > 0 ? `\nDesconto: -${formatMoney(ped.discount || ped.desconto)}` : '';
@@ -480,7 +558,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
         window.open(url, '_blank');
     };
 
-    // Filtra os pedidos exibidos no quadro conforme o seletor Todos / Pedidos / Orçamentos
     const pedidosVisiveisNoQuadro = useMemo(() => {
         return pedidos.filter(p => {
             if (filtroTipo === 'orcamentos') return ehOrcamento(p);
@@ -496,7 +573,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
     return (
         <div className="p-4 md:p-6 space-y-6 font-sans min-h-screen bg-slate-100">
             
-            {/* CABEÇALHO DO PAINEL DE PRODUÇÃO COM BOTÕES DE NOVO PEDIDO E NOVO ORÇAMENTO */}
+            {/* CABEÇALHO DO PAINEL DE PRODUÇÃO COM CONTADOR SEQUENCIAL E BOTÃO ZERAR C/ SENHA */}
             <header className="bg-white rounded-2xl border border-slate-200 px-6 py-4 flex flex-wrap items-center justify-between gap-4 shadow-xs">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white">
@@ -506,7 +583,23 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                         <h1 className="font-black text-slate-800 text-base md:text-lg uppercase tracking-wider leading-none">
                             Painel de Produção & Orçamentos
                         </h1>
-                        <span className="text-xs font-bold text-slate-400">Gestão de E-commerce 3D</span>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-bold text-slate-400">
+                                Próximo Nº da Sequência: <strong className="text-slate-700">#{formatarNumeroPedido(ultimoNumeroSequencial + 1)}</strong>
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSenhaResetInput('');
+                                    setModoTrocarSenha(false);
+                                    setModalResetOpen(true);
+                                }}
+                                className="text-[10px] font-black uppercase bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1"
+                                title="Reiniciar contagem de pedidos para 0001 (Requer Senha)"
+                            >
+                                🔒 Zerar Nº (0001)
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -577,7 +670,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                     </div>
                                 ) : (
                                     pedidosDaColuna.map(ped => {
-                                        const codigo = ped.orderNumber || ped.numeroPedido || ped.codigo || ped.id?.slice(0, 6).toUpperCase();
+                                        const codigo = ped.orderNumber || ped.numeroPedido || ped.codigo || '0001';
                                         const nomeCli = ped.customerName || ped.clienteNome || ped.nomeCliente || ped.nome || 'Cliente';
                                         const foneCli = ped.customerPhone || ped.clienteTelefone || ped.telefone || ped.whatsapp || '';
                                         const total = ped.total || ped.valorTotal || ped.totalAmount || 0;
@@ -591,10 +684,9 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                         return (
                                             <div key={ped.id} className={`bg-white rounded-xl p-4 border-2 shadow-xs hover:shadow-md transition-all space-y-3 ${isOrc ? 'border-orange-300 bg-orange-50/10' : 'border-slate-200'}`}>
                                                 
-                                                {/* Topo do Card: Código + Selo Orçamento + Botão Editar */}
                                                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                                                     <div className="flex items-center gap-1.5">
-                                                        <span className="bg-slate-900 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md">
+                                                        <span className="bg-slate-900 text-white text-[11px] font-black uppercase px-2.5 py-1 rounded-md">
                                                             #{codigo}
                                                         </span>
                                                         {isOrc && (
@@ -623,7 +715,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                                     </div>
                                                 </div>
 
-                                                {/* Dados do Cliente */}
                                                 <div>
                                                     <p className="font-black text-sm text-slate-800 uppercase">{nomeCli}</p>
                                                     {foneCli && (
@@ -643,7 +734,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                                     )}
                                                 </div>
 
-                                                {/* Resumo de Itens */}
                                                 <div className="bg-slate-50 rounded-lg p-2.5 space-y-1 border border-slate-100">
                                                     {listaItens.length > 0 ? (
                                                         listaItens.map((it, idx) => (
@@ -662,7 +752,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                                     )}
                                                 </div>
 
-                                                {/* Pagamento e Valor Total */}
                                                 <div className="flex items-center justify-between pt-1">
                                                     <span className="text-[10px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-1 rounded">
                                                         {ped.modalidadeFrete || 'Envio'} • {ped.formaPagamento || ped.paymentMethod || 'PIX'}
@@ -672,7 +761,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                                     </span>
                                                 </div>
 
-                                                {/* Se for Orçamento, exibe botão rápido para Aprovar ou Enviar Proposta */}
                                                 {isOrc && (
                                                     <div className="grid grid-cols-2 gap-1.5 pt-1">
                                                         <button
@@ -684,14 +772,12 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                                         <button
                                                             onClick={() => moverPedido(ped, 'producao')}
                                                             className="py-1.5 px-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-black text-[10px] uppercase"
-                                                            title="Converte o orçamento em pedido e envia para a Impressora"
                                                         >
                                                             ✓ Aprovar Orçamento
                                                         </button>
                                                     </div>
                                                 )}
 
-                                                {/* Barra Inferior de Movimentação e Finalização (Marcar como Entregue) */}
                                                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
                                                     {antColuna && (
                                                         <button
@@ -742,27 +828,100 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
             </div>
 
             {/* ========================================================================= */}
-            {/* MODAL DE CRIAÇÃO E EDIÇÃO COMPLETA DE PEDIDOS E ORÇAMENTOS                */}
+            {/* MODAL DE SEGURANÇA COM SENHA PARA ZERAR O CONTADOR DE PEDIDOS (0001)      */}
             {/* ========================================================================= */}
+            {modalResetOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="bg-red-600 text-white p-5 text-center relative">
+                            <button onClick={() => setModalResetOpen(false)} className="absolute top-4 right-4 text-white/80 hover:text-white">✕</button>
+                            <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-2 text-2xl">
+                                🔒
+                            </div>
+                            <h3 className="font-black text-base uppercase tracking-wider">Zerar Sequência para #0001</h3>
+                            <p className="text-[11px] opacity-90 mt-1">
+                                Contador atual: #{formatarNumeroPedido(ultimoNumeroSequencial + 1)}
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleConfirmarZerarComSenha} className="p-6 space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                                    Digite a Senha de Administrador *
+                                </label>
+                                <input
+                                    type="password"
+                                    required
+                                    autoFocus
+                                    value={senhaResetInput}
+                                    onChange={e => setSenhaResetInput(e.target.value)}
+                                    placeholder="Senha (padrão: 1234)"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-center tracking-widest outline-none focus:border-red-500"
+                                />
+                            </div>
+
+                            <div className="pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setModoTrocarSenha(!modoTrocarSenha)}
+                                    className="text-[11px] font-bold text-blue-600 hover:underline"
+                                >
+                                    {modoTrocarSenha ? '✕ Cancelar troca de senha' : '⚙️ Alterar senha padrão ao salvar'}
+                                </button>
+
+                                {modoTrocarSenha && (
+                                    <div className="mt-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                                            Nova Senha de Segurança
+                                        </label>
+                                        <input
+                                            type="password"
+                                            value={novaSenhaAdminInput}
+                                            onChange={e => setNovaSenhaAdminInput(e.target.value)}
+                                            placeholder="Digite a nova senha..."
+                                            className="w-full p-2.5 bg-blue-50/50 border border-blue-200 rounded-xl text-xs font-black text-center"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setModalResetOpen(false)}
+                                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-xs uppercase shadow-md cursor-pointer"
+                                >
+                                    Confirmar e Zerar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE CRIAÇÃO E EDIÇÃO COMPLETA DE PEDIDOS E ORÇAMENTOS */}
             {isFormOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
                         
-                        {/* Topo do Modal */}
                         <div className="p-5 bg-slate-900 text-white flex justify-between items-center shrink-0">
                             <div>
                                 <h3 className="font-black text-base md:text-lg uppercase tracking-wider">
-                                    {editandoId ? `Editar ${formData.tipoRegistro === 'orcamento' ? 'Orçamento' : 'Pedido'} #${formData.orderNumber}` : `Novo ${formData.tipoRegistro === 'orcamento' ? 'Orçamento' : 'Pedido Manual'}`}
+                                    {editandoId ? `Editar ${formData.tipoRegistro === 'orcamento' ? 'Orçamento' : 'Pedido'} #${formData.orderNumber}` : `Novo ${formData.tipoRegistro === 'orcamento' ? 'Orçamento' : 'Pedido'} #${formData.orderNumber}`}
                                 </h3>
-                                <span className="text-xs text-slate-400">Adicione produtos do catálogo ou itens personalizados sob medida</span>
+                                <span className="text-xs text-slate-400">Numeração sequencial automática</span>
                             </div>
                             <button onClick={() => setIsFormOpen(false)} className="text-white/70 hover:text-white text-xl">✕</button>
                         </div>
 
-                        {/* Corpo do Formulário */}
                         <form onSubmit={handleSalvarPedidoOuOrcamento} className="p-6 overflow-y-auto space-y-6 flex-1">
                             
-                            {/* Seletor de Tipo (Pedido x Orçamento) e Etapa Atual */}
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Tipo de Registro</label>
@@ -793,11 +952,11 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Código Identificador</label>
+                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nº do Pedido (Sequencial)</label>
                                     <input
                                         type="text"
                                         value={formData.orderNumber}
-                                        onChange={e => setFormData({ ...formData, orderNumber: e.target.value.toUpperCase() })}
+                                        onChange={e => setFormData({ ...formData, orderNumber: e.target.value })}
                                         className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-black text-xs uppercase"
                                     />
                                 </div>
@@ -887,7 +1046,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                             <div className="space-y-3 pt-2 border-t border-slate-200">
                                 <h4 className="font-black text-xs uppercase text-slate-800 tracking-wider">2. Itens do Pedido / Orçamento</h4>
 
-                                {/* Barra para adicionar item do catálogo ou personalizado */}
                                 <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
                                     {catalogoProdutos.length > 0 && (
                                         <div>
@@ -951,7 +1109,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                     </div>
                                 </div>
 
-                                {/* Lista de Itens já incluídos (Editáveis diretamente) */}
                                 {formData.items.length === 0 ? (
                                     <p className="text-center py-4 text-xs font-bold text-slate-400 border border-dashed border-slate-200 rounded-xl">
                                         Nenhum item incluído ainda.
@@ -1076,7 +1233,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                 </div>
                             </div>
 
-                            {/* Rodapé do Formulário com Soma Total */}
                             <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
                                 <div>
                                     <span className="text-[10px] font-black uppercase text-slate-400 block">Valor Total Calculado</span>
@@ -1105,9 +1261,7 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                 </div>
             )}
 
-            {/* ========================================================================= */}
-            {/* MODAL DE DETALHES RÁPIDOS + RASTREIO + MARCAR COMO ENTREGUE               */}
-            {/* ========================================================================= */}
+            {/* MODAL DE DETALHES RÁPIDOS + RASTREIO + MARCAR COMO ENTREGUE */}
             {pedidoSelecionado && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
@@ -1143,7 +1297,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                 </p>
                             </div>
 
-                            {/* Campo para informar Código de Rastreio ao Cliente */}
                             <div className="bg-blue-50/60 p-3.5 rounded-xl border border-blue-200 space-y-2">
                                 <label className="text-[10px] font-black uppercase text-blue-800 block">
                                     Código de Rastreio (Correios / Transportadora)
@@ -1173,7 +1326,6 @@ export default function Kanban({ user, permissoes, donoUid: propDonoUid }) {
                                 <span className="font-black text-lg text-emerald-600">{formatMoney(pedidoSelecionado.total || pedidoSelecionado.valorTotal)}</span>
                             </div>
 
-                            {/* Botões de Ação Final */}
                             <div className="pt-2 flex flex-col gap-2">
                                 <button
                                     type="button"
