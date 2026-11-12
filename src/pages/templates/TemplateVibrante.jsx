@@ -4,6 +4,14 @@ import { db } from '../../firebase';
 
 const IMAGEM_PADRAO_BANNER_SECUNDARIO = "https://images.unsplash.com/photo-1631541909061-71e349d1f203?auto=format&fit=crop&w=600&q=80";
 
+const ETAPAS_PEDIDO = [
+    { id: 'novo', label: 'Recebido', icone: '✓' },
+    { id: 'producao', label: 'Em Produção', icone: '⚙️' },
+    { id: 'embalagem', label: 'Embalagem', icone: '📦' },
+    { id: 'enviado', label: 'Enviado', icone: '🚚' },
+    { id: 'concluido', label: 'Entregue', icone: '🎉' }
+];
+
 export default function TemplateVibrante({ loja, produtos, categorias, donoUid }) {
     const uidLoja = donoUid || loja?.donoUid || loja?.uid;
 
@@ -14,10 +22,11 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [deptOpen, setDeptOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-    // Estado do Cliente Logado + Mensagem de Boas-Vindas
+    // Estado do Cliente Logado + Pedidos Sincronizados com Firebase
     const [clienteLogado, setClienteLogado] = useState(null);
     const [mensagemTopo, setMensagemTopo] = useState('');
     const [meusPedidos, setMeusPedidos] = useState([]);
+    const [carregandoPedidos, setCarregandoPedidos] = useState(false);
 
     // Estados de Busca e Filtro
     const [busca, setBusca] = useState('');
@@ -29,11 +38,22 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [copiadoId, setCopiadoId] = useState(null);
     const [enviandoPedido, setEnviandoPedido] = useState(false);
     const [pedidoConfirmado, setPedidoConfirmado] = useState(null);
+    const [buscandoCep, setBuscandoCep] = useState(false);
 
-    // Campos de Checkout dentro do Carrinho
+    // Campos de Endereço Completo + Frete no Checkout
     const [checkoutNome, setCheckoutNome] = useState('');
     const [checkoutTelefone, setCheckoutTelefone] = useState('');
-    const [checkoutEndereco, setCheckoutEndereco] = useState('');
+    const [checkoutEmail, setCheckoutEmail] = useState('');
+    const [checkoutCep, setCheckoutCep] = useState('');
+    const [checkoutRua, setCheckoutRua] = useState('');
+    const [checkoutNumero, setCheckoutNumero] = useState('');
+    const [checkoutComplemento, setCheckoutComplemento] = useState('');
+    const [checkoutBairro, setCheckoutBairro] = useState('');
+    const [checkoutCidade, setCheckoutCidade] = useState('');
+    const [checkoutUf, setCheckoutUf] = useState('');
+    const [checkoutModalidadeFrete, setCheckoutModalidadeFrete] = useState('PAC');
+    const [checkoutValorFrete, setCheckoutValorFrete] = useState(0);
+    const [opcoesFreteCalculadas, setOpcoesFreteCalculadas] = useState([]);
     const [checkoutPagamento, setCheckoutPagamento] = useState('PIX');
     const [checkoutObs, setCheckoutObs] = useState('');
 
@@ -46,14 +66,20 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [regNome, setRegNome] = useState('');
     const [regWhatsapp, setRegWhatsapp] = useState('');
     const [regEmail, setRegEmail] = useState('');
-    const [regEndereco, setRegEndereco] = useState('');
+    const [regCep, setRegCep] = useState('');
+    const [regRua, setRegRua] = useState('');
+    const [regNumero, setRegNumero] = useState('');
+    const [regComplemento, setRegComplemento] = useState('');
+    const [regBairro, setRegBairro] = useState('');
+    const [regCidade, setRegCidade] = useState('');
+    const [regUf, setRegUf] = useState('');
     const [regSenha, setRegSenha] = useState('');
     const [loginAcesso, setLoginAcesso] = useState('');
     const [loginSenha, setLoginSenha] = useState('');
     const [processandoAuth, setProcessandoAuth] = useState(false);
 
     // =====================================================
-    // PREPARAÇÃO DO CARROSSEL MOSAICO DE CATEGORIAS (SEM DUPLICAR)
+    // PREPARAÇÃO DO CARROSSEL MOSAICO DE CATEGORIAS
     // =====================================================
     const ITEMS_POR_PAGINA_MOSAICO = 8;
     const totalPaginasMosaico = Math.max(1, Math.ceil(categorias.length / ITEMS_POR_PAGINA_MOSAICO));
@@ -82,15 +108,39 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     // =====================================================
     const produtosDestaque = produtos.filter(p => p.destaque === true);
     const listaCarrosselDestaque = produtosDestaque.length > 0 ? produtosDestaque : produtos.slice(0, 5);
-
     const listaCarrosselPromo = produtos.filter(p => p.isPromo === true);
 
-    // Dados dinâmicos do Banner Secundário
     const fotoBannerSecundario = loja?.bannerSecundarioUrl || loja?.totemUrl || IMAGEM_PADRAO_BANNER_SECUNDARIO;
     const tagBannerSecundario = loja?.bannerSecundarioTag || 'PROJETOS ESPECIAIS';
     const tituloBannerSecundario = loja?.bannerSecundarioTitulo || 'Personalize com a sua Marca';
     const textoBannerSecundario = loja?.bannerSecundarioTexto || 'Displays NFC, chaveiros corporativos e peças exclusivas.';
     const botaoBannerSecundario = loja?.bannerSecundarioBotao || 'Solicitar Cotação';
+
+    // Sincroniza dados do cliente salvo no navegador
+    const preencherEstadosComCliente = (cli) => {
+        if (!cli) return;
+        setRegNome(cli.nome || cli.name || '');
+        setRegWhatsapp(cli.telefone || cli.phone || '');
+        setRegEmail(cli.email || '');
+        setRegCep(cli.cep || '');
+        setRegRua(cli.rua || cli.endereco || '');
+        setRegNumero(cli.numero || '');
+        setRegComplemento(cli.complemento || '');
+        setRegBairro(cli.bairro || '');
+        setRegCidade(cli.cidade || '');
+        setRegUf(cli.uf || '');
+
+        setCheckoutNome(cli.nome || cli.name || '');
+        setCheckoutTelefone(cli.telefone || cli.phone || '');
+        setCheckoutEmail(cli.email || '');
+        if (cli.cep) setCheckoutCep(cli.cep);
+        if (cli.rua) setCheckoutRua(cli.rua);
+        if (cli.numero) setCheckoutNumero(cli.numero);
+        if (cli.complemento) setCheckoutComplemento(cli.complemento);
+        if (cli.bairro) setCheckoutBairro(cli.bairro);
+        if (cli.cidade) setCheckoutCidade(cli.cidade);
+        if (cli.uf) setCheckoutUf(cli.uf);
+    };
 
     useEffect(() => {
         const salvo = localStorage.getItem(`cliente_${uidLoja}`);
@@ -98,16 +148,117 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             try {
                 const parsed = JSON.parse(salvo);
                 setClienteLogado(parsed);
-                setRegNome(parsed.nome || parsed.name || '');
-                setRegWhatsapp(parsed.telefone || parsed.phone || '');
-                setRegEmail(parsed.email || '');
-                setRegEndereco(parsed.endereco || parsed.address || '');
-                setCheckoutNome(parsed.nome || parsed.name || '');
-                setCheckoutTelefone(parsed.telefone || parsed.phone || '');
-                setCheckoutEndereco(parsed.endereco || parsed.address || '');
+                preencherEstadosComCliente(parsed);
             } catch (e) {}
         }
     }, [uidLoja]);
+
+    // =====================================================
+    // ESCUTA EM TEMPO REAL DOS PEDIDOS DO CLIENTE NO FIREBASE
+    // (NUNCA MAIS SOME AO ATUALIZAR A PÁGINA E ATUALIZA O STATUS NA HORA)
+    // =====================================================
+    useEffect(() => {
+        if (!uidLoja || !clienteLogado) {
+            setMeusPedidos([]);
+            return;
+        }
+
+        setCarregandoPedidos(true);
+        const emailCli = String(clienteLogado.email || '').toLowerCase().trim();
+        const foneCli = String(clienteLogado.telefone || clienteLogado.phone || clienteLogado.whatsapp || '').replace(/\D/g, '');
+        const idCli = clienteLogado.id;
+
+        const unsub = db.collection(`artifacts/tribo-burger-financeiro/users/${uidLoja}/orders`)
+            .onSnapshot(snap => {
+                const todos = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                const doCliente = todos.filter(ped => {
+                    const pedClientId = ped.clientId || '';
+                    const pedEmail = String(ped.customerEmail || ped.email || '').toLowerCase().trim();
+                    const pedFone = String(ped.customerPhone || ped.telefone || ped.phone || '').replace(/\D/g, '');
+
+                    if (idCli && pedClientId === idCli) return true;
+                    if (emailCli && pedEmail && pedEmail === emailCli) return true;
+                    if (foneCli && foneCli.length >= 8 && pedFone && pedFone.includes(foneCli.slice(-8))) return true;
+                    return false;
+                }).sort((a, b) => {
+                    const tA = a.timestamp || new Date(a.createdAt || a.dataPedido || 0).getTime();
+                    const tB = b.timestamp || new Date(b.createdAt || b.dataPedido || 0).getTime();
+                    return tB - tA;
+                });
+
+                setMeusPedidos(doCliente);
+                setCarregandoPedidos(false);
+            }, () => {
+                setCarregandoPedidos(false);
+            });
+
+        return () => unsub();
+    }, [uidLoja, clienteLogado]);
+
+    // =====================================================
+    // BUSCA AUTOMÁTICA DE CEP (API VIACEP) + CÁLCULO DE FRETE
+    // =====================================================
+    const consultarCepViaCep = async (cepValor, destino = 'checkout') => {
+        const cepLimpo = String(cepValor).replace(/\D/g, '');
+        if (cepLimpo.length !== 8) return;
+
+        setBuscandoCep(true);
+        try {
+            const resp = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+            const data = await resp.json();
+            if (!data.erro) {
+                if (destino === 'checkout') {
+                    setCheckoutRua(data.logradouro || '');
+                    setCheckoutBairro(data.bairro || '');
+                    setCheckoutCidade(data.localidade || '');
+                    setCheckoutUf(data.uf || '');
+                    calcularOpcoesDeFrete(cepLimpo, data.uf);
+                } else {
+                    setRegRua(data.logradouro || '');
+                    setRegBairro(data.bairro || '');
+                    setRegCidade(data.localidade || '');
+                    setRegUf(data.uf || '');
+                }
+            }
+        } catch (err) {
+            console.error("Erro ao buscar CEP:", err);
+        }
+        setBuscandoCep(false);
+    };
+
+    // Calcula estimativa de frete com base no Peso dos produtos e UF do CEP
+    const calcularOpcoesDeFrete = (cepLimpo, ufDestino = 'SP') => {
+        const pesoTotal = carrinho.reduce((acc, item) => acc + (Number(item.weight || 0.2) * item.qtd), 0);
+        const mesmoEstado = ufDestino.toUpperCase() === 'SP';
+
+        const basePac = mesmoEstado ? 16.90 : 26.90;
+        const baseSedex = mesmoEstado ? 24.90 : 42.90;
+        const baseTransp = mesmoEstado ? 21.50 : 34.90;
+        const adicionalPeso = Math.max(0, Math.ceil(pesoTotal - 1)) * 4.50;
+
+        const opcoes = [
+            { id: 'PAC', nome: 'Correios PAC', prazo: mesmoEstado ? '4 a 6 dias úteis' : '7 a 12 dias úteis', valor: Number((basePac + adicionalPeso).toFixed(2)) },
+            { id: 'SEDEX', nome: 'Correios SEDEX', prazo: mesmoEstado ? '1 a 3 dias úteis' : '3 a 5 dias úteis', valor: Number((baseSedex + adicionalPeso).toFixed(2)) },
+            { id: 'Jadlog', nome: 'Transportadora Jadlog (.Package)', prazo: mesmoEstado ? '2 a 4 dias úteis' : '5 a 8 dias úteis', valor: Number((baseTransp + adicionalPeso).toFixed(2)) },
+            { id: 'Retirada', nome: 'Retirar na Loja / Combinar', prazo: '1 a 2 dias úteis', valor: 0 }
+        ];
+
+        setOpcoesFreteCalculadas(opcoes);
+        const selecionada = opcoes.find(o => o.id === checkoutModalidadeFrete) || opcoes[0];
+        setCheckoutModalidadeFrete(selecionada.id);
+        setCheckoutValorFrete(selecionada.valor);
+    };
+
+    useEffect(() => {
+        const cepLimpo = String(checkoutCep).replace(/\D/g, '');
+        if (cepLimpo.length === 8 && carrinho.length > 0) {
+            calcularOpcoesDeFrete(cepLimpo, checkoutUf || 'SP');
+        } else if (carrinho.length === 0) {
+            setOpcoesFreteCalculadas([]);
+            setCheckoutValorFrete(0);
+        }
+    }, [carrinho]);
 
     useEffect(() => {
         if (listaCarrosselDestaque.length <= 1) return;
@@ -144,8 +295,19 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
     const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+    const montarEnderecoFormatado = (rua, numero, compl, bairro, cidade, uf, cep) => {
+        const partes = [
+            rua ? `${rua}${numero ? `, ${numero}` : ''}` : '',
+            compl ? `(${compl})` : '',
+            bairro || '',
+            cidade ? `${cidade}${uf ? ` - ${uf}` : ''}` : '',
+            cep ? `CEP: ${cep}` : ''
+        ].filter(Boolean);
+        return partes.join(' • ');
+    };
+
     // =====================================================
-    // CADASTRO E LOGIN DE CLIENTES INTEGRADO COM O SISTEMA
+    // CADASTRO E LOGIN DE CLIENTES
     // =====================================================
     const salvarClienteNasColecoes = async (clientId, payload) => {
         const colecoes = ['clientes', 'clients', 'delivery_clients'];
@@ -164,6 +326,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         try {
             const clientId = crypto.randomUUID();
             const agora = new Date().toISOString();
+            const endCompleto = montarEnderecoFormatado(regRua, regNumero, regComplemento, regBairro, regCidade, regUf, regCep);
 
             const novoCliente = {
                 id: clientId,
@@ -174,9 +337,16 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 whatsapp: regWhatsapp.trim(),
                 contato: regWhatsapp.trim(),
                 email: regEmail.trim().toLowerCase(),
-                endereco: regEndereco.trim() || 'Cadastrado via Site',
-                address: regEndereco.trim() || 'Cadastrado via Site',
-                enderecoPrincipal: regEndereco.trim() || 'Cadastrado via Site',
+                cep: regCep.trim(),
+                rua: regRua.trim(),
+                numero: regNumero.trim(),
+                complemento: regComplemento.trim(),
+                bairro: regBairro.trim(),
+                cidade: regCidade.trim(),
+                uf: regUf.trim(),
+                endereco: endCompleto,
+                address: endCompleto,
+                enderecoPrincipal: endCompleto,
                 senha: regSenha,
                 password: regSenha,
                 totalGasto: 0,
@@ -196,9 +366,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             await salvarClienteNasColecoes(clientId, novoCliente);
 
             setClienteLogado(novoCliente);
-            setCheckoutNome(novoCliente.nome);
-            setCheckoutTelefone(novoCliente.telefone);
-            setCheckoutEndereco(novoCliente.endereco);
+            preencherEstadosComCliente(novoCliente);
             localStorage.setItem(`cliente_${uidLoja}`, JSON.stringify(novoCliente));
             setAuthModal({ open: false, mode: 'login' });
             exibirNotificacao(`Bem-vindo(a), ${novoCliente.nome}! Seu cadastro foi realizado com sucesso.`);
@@ -241,13 +409,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
             if (encontrado) {
                 setClienteLogado(encontrado);
-                setRegNome(encontrado.nome || encontrado.name || '');
-                setRegWhatsapp(encontrado.telefone || encontrado.phone || '');
-                setRegEmail(encontrado.email || '');
-                setRegEndereco(encontrado.endereco || encontrado.address || '');
-                setCheckoutNome(encontrado.nome || encontrado.name || '');
-                setCheckoutTelefone(encontrado.telefone || encontrado.phone || '');
-                setCheckoutEndereco(encontrado.endereco || encontrado.address || '');
+                preencherEstadosComCliente(encontrado);
                 localStorage.setItem(`cliente_${uidLoja}`, JSON.stringify(encontrado));
                 setAuthModal({ open: false, mode: 'login' });
                 exibirNotificacao(`Olá novamente, ${encontrado.nome || encontrado.name}! Login efetuado com sucesso.`);
@@ -267,6 +429,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         setProcessandoAuth(true);
 
         try {
+            const endCompleto = montarEnderecoFormatado(regRua, regNumero, regComplemento, regBairro, regCidade, regUf, regCep);
             const atualizado = {
                 ...clienteLogado,
                 nome: regNome.trim(),
@@ -275,19 +438,24 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 phone: regWhatsapp.trim(),
                 whatsapp: regWhatsapp.trim(),
                 email: regEmail.trim().toLowerCase(),
-                endereco: regEndereco.trim(),
-                address: regEndereco.trim(),
-                enderecoPrincipal: regEndereco.trim(),
+                cep: regCep.trim(),
+                rua: regRua.trim(),
+                numero: regNumero.trim(),
+                complemento: regComplemento.trim(),
+                bairro: regBairro.trim(),
+                cidade: regCidade.trim(),
+                uf: regUf.trim(),
+                endereco: endCompleto,
+                address: endCompleto,
+                enderecoPrincipal: endCompleto,
                 updatedAt: new Date().toISOString()
             };
 
             await salvarClienteNasColecoes(clienteLogado.id, atualizado);
             setClienteLogado(atualizado);
-            setCheckoutNome(atualizado.nome);
-            setCheckoutTelefone(atualizado.telefone);
-            setCheckoutEndereco(atualizado.endereco);
+            preencherEstadosComCliente(atualizado);
             localStorage.setItem(`cliente_${uidLoja}`, JSON.stringify(atualizado));
-            exibirNotificacao("Seus dados cadastrais foram atualizados com sucesso!");
+            exibirNotificacao("Seus dados e endereço foram atualizados com sucesso!");
             setClientAreaModal({ ...clientAreaModal, open: false });
         } catch (error) {
             alert("Erro ao atualizar dados.");
@@ -347,15 +515,14 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
         );
     };
 
-    // Botão Comprar / Aproveitar Oferta: Adiciona ao carrinho e abre a gaveta do Carrinho para finalizar!
     const handleComprarDireto = (produto) => {
         adicionarAoCarrinho(produto, true);
     };
 
-    const totalCarrinho = carrinho.reduce((acc, item) => acc + (Number(item.sellingPrice || 0) * item.qtd), 0);
+    const subtotalCarrinho = carrinho.reduce((acc, item) => acc + (Number(item.sellingPrice || 0) * item.qtd), 0);
+    const totalComFrete = subtotalCarrinho + Number(checkoutValorFrete || 0);
     const qtdTotalCarrinho = carrinho.reduce((acc, item) => acc + item.qtd, 0);
 
-    // Finaliza o Pedido no Carrinho e envia direto para a aba Gestão de Pedidos (Kanban) no Firebase
     const handleFinalizarPedidoNoSistema = async (e) => {
         e.preventDefault();
         if (carrinho.length === 0) return;
@@ -363,10 +530,14 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
         const nomeFinal = (checkoutNome || clienteLogado?.nome || clienteLogado?.name || '').trim();
         const foneFinal = (checkoutTelefone || clienteLogado?.telefone || clienteLogado?.phone || '').trim();
-        const enderecoFinal = (checkoutEndereco || clienteLogado?.endereco || clienteLogado?.address || '').trim();
+        const emailFinal = (checkoutEmail || clienteLogado?.email || '').trim().toLowerCase();
+        const cepFinal = checkoutCep.trim();
+        const enderecoFormatado = montarEnderecoFormatado(
+            checkoutRua, checkoutNumero, checkoutComplemento, checkoutBairro, checkoutCidade, checkoutUf, cepFinal
+        );
 
-        if (!nomeFinal || !foneFinal || !enderecoFinal) {
-            return alert("Por favor, preencha seu Nome, WhatsApp e Endereço de entrega para concluir o pedido.");
+        if (!nomeFinal || !foneFinal || !cepFinal || !checkoutRua || !checkoutNumero) {
+            return alert("Por favor, preencha Nome, WhatsApp, CEP, Rua e Número para o envio do produto.");
         }
 
         setEnviandoPedido(true);
@@ -374,6 +545,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             const orderId = crypto.randomUUID();
             const codigoCurto = orderId.slice(0, 6).toUpperCase();
             const agora = new Date().toISOString();
+            const idCli = clienteLogado?.id || foneFinal.replace(/\D/g, '') || crypto.randomUUID();
 
             const itensFormatados = carrinho.map(item => ({
                 id: item.id,
@@ -393,46 +565,56 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
             const resumoTexto = carrinho.map(i => `${i.qtd}x ${i.name}`).join(', ');
 
-            // Objeto completo compatível com o Kanban / Gestão de Pedidos e Histórico
             const payloadPedido = {
                 id: orderId,
                 orderNumber: codigoCurto,
                 numeroPedido: codigoCurto,
                 codigo: codigoCurto,
-                // Dados do Cliente
-                clientId: clienteLogado?.id || foneFinal.replace(/\D/g, ''),
+                clientId: idCli,
                 customerName: nomeFinal,
                 clienteNome: nomeFinal,
                 nomeCliente: nomeFinal,
-                clientName: nomeFinal,
                 nome: nomeFinal,
                 customerPhone: foneFinal,
                 clienteTelefone: foneFinal,
                 telefone: foneFinal,
                 phone: foneFinal,
                 whatsapp: foneFinal,
-                address: enderecoFinal,
-                endereco: enderecoFinal,
-                deliveryAddress: enderecoFinal,
-                // Itens e Valores
+                customerEmail: emailFinal,
+                email: emailFinal,
+                // Dados completos de CEP e Endereço de Envio
+                cep: cepFinal,
+                rua: checkoutRua.trim(),
+                numero: checkoutNumero.trim(),
+                complemento: checkoutComplemento.trim(),
+                bairro: checkoutBairro.trim(),
+                cidade: checkoutCidade.trim(),
+                uf: checkoutUf.trim(),
+                address: enderecoFormatado,
+                endereco: enderecoFormatado,
+                deliveryAddress: enderecoFormatado,
+                // Frete / Logística
+                shippingMethod: checkoutModalidadeFrete,
+                modalidadeFrete: checkoutModalidadeFrete,
+                deliveryFee: Number(checkoutValorFrete || 0),
+                taxaEntrega: Number(checkoutValorFrete || 0),
+                valorFrete: Number(checkoutValorFrete || 0),
+                trackingCode: '',
+                codigoRastreio: '',
+                // Itens e Totais
                 items: itensFormatados,
                 itens: itensFormatados,
                 products: itensFormatados,
                 resumoItens: resumoTexto,
-                subtotal: totalCarrinho,
-                deliveryFee: 0,
-                taxaEntrega: 0,
-                total: totalCarrinho,
-                valorTotal: totalCarrinho,
-                totalAmount: totalCarrinho,
-                // Pagamento e Observações
+                subtotal: subtotalCarrinho,
+                total: totalComFrete,
+                valorTotal: totalComFrete,
+                totalAmount: totalComFrete,
                 paymentMethod: checkoutPagamento,
                 formaPagamento: checkoutPagamento,
                 pagamento: checkoutPagamento,
                 notes: checkoutObs.trim(),
                 observacao: checkoutObs.trim(),
-                observacoes: checkoutObs.trim(),
-                // Status para aparecer na primeira coluna do Kanban (Gestão de Pedidos)
                 status: 'novo',
                 orderStatus: 'pending',
                 etapa: 'novo',
@@ -444,7 +626,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 timestamp: Date.now()
             };
 
-            // Salva nas coleções de pedidos lidas pelo painel (Gestão de Pedidos / Kanban)
             const colecoesPedidos = ['orders', 'pedidos', 'delivery_orders', 'ecommerce_orders'];
             await Promise.all(
                 colecoesPedidos.map(col =>
@@ -452,9 +633,8 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 )
             );
 
-            // Atualiza ou cria o cliente na aba Clientes somando o pedido e o valor gasto
-            const idCli = clienteLogado?.id || foneFinal.replace(/\D/g, '') || crypto.randomUUID();
-            const novoTotalGasto = Number(clienteLogado?.totalGasto || clienteLogado?.totalSpent || 0) + Number(totalCarrinho);
+            // Salva / Atualiza dados do Cliente e mantém ele logado para ver o histórico sempre que voltar
+            const novoTotalGasto = Number(clienteLogado?.totalGasto || clienteLogado?.totalSpent || 0) + Number(totalComFrete);
             const novaQtdPedidos = Number(clienteLogado?.pedidos || clienteLogado?.orderCount || 0) + 1;
 
             const clienteAtualizado = {
@@ -465,9 +645,17 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 telefone: foneFinal,
                 phone: foneFinal,
                 whatsapp: foneFinal,
-                endereco: enderecoFinal,
-                address: enderecoFinal,
-                enderecoPrincipal: enderecoFinal,
+                email: emailFinal,
+                cep: cepFinal,
+                rua: checkoutRua.trim(),
+                numero: checkoutNumero.trim(),
+                complemento: checkoutComplemento.trim(),
+                bairro: checkoutBairro.trim(),
+                cidade: checkoutCidade.trim(),
+                uf: checkoutUf.trim(),
+                endereco: enderecoFormatado,
+                address: enderecoFormatado,
+                enderecoPrincipal: enderecoFormatado,
                 totalGasto: novoTotalGasto,
                 totalSpent: novoTotalGasto,
                 receitaGerada: novoTotalGasto,
@@ -484,25 +672,25 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             setClienteLogado(clienteAtualizado);
             localStorage.setItem(`cliente_${uidLoja}`, JSON.stringify(clienteAtualizado));
 
-            // Atualiza lista local de Meus Pedidos do cliente
-            const pedidoLocal = {
-                id: codigoCurto,
-                data: new Date().toLocaleDateString('pt-BR'),
-                itens: resumoTexto,
-                total: totalCarrinho,
-                status: 'Recebido pela Loja'
-            };
-            setMeusPedidos(prev => [pedidoLocal, ...prev]);
-
             setCarrinho([]);
             setCheckoutObs('');
-            setPedidoConfirmado(pedidoLocal);
-            exibirNotificacao(`Pedido #${codigoCurto} enviado com sucesso para a loja!`);
+            setPedidoConfirmado(payloadPedido);
+            exibirNotificacao(`Pedido #${codigoCurto} realizado com sucesso!`);
         } catch (error) {
             console.error("Erro ao finalizar pedido:", error);
             alert("Ocorreu um erro ao enviar seu pedido. Tente novamente.");
         }
         setEnviandoPedido(false);
+    };
+
+    // Descobre o índice da etapa atual do pedido para desenhar a barra de progresso
+    const obterIndiceEtapa = (ped) => {
+        const st = String(ped.status || ped.etapa || ped.orderStatus || 'novo').toLowerCase().trim();
+        if (['concluido', 'finalizado', 'entregue', 'delivered'].includes(st)) return 4;
+        if (['enviado', 'retirada', 'shipped'].includes(st)) return 3;
+        if (['embalagem', 'separacao', 'pronto', 'packing'].includes(st)) return 2;
+        if (['producao', 'impressora', 'fabrico', 'printing'].includes(st)) return 1;
+        return 0;
     };
 
     const produtosFiltrados = produtos.filter(p => {
@@ -520,7 +708,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     return (
         <div className="bg-white min-h-screen w-full font-sans text-slate-800 flex flex-col">
             
-            {/* NOTIFICAÇÃO FLUTUANTE DE LOGIN / AÇÕES */}
+            {/* NOTIFICAÇÃO FLUTUANTE */}
             {mensagemTopo && (
                 <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-6 py-3.5 rounded-2xl shadow-2xl font-black text-sm flex items-center gap-3 border-2 border-white animate-bounce">
                     <span>✓</span>
@@ -532,9 +720,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             {/* 1. FAIXA PROMOCIONAL LARANJA DE TOPO */}
             <div className="w-full bg-orange-500 text-white text-xs md:text-sm font-bold py-2.5 px-4 md:px-10 xl:px-16">
                 <div className="w-full flex flex-wrap justify-between items-center gap-2">
-                    <span className="flex items-center gap-1.5">✓ Envio rápido e seguro para todo o Brasil</span>
+                    <span className="flex items-center gap-1.5">✓ Envio rápido com Rastreio (Correios PAC, SEDEX e Transportadora)</span>
                     <span className="hidden md:inline">✓ Peças personalizadas com acabamento premium direto da fábrica</span>
-                    <span className="flex items-center gap-1.5">✓ Atendimento rápido via WhatsApp</span>
+                    <span className="flex items-center gap-1.5">✓ Acompanhe seu pedido em tempo real pelo site</span>
                 </div>
             </div>
 
@@ -556,9 +744,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
                     <div className="flex items-center gap-4 text-sm font-black">
                         {clienteLogado ? (
-                            <span className="text-emerald-600 flex items-center gap-1.5">
-                                ● Logado como {clienteLogado.nome || clienteLogado.name}
-                            </span>
+                            <button onClick={() => setClientAreaModal({ open: true, tab: 'pedidos' })} className="text-emerald-600 hover:underline flex items-center gap-1.5">
+                                ● {clienteLogado.nome || clienteLogado.name} ({meusPedidos.length} pedido{meusPedidos.length === 1 ? '' : 's'})
+                            </button>
                         ) : (
                             <button onClick={() => setAuthModal({ open: true, mode: 'register' })} className="text-orange-600 hover:underline">
                                 Criar Conta Grátis
@@ -572,7 +760,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             <header className="w-full bg-white py-5 px-4 md:px-10 xl:px-16 border-b border-slate-200 sticky top-0 z-40 shadow-sm">
                 <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-6">
                     
-                    {/* LOGO GRANDE */}
                     <div onClick={() => { setCategoriaFiltro('todas'); setBusca(''); }} className="flex items-center gap-5 cursor-pointer shrink-0">
                         {loja.logoUrl ? (
                             <img 
@@ -595,7 +782,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                         </div>
                     </div>
 
-                    {/* BOTÃO DE DEPARTAMENTOS + BARRA DE BUSCA */}
+                    {/* BUSCA */}
                     <div className="flex-1 w-full max-w-3xl flex flex-col sm:flex-row items-stretch gap-2.5 relative">
                         <div className="relative">
                             <button 
@@ -648,7 +835,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                         </div>
                     </div>
 
-                    {/* CONTATO + MENU DO CLIENTE LOGADO / LOGIN + CARRINHO */}
+                    {/* MENU CLIENTE + CARRINHO */}
                     <div className="flex items-center gap-5 shrink-0">
                         {telefoneAjustes && (
                             <a 
@@ -679,28 +866,29 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     <div className="text-left leading-tight">
                                         <span className="block text-[10px] font-black uppercase text-emerald-700">Olá, {(clienteLogado.nome || clienteLogado.name).split(' ')[0]}</span>
                                         <span className="font-black text-xs text-slate-800 flex items-center gap-1">
-                                            Minha Conta <span>▼</span>
+                                            Meus Pedidos ({meusPedidos.length}) <span>▼</span>
                                         </span>
                                     </div>
                                 </button>
 
                                 {userMenuOpen && (
-                                    <div className="absolute right-0 top-full mt-2 w-60 bg-white border border-slate-200 rounded-2xl shadow-2xl py-2 z-50">
+                                    <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl py-2 z-50">
                                         <div className="px-4 py-2.5 border-b border-slate-100">
                                             <p className="font-black text-xs text-slate-800 truncate">{clienteLogado.nome || clienteLogado.name}</p>
-                                            <p className="text-[11px] text-slate-400 truncate">{clienteLogado.email}</p>
+                                            <p className="text-[11px] text-slate-400 truncate">{clienteLogado.email || clienteLogado.telefone}</p>
                                         </div>
                                         <button 
-                                            onClick={() => { setClientAreaModal({ open: true, tab: 'cadastro' }); setUserMenuOpen(false); }}
-                                            className="w-full text-left px-4 py-3 text-xs font-black uppercase text-slate-700 hover:bg-slate-50 flex items-center gap-2.5"
+                                            onClick={() => { setClientAreaModal({ open: true, tab: 'pedidos' }); setUserMenuOpen(false); }}
+                                            className="w-full text-left px-4 py-3 text-xs font-black uppercase text-slate-700 hover:bg-slate-50 flex items-center justify-between"
                                         >
-                                            <Icon name="user" size={16} className="text-[var(--cor-primaria)]" /> Meu Cadastro
+                                            <span className="flex items-center gap-2.5"><Icon name="package" size={16} className="text-orange-500" /> Meus Pedidos</span>
+                                            <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-[10px]">{meusPedidos.length}</span>
                                         </button>
                                         <button 
-                                            onClick={() => { setClientAreaModal({ open: true, tab: 'pedidos' }); setUserMenuOpen(false); }}
+                                            onClick={() => { setClientAreaModal({ open: true, tab: 'cadastro' }); setUserMenuOpen(false); }}
                                             className="w-full text-left px-4 py-3 text-xs font-black uppercase text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 border-t border-slate-50"
                                         >
-                                            <Icon name="package" size={16} className="text-orange-500" /> Meus Pedidos ({meusPedidos.length})
+                                            <Icon name="user" size={16} className="text-[var(--cor-primaria)]" /> Meu Endereço e Cadastro
                                         </button>
                                         <button 
                                             onClick={handleLogout}
@@ -734,7 +922,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </div>
                             <div className="text-left leading-tight hidden sm:block">
                                 <span className="block text-[10px] font-bold text-slate-400 uppercase">Carrinho</span>
-                                <span className="font-black text-sm text-slate-900">{formatMoney(totalCarrinho)}</span>
+                                <span className="font-black text-sm text-slate-900">{formatMoney(subtotalCarrinho)}</span>
                             </div>
                         </button>
                     </div>
@@ -769,7 +957,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     onClick={() => setClientAreaModal({ open: true, tab: 'cadastro' })} 
                                     className="flex items-center gap-2 text-emerald-700 hover:text-emerald-800"
                                 >
-                                    <Icon name="user" size={18} /> Meu Cadastro
+                                    <Icon name="user" size={18} /> Meu Endereço
                                 </button>
                                 <span className="text-slate-300">|</span>
                             </>
@@ -779,7 +967,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             className="flex items-center gap-2 hover:text-orange-600 transition-colors"
                         >
                             <Icon name="package" size={18} className="text-orange-500" /> 
-                            {clienteLogado ? `Meus Pedidos (${meusPedidos.length})` : 'Status do Pedido'}
+                            {clienteLogado ? `Meus Pedidos (${meusPedidos.length})` : 'Rastrear / Meus Pedidos'}
                         </button>
                         <span className="text-slate-300">|</span>
                         <button 
@@ -792,12 +980,10 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </nav>
 
-            {/* CONTEÚDO PRINCIPAL EM TELA INTEIRA */}
+            {/* CONTEÚDO PRINCIPAL */}
             <main className="w-full px-4 md:px-10 xl:px-16 py-8 space-y-12 flex-1">
                 
-                {/* ========================================================================= */}
-                {/* 5. MENU MOSAICO BENTO GRID COM SELO LARANJA DINÂMICO DE CADA CATEGORIA     */}
-                {/* ========================================================================= */}
+                {/* 5. MENU MOSAICO BENTO GRID */}
                 {categorias.length > 0 && (
                     <section className="relative py-2">
                         {totalPaginasMosaico > 1 && (
@@ -805,7 +991,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 <button 
                                     type="button"
                                     onClick={anteriorSlideCategorias}
-                                    title="Página Anterior de Categorias"
                                     className="flex absolute -left-2 md:-left-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-500 hover:text-slate-900 bg-white/90 hover:bg-white rounded-xl shadow-md border border-slate-200 transition-all cursor-pointer"
                                 >
                                     <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -816,7 +1001,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 <button 
                                     type="button"
                                     onClick={proximoSlideCategorias}
-                                    title="Próxima Página de Categorias"
                                     className="flex absolute -right-2 md:-right-6 top-1/2 -translate-y-1/2 z-20 w-11 h-16 items-center justify-center text-slate-500 hover:text-slate-900 bg-white/90 hover:bg-white rounded-xl shadow-md border border-slate-200 transition-all cursor-pointer"
                                 >
                                     <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -828,8 +1012,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
                         <div className="space-y-5">
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-                                
-                                {/* SLOT 0: Card Vertical Grande Esquerdo */}
                                 {categoriasMosaicoAtual[0] && (
                                     <div 
                                         onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[0].name)}
@@ -838,15 +1020,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                         }`}
                                     >
                                         {categoriasMosaicoAtual[0].imageUrl ? (
-                                            <img 
-                                                src={categoriasMosaicoAtual[0].imageUrl} 
-                                                alt={categoriasMosaicoAtual[0].name} 
-                                                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                                            />
+                                            <img src={categoriasMosaicoAtual[0].imageUrl} alt={categoriasMosaicoAtual[0].name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                         ) : (
-                                            <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-                                                <Icon name="box" size={64} />
-                                            </div>
+                                            <div className="absolute inset-0 flex items-center justify-center text-slate-300"><Icon name="box" size={64} /></div>
                                         )}
                                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                         <div className="absolute bottom-4 left-4 right-4 z-10 text-left">
@@ -855,14 +1031,11 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                     {categoriasMosaicoAtual[0].tag !== undefined ? categoriasMosaicoAtual[0].tag : 'DEPARTAMENTO'}
                                                 </span>
                                             )}
-                                            <h3 className="text-xl font-black text-white tracking-tight leading-tight drop-shadow-sm">
-                                                {categoriasMosaicoAtual[0].name}
-                                            </h3>
+                                            <h3 className="text-xl font-black text-white tracking-tight leading-tight drop-shadow-sm">{categoriasMosaicoAtual[0].name}</h3>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* SLOTS 1 e 2: Coluna Central com 2 Cards Empilhados */}
                                 {(categoriasMosaicoAtual[1] || categoriasMosaicoAtual[2]) && (
                                     <div className="md:col-span-3 flex flex-col gap-5 justify-between">
                                         {categoriasMosaicoAtual[1] && (
@@ -873,26 +1046,14 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 }`}
                                             >
                                                 {categoriasMosaicoAtual[1].imageUrl ? (
-                                                    <img 
-                                                        src={categoriasMosaicoAtual[1].imageUrl} 
-                                                        alt={categoriasMosaicoAtual[1].name} 
-                                                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                                                    />
+                                                    <img src={categoriasMosaicoAtual[1].imageUrl} alt={categoriasMosaicoAtual[1].name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                                 ) : (
-                                                    <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-                                                        <Icon name="box" size={44} />
-                                                    </div>
+                                                    <div className="absolute inset-0 flex items-center justify-center text-slate-300"><Icon name="box" size={44} /></div>
                                                 )}
                                                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                                 <div className="absolute bottom-3.5 left-4 right-4 z-10">
-                                                    {categoriasMosaicoAtual[1].tag && (
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">
-                                                            {categoriasMosaicoAtual[1].tag}
-                                                        </span>
-                                                    )}
-                                                    <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
-                                                        {categoriasMosaicoAtual[1].name}
-                                                    </h3>
+                                                    {categoriasMosaicoAtual[1].tag && <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">{categoriasMosaicoAtual[1].tag}</span>}
+                                                    <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">{categoriasMosaicoAtual[1].name}</h3>
                                                 </div>
                                             </div>
                                         )}
@@ -905,33 +1066,20 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 }`}
                                             >
                                                 {categoriasMosaicoAtual[2].imageUrl ? (
-                                                    <img 
-                                                        src={categoriasMosaicoAtual[2].imageUrl} 
-                                                        alt={categoriasMosaicoAtual[2].name} 
-                                                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                                                    />
+                                                    <img src={categoriasMosaicoAtual[2].imageUrl} alt={categoriasMosaicoAtual[2].name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                                 ) : (
-                                                    <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-                                                        <Icon name="box" size={44} />
-                                                    </div>
+                                                    <div className="absolute inset-0 flex items-center justify-center text-slate-300"><Icon name="box" size={44} /></div>
                                                 )}
                                                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                                 <div className="absolute bottom-3.5 left-4 right-4 z-10">
-                                                    {categoriasMosaicoAtual[2].tag && (
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">
-                                                            {categoriasMosaicoAtual[2].tag}
-                                                        </span>
-                                                    )}
-                                                    <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
-                                                        {categoriasMosaicoAtual[2].name}
-                                                    </h3>
+                                                    {categoriasMosaicoAtual[2].tag && <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">{categoriasMosaicoAtual[2].tag}</span>}
+                                                    <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">{categoriasMosaicoAtual[2].name}</h3>
                                                 </div>
                                             </div>
                                         )}
                                     </div>
                                 )}
 
-                                {/* SLOT 3: Card Largo Direito */}
                                 {categoriasMosaicoAtual[3] && (
                                     <div 
                                         onClick={() => selecionarCategoriaMosaico(categoriasMosaicoAtual[3].name)}
@@ -940,15 +1088,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                         }`}
                                     >
                                         {categoriasMosaicoAtual[3].imageUrl ? (
-                                            <img 
-                                                src={categoriasMosaicoAtual[3].imageUrl} 
-                                                alt={categoriasMosaicoAtual[3].name} 
-                                                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                                            />
+                                            <img src={categoriasMosaicoAtual[3].imageUrl} alt={categoriasMosaicoAtual[3].name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                         ) : (
-                                            <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-                                                <Icon name="box" size={80} />
-                                            </div>
+                                            <div className="absolute inset-0 flex items-center justify-center text-slate-300"><Icon name="box" size={80} /></div>
                                         )}
                                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                         <div className="absolute bottom-5 left-6 right-6 z-10">
@@ -957,15 +1099,12 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                     {categoriasMosaicoAtual[3].tag !== undefined ? categoriasMosaicoAtual[3].tag : 'DESTAQUE'}
                                                 </span>
                                             )}
-                                            <h3 className="text-2xl md:text-3xl font-black text-white leading-snug drop-shadow-sm">
-                                                {categoriasMosaicoAtual[3].name}
-                                            </h3>
+                                            <h3 className="text-2xl md:text-3xl font-black text-white leading-snug drop-shadow-sm">{categoriasMosaicoAtual[3].name}</h3>
                                         </div>
                                     </div>
                                 )}
                             </div>
 
-                            {/* LINHA INFERIOR DO MOSAICO: Até 4 Cards Horizontais (Slots 4, 5, 6 e 7) */}
                             {categoriasMosaicoAtual.length > 4 && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                                     {categoriasMosaicoAtual.slice(4, 8).map((cat) => (
@@ -977,26 +1116,14 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                             }`}
                                         >
                                             {cat.imageUrl ? (
-                                                <img 
-                                                    src={cat.imageUrl} 
-                                                    alt={cat.name} 
-                                                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                                                />
+                                                <img src={cat.imageUrl} alt={cat.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                             ) : (
-                                                <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-                                                    <Icon name="box" size={44} />
-                                                </div>
+                                                <div className="absolute inset-0 flex items-center justify-center text-slate-300"><Icon name="box" size={44} /></div>
                                             )}
                                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-transparent" />
                                             <div className="absolute bottom-3.5 left-4 right-4 z-10">
-                                                {cat.tag && (
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">
-                                                        {cat.tag}
-                                                    </span>
-                                                )}
-                                                <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">
-                                                    {cat.name}
-                                                </h3>
+                                                {cat.tag && <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block mb-0.5">{cat.tag}</span>}
+                                                <h3 className="text-lg font-black text-white leading-snug drop-shadow-sm">{cat.name}</h3>
                                             </div>
                                         </div>
                                     ))}
@@ -1014,17 +1141,12 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                             className={`h-1.5 rounded-full transition-all cursor-pointer ${
                                                 catSlidePage === i ? 'w-7 bg-[#234794]' : 'w-4 bg-slate-200 hover:bg-slate-400'
                                             }`}
-                                            aria-label={`Página ${i + 1}`}
                                         />
                                     ))}
                                 </div>
                             )}
-
                             {categoriaFiltro !== 'todas' && (
-                                <button 
-                                    onClick={() => setCategoriaFiltro('todas')} 
-                                    className="bg-orange-100 text-orange-700 px-4 py-1.5 rounded-full text-xs font-black uppercase hover:bg-orange-200 transition-colors"
-                                >
+                                <button onClick={() => setCategoriaFiltro('todas')} className="bg-orange-100 text-orange-700 px-4 py-1.5 rounded-full text-xs font-black uppercase hover:bg-orange-200 transition-colors">
                                     ✕ Limpar Filtro de Categoria ({categoriaFiltro})
                                 </button>
                             )}
@@ -1035,8 +1157,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 {/* 6. HERO BANNER PRINCIPAL + BANNER PROMOCIONAL LATERAL */}
                 {categoriaFiltro === 'todas' && !busca && (
                     <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-                        
-                        {/* Banner Horizontal Principal (8 colunas) */}
                         <div className="lg:col-span-8 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-[var(--cor-primaria)] text-white relative min-h-[380px] md:min-h-[440px] flex items-center shadow-md">
                             {loja.bannerUrl && <img src={loja.bannerUrl} alt="Banner" className="absolute inset-0 w-full h-full object-cover opacity-55" />}
                             <div className="relative z-10 p-8 md:p-12 max-w-xl space-y-4">
@@ -1050,35 +1170,17 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             </div>
                         </div>
 
-                        {/* Banner Lateral Configurável (4 colunas) */}
                         <div className="lg:col-span-4 rounded-2xl overflow-hidden bg-[#eaeff6] border border-slate-200 p-6 flex flex-col gap-3 relative min-h-[380px] md:min-h-[440px] shadow-sm">
                             <div className="space-y-1 z-10 shrink-0">
-                                <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded inline-block">
-                                    {tagBannerSecundario}
-                                </span>
-                                <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-tight pt-0.5">
-                                    {tituloBannerSecundario}
-                                </h3>
+                                <span className="bg-orange-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded inline-block">{tagBannerSecundario}</span>
+                                <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-tight pt-0.5">{tituloBannerSecundario}</h3>
                             </div>
-
                             <div className="flex-1 w-full min-h-[210px] md:min-h-[250px] rounded-xl overflow-hidden relative shadow-sm bg-slate-200">
-                                <img 
-                                    src={fotoBannerSecundario} 
-                                    alt={tituloBannerSecundario} 
-                                    className="absolute inset-0 w-full h-full object-cover hover:scale-105 transition-transform duration-500" 
-                                />
+                                <img src={fotoBannerSecundario} alt={tituloBannerSecundario} className="absolute inset-0 w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
                             </div>
-
                             <div className="space-y-2.5 z-10 shrink-0 pt-1">
-                                <p className="text-xs md:text-sm text-slate-700 font-bold leading-snug">
-                                    {textoBannerSecundario}
-                                </p>
-                                <a 
-                                    href={getWppLink(`Olá! Quero saber mais sobre: ${tituloBannerSecundario} (${loja.nomeLoja}).`)} 
-                                    target="_blank" 
-                                    rel="noreferrer" 
-                                    className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white text-xs font-black uppercase px-5 py-3 rounded-xl transition-colors w-full sm:w-auto shadow-sm"
-                                >
+                                <p className="text-xs md:text-sm text-slate-700 font-bold leading-snug">{textoBannerSecundario}</p>
+                                <a href={getWppLink(`Olá! Quero saber mais sobre: ${tituloBannerSecundario} (${loja.nomeLoja}).`)} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white text-xs font-black uppercase px-5 py-3 rounded-xl transition-colors w-full sm:w-auto shadow-sm">
                                     {botaoBannerSecundario} <span>→</span>
                                 </a>
                             </div>
@@ -1086,11 +1188,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </section>
                 )}
 
-                {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES (COMPRAR VAI DIRETO PARA O CARRINHO) */}
+                {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES */}
                 {(listaCarrosselDestaque.length > 0 || listaCarrosselPromo.length > 0) && categoriaFiltro === 'todas' && !busca && (
                     <section className={`grid grid-cols-1 ${listaCarrosselDestaque.length > 0 && listaCarrosselPromo.length > 0 ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
-                        
-                        {/* CARROSSEL 1: PRODUTOS EM DESTAQUE */}
                         {listaCarrosselDestaque.length > 0 && (() => {
                             const prodSlide = listaCarrosselDestaque[slideDestaque] || listaCarrosselDestaque[0];
                             return (
@@ -1114,11 +1214,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 {prodSlide.novidade && <span className="bg-blue-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">NOVO</span>}
                                                 {prodSlide.maisVendido && <span className="bg-amber-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">MAIS VENDIDO</span>}
                                             </div>
-                                            {prodSlide.imageUrl ? (
-                                                <img src={prodSlide.imageUrl} alt={prodSlide.name} className="max-h-full max-w-full object-contain hover:scale-105 transition-transform" />
-                                            ) : (
-                                                <Icon name="image" size={48} className="text-slate-200" />
-                                            )}
+                                            {prodSlide.imageUrl ? <img src={prodSlide.imageUrl} alt={prodSlide.name} className="max-h-full max-w-full object-contain hover:scale-105 transition-transform" /> : <Icon name="image" size={48} className="text-slate-200" />}
                                         </div>
                                         <div className="sm:col-span-7 space-y-3">
                                             <span className="text-xs font-black uppercase text-orange-500 block">{prodSlide.category || 'Destaque'}</span>
@@ -1129,12 +1225,8 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 {prodSlide.isPromo && <span className="text-xs text-slate-400 line-through font-bold">{formatMoney(prodSlide.price)}</span>}
                                             </div>
                                             <div className="flex flex-wrap items-center gap-2 pt-2">
-                                                <button onClick={() => handleComprarDireto(prodSlide)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm transition-colors">
-                                                    Comprar Agora
-                                                </button>
-                                                <button onClick={() => adicionarAoCarrinho(prodSlide, false)} className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors">
-                                                    <Icon name="shopping-cart" size={14} /> + Carrinho
-                                                </button>
+                                                <button onClick={() => handleComprarDireto(prodSlide)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer">Comprar Agora</button>
+                                                <button onClick={() => adicionarAoCarrinho(prodSlide, false)} className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"><Icon name="shopping-cart" size={14} /> + Carrinho</button>
                                             </div>
                                         </div>
                                     </div>
@@ -1142,7 +1234,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             );
                         })()}
 
-                        {/* CARROSSEL 2: OFERTAS & PROMOÇÕES */}
                         {listaCarrosselPromo.length > 0 && (() => {
                             const promoSlide = listaCarrosselPromo[slidePromo] || listaCarrosselPromo[0];
                             const descPerc = promoSlide.price > 0 && promoSlide.promoPrice > 0
@@ -1169,11 +1260,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 {promoSlide.novidade && <span className="bg-blue-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">NOVO</span>}
                                                 {promoSlide.maisVendido && <span className="bg-amber-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">MAIS VENDIDO</span>}
                                             </div>
-                                            {promoSlide.imageUrl ? (
-                                                <img src={promoSlide.imageUrl} alt={promoSlide.name} className="max-h-full max-w-full object-contain hover:scale-105 transition-transform" />
-                                            ) : (
-                                                <Icon name="image" size={48} className="text-slate-200" />
-                                            )}
+                                            {promoSlide.imageUrl ? <img src={promoSlide.imageUrl} alt={promoSlide.name} className="max-h-full max-w-full object-contain hover:scale-105 transition-transform" /> : <Icon name="image" size={48} className="text-slate-200" />}
                                         </div>
                                         <div className="sm:col-span-7 space-y-3">
                                             <span className="text-xs font-black uppercase text-rose-600 block">Em Promoção</span>
@@ -1184,12 +1271,8 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                                 <span className="text-xs text-slate-400 line-through font-bold">{formatMoney(promoSlide.price)}</span>
                                             </div>
                                             <div className="flex flex-wrap items-center gap-2 pt-2">
-                                                <button onClick={() => handleComprarDireto(promoSlide)} className="bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm transition-colors">
-                                                    Aproveitar Oferta
-                                                </button>
-                                                <button onClick={() => adicionarAoCarrinho(promoSlide, false)} className="bg-slate-900 hover:bg-black text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors">
-                                                    <Icon name="shopping-cart" size={14} /> + Carrinho
-                                                </button>
+                                                <button onClick={() => handleComprarDireto(promoSlide)} className="bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer">Aproveitar Oferta</button>
+                                                <button onClick={() => adicionarAoCarrinho(promoSlide, false)} className="bg-slate-900 hover:bg-black text-white font-black text-xs uppercase px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"><Icon name="shopping-cart" size={14} /> + Carrinho</button>
                                             </div>
                                         </div>
                                     </div>
@@ -1204,8 +1287,8 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-xl bg-blue-50 text-[var(--cor-primaria)] flex items-center justify-center shrink-0"><Icon name="truck" size={26} /></div>
                         <div>
-                            <h4 className="font-black text-xs uppercase text-slate-800">Envio Rápido e Seguro</h4>
-                            <p className="text-xs text-slate-500">Despachamos para todo o Brasil</p>
+                            <h4 className="font-black text-xs uppercase text-slate-800">Envio por Correios e Transportadora</h4>
+                            <p className="text-xs text-slate-500">PAC, SEDEX e Jadlog com Rastreio</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -1213,8 +1296,8 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M21 19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3zM3 19a2 2 0 002 2h1a2 2 0 002-2v-3a2 2 0 00-2-2H3z" /></svg>
                         </div>
                         <div>
-                            <h4 className="font-black text-xs uppercase text-slate-800">Suporte Online</h4>
-                            <p className="text-xs text-slate-500">Atendimento direto via WhatsApp</p>
+                            <h4 className="font-black text-xs uppercase text-slate-800">Status em Tempo Real</h4>
+                            <p className="text-xs text-slate-500">Acompanhe cada etapa em Meus Pedidos</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -1235,7 +1318,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </div>
                 </section>
 
-                {/* 9. GRADE DE PRODUTOS COM OS NOVOS SELOS (NOVIDADE E MAIS VENDIDO) */}
+                {/* 9. GRADE DE PRODUTOS */}
                 <section id="vitrine" className="space-y-6">
                     <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-3 gap-2">
                         <div>
@@ -1262,8 +1345,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 const isFav = favoritos.includes(p.id);
                                 return (
                                     <div key={p.id} className="bg-white rounded-2xl p-4 border border-slate-200/80 hover:border-[var(--cor-primaria)] hover:shadow-xl transition-all duration-300 flex flex-col justify-between group relative">
-                                        
-                                        {/* SELOS DO PRODUTO: DESCONTO, TOP, NOVIDADE E MAIS VENDIDO */}
                                         <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 items-start">
                                             {descontoPerc > 0 && <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm">-{descontoPerc}%</span>}
                                             {p.destaque && <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase">Top</span>}
@@ -1330,7 +1411,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </section>
             </main>
 
-            {/* 11. RODAPÉ COMPLETO COM LOGO GRANDE */}
+            {/* 11. RODAPÉ COMPLETO */}
             <footer id="rodape" className="w-full bg-white border-t border-slate-200 mt-12 text-slate-600">
                 <div className="w-full px-4 md:px-10 xl:px-16 py-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
                     <div className="lg:col-span-2 space-y-4">
@@ -1382,12 +1463,12 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
 
                     <div className="space-y-3">
                         <h4 className="font-black text-sm text-slate-900 uppercase tracking-wider">Área do Cliente</h4>
-                        <p className="text-xs text-slate-500">Acesse seus dados cadastrais, produtos favoritos e histórico de pedidos.</p>
+                        <p className="text-xs text-slate-500">Acompanhe seus pedidos em tempo real, código de rastreio e endereço de entrega.</p>
                         <div className="flex flex-col gap-2 pt-1">
                             {clienteLogado ? (
                                 <>
-                                    <button onClick={() => setClientAreaModal({ open: true, tab: 'cadastro' })} className="w-full py-3 bg-slate-900 hover:bg-black text-white rounded-xl font-black text-xs uppercase transition-colors">Meu Cadastro</button>
-                                    <button onClick={() => setClientAreaModal({ open: true, tab: 'pedidos' })} className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-xs uppercase transition-colors">Meus Pedidos</button>
+                                    <button onClick={() => setClientAreaModal({ open: true, tab: 'pedidos' })} className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-xs uppercase transition-colors">Meus Pedidos ({meusPedidos.length})</button>
+                                    <button onClick={() => setClientAreaModal({ open: true, tab: 'cadastro' })} className="w-full py-3 bg-slate-900 hover:bg-black text-white rounded-xl font-black text-xs uppercase transition-colors">Meu Cadastro e CEP</button>
                                 </>
                             ) : (
                                 <>
@@ -1416,7 +1497,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 target="_blank" 
                 rel="noreferrer" 
                 className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-[#25D366] hover:bg-[#1ebe57] text-white px-5 py-3.5 rounded-full shadow-2xl hover:scale-105 transition-all border-2 border-white" 
-                title={telefoneAjustes ? `WhatsApp: ${telefoneAjustes}` : "Conversar no WhatsApp"}
             >
                 <svg className="w-7 h-7 fill-current shrink-0" viewBox="0 0 24 24">
                     <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.126.556 4.124 1.535 5.862l-1.535 5.638 5.792-1.518c1.693.904 3.621 1.418 5.672 1.418 6.627 0 12-5.373 12-12s-5.373-12-12-12z"/>
@@ -1427,14 +1507,14 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             </a>
 
-            {/* 13. MODAL DE LOGIN E CADASTRO */}
+            {/* 13. MODAL DE LOGIN E CADASTRO COM BUSCA DE CEP */}
             {authModal.open && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden my-auto">
                         <div className="bg-[var(--cor-primaria)] p-6 text-center text-white relative">
                             <button onClick={() => setAuthModal({ ...authModal, open: false })} className="absolute top-4 right-4 text-white/70 hover:text-white">✕</button>
                             <h3 className="font-black text-lg uppercase tracking-wider">{authModal.mode === 'login' ? 'Entrar na Minha Conta' : 'Criar Conta de Cliente'}</h3>
-                            <p className="text-xs opacity-80 mt-1">{authModal.mode === 'login' ? 'Acesse seu cadastro e acompanhe seus pedidos' : 'Seus dados ficam salvos para compras rápidas'}</p>
+                            <p className="text-xs opacity-80 mt-1">{authModal.mode === 'login' ? 'Acesse seu histórico de pedidos e código de rastreio' : 'Cadastre seu endereço com CEP para envio rápido'}</p>
                         </div>
 
                         <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50 text-xs font-black uppercase">
@@ -1443,28 +1523,74 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                         </div>
 
                         {authModal.mode === 'register' ? (
-                            <form onSubmit={handleRegistrarCliente} className="p-6 space-y-3.5">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nome Completo *</label>
-                                    <input type="text" required value={regNome} onChange={e => setRegNome(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-orange-500" placeholder="Seu nome completo" />
+                            <form onSubmit={handleRegistrarCliente} className="p-6 space-y-3 max-h-[75vh] overflow-y-auto">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nome Completo *</label>
+                                        <input type="text" required value={regNome} onChange={e => setRegNome(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" placeholder="Seu nome completo" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">WhatsApp / Telefone *</label>
+                                        <input type="text" required value={regWhatsapp} onChange={e => setRegWhatsapp(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" placeholder="(11) 99999-9999" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">WhatsApp / Telefone *</label>
-                                    <input type="text" required value={regWhatsapp} onChange={e => setRegWhatsapp(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-orange-500" placeholder="(11) 99999-9999" />
+
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-orange-600 block mb-1">CEP *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={regCep}
+                                            onChange={e => { setRegCep(e.target.value); consultarCepViaCep(e.target.value, 'cadastro'); }}
+                                            placeholder="00000-000"
+                                            className="w-full p-2.5 bg-orange-50/40 border border-orange-300 rounded-xl text-xs font-black"
+                                        />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Rua / Logradouro *</label>
+                                        <input type="text" required value={regRua} onChange={e => setRegRua(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" placeholder="Nome da rua" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Endereço de Entrega *</label>
-                                    <input type="text" required value={regEndereco} onChange={e => setRegEndereco(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-orange-500" placeholder="Rua, Número, Bairro, Cidade" />
+
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Número *</label>
+                                        <input type="text" required value={regNumero} onChange={e => setRegNumero(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" placeholder="123" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Complemento</label>
+                                        <input type="text" value={regComplemento} onChange={e => setRegComplemento(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" placeholder="Apto, Bloco, Casa..." />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">E-mail *</label>
-                                    <input type="email" required value={regEmail} onChange={e => setRegEmail(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-orange-500" placeholder="seu@email.com" />
+
+                                <div className="grid grid-cols-5 gap-2">
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Bairro *</label>
+                                        <input type="text" required value={regBairro} onChange={e => setRegBairro(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Cidade *</label>
+                                        <input type="text" required value={regCidade} onChange={e => setRegCidade(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">UF *</label>
+                                        <input type="text" required maxLength={2} value={regUf} onChange={e => setRegUf(e.target.value.toUpperCase())} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-center" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Crie uma Senha *</label>
-                                    <input type="password" required value={regSenha} onChange={e => setRegSenha(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-orange-500" placeholder="••••••••" />
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">E-mail *</label>
+                                        <input type="email" required value={regEmail} onChange={e => setRegEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" placeholder="seu@email.com" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Crie uma Senha *</label>
+                                        <input type="password" required value={regSenha} onChange={e => setRegSenha(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" placeholder="••••••••" />
+                                    </div>
                                 </div>
-                                <button type="submit" disabled={processandoAuth} className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black uppercase text-xs shadow-md transition-colors">
+
+                                <button type="submit" disabled={processandoAuth} className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black uppercase text-xs shadow-md transition-colors mt-2">
                                     {processandoAuth ? 'Salvando Cadastro...' : 'Finalizar Cadastro'}
                                 </button>
                             </form>
@@ -1487,80 +1613,177 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                 </div>
             )}
 
-            {/* 14. MODAL EXCLUSIVO DO CLIENTE LOGADO */}
+            {/* ========================================================================= */}
+            {/* 14. MODAL DO CLIENTE: HISTÓRICO PERMANENTE + BARRA DE PROGRESSO EM TEMPO REAL */}
+            {/* ========================================================================= */}
             {clientAreaModal.open && clienteLogado && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="bg-slate-900 p-5 text-white flex justify-between items-center shrink-0">
                             <div className="flex items-center gap-3">
                                 <div className="w-11 h-11 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-lg">
                                     {(clienteLogado.nome || clienteLogado.name || 'C').charAt(0).toUpperCase()}
                                 </div>
                                 <div>
                                     <h3 className="font-black text-base uppercase">{clienteLogado.nome || clienteLogado.name}</h3>
-                                    <span className="text-xs text-emerald-400 font-bold">Área Exclusiva do Cliente</span>
+                                    <span className="text-xs text-emerald-400 font-bold">Acompanhamento de Pedidos em Tempo Real</span>
                                 </div>
                             </div>
                             <button onClick={() => setClientAreaModal({ ...clientAreaModal, open: false })} className="text-white/70 hover:text-white text-xl">✕</button>
                         </div>
 
-                        <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50 text-xs font-black uppercase">
-                            <button onClick={() => setClientAreaModal({ open: true, tab: 'cadastro' })} className={`py-3.5 ${clientAreaModal.tab === 'cadastro' ? 'bg-white text-[var(--cor-primaria)] border-b-2 border-[var(--cor-primaria)]' : 'text-slate-400'}`}>
-                                Meu Cadastro
-                            </button>
+                        <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50 text-xs font-black uppercase shrink-0">
                             <button onClick={() => setClientAreaModal({ open: true, tab: 'pedidos' })} className={`py-3.5 ${clientAreaModal.tab === 'pedidos' ? 'bg-white text-orange-500 border-b-2 border-orange-500' : 'text-slate-400'}`}>
                                 Meus Pedidos ({meusPedidos.length})
+                            </button>
+                            <button onClick={() => setClientAreaModal({ open: true, tab: 'cadastro' })} className={`py-3.5 ${clientAreaModal.tab === 'cadastro' ? 'bg-white text-[var(--cor-primaria)] border-b-2 border-[var(--cor-primaria)]' : 'text-slate-400'}`}>
+                                Meu Cadastro e CEP
                             </button>
                         </div>
 
                         {clientAreaModal.tab === 'cadastro' ? (
-                            <form onSubmit={handleAtualizarMeuCadastro} className="p-6 space-y-4">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nome Completo</label>
-                                    <input type="text" required value={regNome} onChange={e => setRegNome(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" />
+                            <form onSubmit={handleAtualizarMeuCadastro} className="p-6 space-y-3 overflow-y-auto">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nome Completo</label>
+                                        <input type="text" required value={regNome} onChange={e => setRegNome(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">WhatsApp / Telefone</label>
+                                        <input type="text" required value={regWhatsapp} onChange={e => setRegWhatsapp(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">WhatsApp / Telefone</label>
-                                    <input type="text" required value={regWhatsapp} onChange={e => setRegWhatsapp(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" />
+
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-orange-600 block mb-1">CEP</label>
+                                        <input type="text" value={regCep} onChange={e => { setRegCep(e.target.value); consultarCepViaCep(e.target.value, 'cadastro'); }} className="w-full p-2.5 bg-orange-50/40 border border-orange-300 rounded-xl text-xs font-black" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Rua / Logradouro</label>
+                                        <input type="text" value={regRua} onChange={e => setRegRua(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Endereço Principal de Entrega</label>
-                                    <input type="text" required value={regEndereco} onChange={e => setRegEndereco(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" />
+
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Número</label>
+                                        <input type="text" value={regNumero} onChange={e => setRegNumero(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Complemento</label>
+                                        <input type="text" value={regComplemento} onChange={e => setRegComplemento(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
                                 </div>
+
+                                <div className="grid grid-cols-5 gap-2">
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Bairro</label>
+                                        <input type="text" value={regBairro} onChange={e => setRegBairro(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Cidade</label>
+                                        <input type="text" value={regCidade} onChange={e => setRegCidade(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">UF</label>
+                                        <input type="text" maxLength={2} value={regUf} onChange={e => setRegUf(e.target.value.toUpperCase())} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-center" />
+                                    </div>
+                                </div>
+
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">E-mail</label>
-                                    <input type="email" required value={regEmail} onChange={e => setRegEmail(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" />
+                                    <input type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
                                 </div>
-                                <div className="flex justify-between items-center pt-2 gap-3">
+
+                                <div className="flex justify-between items-center pt-3 gap-3">
                                     <button type="button" onClick={handleLogout} className="px-4 py-3 bg-red-50 text-red-600 rounded-xl font-black text-xs uppercase hover:bg-red-100">
                                         Sair da Conta
                                     </button>
                                     <button type="submit" disabled={processandoAuth} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase shadow-md">
-                                        {processandoAuth ? 'Salvando...' : 'Salvar Alterações'}
+                                        {processandoAuth ? 'Salvando...' : 'Salvar Meu Endereço'}
                                     </button>
                                 </div>
                             </form>
                         ) : (
-                            <div className="p-6 max-h-96 overflow-y-auto space-y-3">
-                                {meusPedidos.length === 0 ? (
+                            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                                {carregandoPedidos ? (
+                                    <div className="text-center py-12 text-xs font-bold text-slate-400">Buscando seus pedidos...</div>
+                                ) : meusPedidos.length === 0 ? (
                                     <div className="text-center py-10 space-y-2">
-                                        <Icon name="package" size={40} className="mx-auto text-slate-300" />
-                                        <p className="font-black text-slate-600 text-sm uppercase">Você ainda não realizou pedidos nesta sessão</p>
-                                        <p className="text-xs text-slate-400">Adicione produtos ao carrinho e finalize o pedido pelo site para acompanhar por aqui.</p>
+                                        <Icon name="package" size={44} className="mx-auto text-slate-300" />
+                                        <p className="font-black text-slate-600 text-sm uppercase">Nenhum pedido encontrado para esta conta</p>
+                                        <p className="text-xs text-slate-400">Assim que você finalizar uma compra no carrinho, poderá acompanhar cada etapa da produção e entrega aqui.</p>
                                     </div>
                                 ) : (
-                                    meusPedidos.map(ped => (
-                                        <div key={ped.id} className="border border-slate-200 rounded-xl p-4 flex justify-between items-center bg-slate-50">
-                                            <div>
-                                                <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">Pedido #{ped.id}</span>
-                                                <p className="font-bold text-xs text-slate-800 mt-1">{ped.itens}</p>
-                                                <span className="text-[11px] text-slate-400">{ped.data} • {ped.status}</span>
+                                    meusPedidos.map(ped => {
+                                        const codigo = ped.orderNumber || ped.codigo || ped.id?.slice(0, 6).toUpperCase();
+                                        const indiceEtapa = obterIndiceEtapa(ped);
+                                        const dataPed = ped.createdAt ? new Date(ped.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                                        const rastreio = ped.trackingCode || ped.codigoRastreio || '';
+
+                                        return (
+                                            <div key={ped.id} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/70 space-y-4 shadow-xs">
+                                                <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-200 pb-3">
+                                                    <div>
+                                                        <span className="text-xs font-black uppercase bg-slate-900 text-white px-2.5 py-1 rounded">
+                                                            Pedido #{codigo}
+                                                        </span>
+                                                        <span className="text-[11px] font-bold text-slate-400 ml-2">{dataPed}</span>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className="font-black text-base text-emerald-600">{formatMoney(ped.total || ped.valorTotal)}</span>
+                                                        <span className="block text-[10px] font-bold text-slate-400 uppercase">
+                                                            {ped.modalidadeFrete || 'Envio Padrão'} • {ped.formaPagamento || 'PIX'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* BARRA DE PROGRESSO DO PEDIDO ESTILO E-COMMERCE */}
+                                                <div className="grid grid-cols-5 gap-1 pt-1">
+                                                    {ETAPAS_PEDIDO.map((etapa, idx) => {
+                                                        const concluida = idx <= indiceEtapa;
+                                                        const atual = idx === indiceEtapa;
+                                                        return (
+                                                            <div key={etapa.id} className="flex flex-col items-center text-center">
+                                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black mb-1 transition-all ${
+                                                                    concluida ? 'bg-emerald-500 text-white shadow-xs' : 'bg-slate-200 text-slate-400'
+                                                                } ${atual ? 'ring-4 ring-emerald-200 scale-110' : ''}`}>
+                                                                    {etapa.icone}
+                                                                </div>
+                                                                <span className={`text-[9px] font-black uppercase leading-tight ${concluida ? 'text-emerald-700' : 'text-slate-400'}`}>
+                                                                    {etapa.label}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                {/* Itens e Endereço */}
+                                                <div className="bg-white p-3 rounded-xl border border-slate-200/80 text-xs space-y-1">
+                                                    <p className="font-black text-slate-800">{ped.resumoItens || (ped.items || []).map(i => `${i.qtd}x ${i.name}`).join(', ')}</p>
+                                                    {(ped.endereco || ped.address) && (
+                                                        <p className="text-[11px] text-slate-500"><strong>Entrega:</strong> {ped.endereco || ped.address}</p>
+                                                    )}
+                                                    {rastreio && (
+                                                        <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between">
+                                                            <span className="text-[11px] font-black text-blue-700 uppercase">
+                                                                🚚 Código de Rastreio: <span className="bg-blue-50 px-2 py-0.5 rounded border border-blue-200">{rastreio}</span>
+                                                            </span>
+                                                            <a
+                                                                href={`https://rastreamento.correios.com.br/app/index.php`}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="text-[11px] font-black text-orange-600 hover:underline"
+                                                            >
+                                                                Rastrear Objeto →
+                                                            </a>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <span className="font-black text-sm text-emerald-600 block">{formatMoney(ped.total)}</span>
-                                            </div>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </div>
                         )}
@@ -1569,15 +1792,15 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             )}
 
             {/* ========================================================================= */}
-            {/* 15. MODAL DO CARRINHO COM CHECKOUT QUE ENVIA DIRETO PARA GESTÃO DE PEDIDOS*/}
+            {/* 15. MODAL DO CARRINHO COM CEP AUTOMÁTICO, FRETE E ENVIO P/ O SISTEMA      */}
             {/* ========================================================================= */}
             {showCartModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-end">
-                    <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between p-6 overflow-y-auto">
+                    <div className="bg-white w-full max-w-lg h-full shadow-2xl flex flex-col justify-between p-6 overflow-y-auto">
                         <div className="flex justify-between items-center border-b border-slate-200 pb-4 shrink-0">
                             <div>
-                                <h3 className="font-black text-lg uppercase text-slate-800">Finalizar Compra ({qtdTotalCarrinho})</h3>
-                                <span className="text-xs font-bold text-slate-400">Confira seus itens e dados de entrega</span>
+                                <h3 className="font-black text-lg uppercase text-slate-800">Carrinho & Checkout ({qtdTotalCarrinho})</h3>
+                                <span className="text-xs font-bold text-slate-400">Preencha o CEP para calcular o envio</span>
                             </div>
                             <button onClick={() => setShowCartModal(false)} className="text-slate-400 hover:text-black text-xl">✕</button>
                         </div>
@@ -1587,22 +1810,33 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-3xl font-black">
                                     ✓
                                 </div>
-                                <h4 className="font-black text-xl uppercase text-slate-800">Pedido #{pedidoConfirmado.id} Confirmado!</h4>
+                                <h4 className="font-black text-xl uppercase text-slate-800">Pedido #{pedidoConfirmado.orderNumber} Recebido!</h4>
                                 <p className="text-xs font-bold text-slate-500 max-w-xs mx-auto leading-relaxed">
-                                    Seu pedido já foi enviado diretamente para o sistema da loja ({loja.nomeLoja}) e está em processamento.
+                                    Seu pedido já está na fila de produção da {loja.nomeLoja}. Você pode acompanhar cada etapa em <strong>Meus Pedidos</strong>.
                                 </p>
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left text-xs space-y-1">
-                                    <p><strong>Itens:</strong> {pedidoConfirmado.itens}</p>
-                                    <p><strong>Total:</strong> <span className="text-emerald-600 font-black">{formatMoney(pedidoConfirmado.total)}</span></p>
-                                    <p><strong>Status:</strong> {pedidoConfirmado.status}</p>
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left text-xs space-y-1.5">
+                                    <p><strong>Itens:</strong> {pedidoConfirmado.resumoItens}</p>
+                                    <p><strong>Entrega ({pedidoConfirmado.modalidadeFrete}):</strong> {pedidoConfirmado.endereco}</p>
+                                    <p><strong>Total com Frete:</strong> <span className="text-emerald-600 font-black">{formatMoney(pedidoConfirmado.total)}</span></p>
                                 </div>
-                                <div className="pt-3 space-y-2">
+                                <div className="pt-3 flex flex-col gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setPedidoConfirmado(null);
+                                            setShowCartModal(false);
+                                            setClientAreaModal({ open: true, tab: 'pedidos' });
+                                        }}
+                                        className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black uppercase text-xs shadow-md"
+                                    >
+                                        Acompanhar em Meus Pedidos
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => { setPedidoConfirmado(null); setShowCartModal(false); }}
-                                        className="w-full py-3.5 bg-slate-900 hover:bg-black text-white rounded-xl font-black uppercase text-xs"
+                                        className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase text-xs"
                                     >
-                                        Voltar para a Loja
+                                        Continuar na Loja
                                     </button>
                                 </div>
                             </div>
@@ -1615,13 +1849,13 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 </button>
                             </div>
                         ) : (
-                            <form onSubmit={handleFinalizarPedidoNoSistema} className="flex-1 flex flex-col justify-between space-y-5 pt-4 overflow-y-auto">
-                                {/* Lista de Produtos no Carrinho */}
-                                <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                            <form onSubmit={handleFinalizarPedidoNoSistema} className="flex-1 flex flex-col justify-between space-y-4 pt-4 overflow-y-auto">
+                                {/* Lista de Produtos */}
+                                <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
                                     {carrinho.map(item => (
-                                        <div key={item.id} className="flex items-center justify-between border border-slate-200 p-3 rounded-xl bg-slate-50/50">
+                                        <div key={item.id} className="flex items-center justify-between border border-slate-200 p-2.5 rounded-xl bg-slate-50/50">
                                             <div className="flex items-center gap-3">
-                                                {item.imageUrl && <img src={item.imageUrl} className="w-12 h-12 object-contain rounded border bg-white p-0.5" alt={item.name} />}
+                                                {item.imageUrl && <img src={item.imageUrl} className="w-11 h-11 object-contain rounded border bg-white p-0.5" alt={item.name} />}
                                                 <div>
                                                     <p className="font-bold text-xs text-slate-800 line-clamp-1">{item.name}</p>
                                                     <p className="text-xs font-black text-rose-600">{formatMoney(item.sellingPrice)}</p>
@@ -1636,82 +1870,129 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     ))}
                                 </div>
 
-                                {/* Dados de Entrega e Pagamento para a Gestão de Pedidos */}
-                                <div className="space-y-3 border-t border-slate-200 pt-4">
-                                    <h4 className="font-black text-xs uppercase text-slate-700 tracking-wider">Dados para Entrega e Pedido</h4>
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Seu Nome *</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={checkoutNome}
-                                            onChange={e => setCheckoutNome(e.target.value)}
-                                            placeholder="Nome completo"
-                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-emerald-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">WhatsApp / Telefone *</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={checkoutTelefone}
-                                            onChange={e => setCheckoutTelefone(e.target.value)}
-                                            placeholder="(11) 99999-9999"
-                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-emerald-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Endereço Completo de Entrega *</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={checkoutEndereco}
-                                            onChange={e => setCheckoutEndereco(e.target.value)}
-                                            placeholder="Rua, Número, Bairro, Cidade, CEP"
-                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-emerald-500"
-                                        />
-                                    </div>
+                                {/* Dados do Cliente + CEP e Endereço de Envio */}
+                                <div className="space-y-2.5 border-t border-slate-200 pt-3">
+                                    <h4 className="font-black text-xs uppercase text-slate-700 tracking-wider">1. Dados do Cliente</h4>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Forma de Pagamento</label>
-                                            <select
-                                                value={checkoutPagamento}
-                                                onChange={e => setCheckoutPagamento(e.target.value)}
-                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
-                                            >
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Seu Nome *</label>
+                                            <input type="text" required value={checkoutNome} onChange={e => setCheckoutNome(e.target.value)} placeholder="Nome completo" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">WhatsApp *</label>
+                                            <input type="text" required value={checkoutTelefone} onChange={e => setCheckoutTelefone(e.target.value)} placeholder="(11) 99999-9999" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
+                                        </div>
+                                    </div>
+
+                                    <h4 className="font-black text-xs uppercase text-slate-700 tracking-wider pt-2">2. CEP e Endereço de Envio</h4>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-orange-600 block mb-0.5">
+                                                CEP * {buscandoCep && '...'}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={checkoutCep}
+                                                onChange={e => { setCheckoutCep(e.target.value); consultarCepViaCep(e.target.value, 'checkout'); }}
+                                                placeholder="00000-000"
+                                                className="w-full p-2 bg-orange-50/50 border border-orange-300 rounded-lg text-xs font-black outline-none"
+                                            />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Rua / Avenida *</label>
+                                            <input type="text" required value={checkoutRua} onChange={e => setCheckoutRua(e.target.value)} placeholder="Rua..." className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Número *</label>
+                                            <input type="text" required value={checkoutNumero} onChange={e => setCheckoutNumero(e.target.value)} placeholder="Nº" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Complemento</label>
+                                            <input type="text" value={checkoutComplemento} onChange={e => setCheckoutComplemento(e.target.value)} placeholder="Apto, Bloco, Ponto de ref." className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-5 gap-2">
+                                        <div className="col-span-2">
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Bairro *</label>
+                                            <input type="text" required value={checkoutBairro} onChange={e => setCheckoutBairro(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Cidade *</label>
+                                            <input type="text" required value={checkoutCidade} onChange={e => setCheckoutCidade(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">UF *</label>
+                                            <input type="text" required maxLength={2} value={checkoutUf} onChange={e => setCheckoutUf(e.target.value.toUpperCase())} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center" />
+                                        </div>
+                                    </div>
+
+                                    {/* Opções de Frete (Correios / Transportadora) */}
+                                    {opcoesFreteCalculadas.length > 0 && (
+                                        <div className="pt-1 space-y-1.5">
+                                            <label className="text-[10px] font-black uppercase text-emerald-700 block">Escolha a Modalidade de Entrega:</label>
+                                            {opcoesFreteCalculadas.map(op => (
+                                                <label key={op.id} className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer ${checkoutModalidadeFrete === op.id ? 'border-emerald-500 bg-emerald-50/50 font-black' : 'border-slate-200 bg-white'}`}>
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="radio"
+                                                            name="frete"
+                                                            checked={checkoutModalidadeFrete === op.id}
+                                                            onChange={() => {
+                                                                setCheckoutModalidadeFrete(op.id);
+                                                                setCheckoutValorFrete(op.valor);
+                                                            }}
+                                                            className="accent-emerald-600"
+                                                        />
+                                                        <span>{op.nome} <span className="text-[10px] text-slate-400">({op.prazo})</span></span>
+                                                    </div>
+                                                    <span className="font-black text-emerald-700">{op.valor === 0 ? 'Grátis' : formatMoney(op.valor)}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-2 pt-1">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Pagamento</label>
+                                            <select value={checkoutPagamento} onChange={e => setCheckoutPagamento(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold">
                                                 <option value="PIX">PIX</option>
                                                 <option value="Cartão de Crédito">Cartão de Crédito</option>
                                                 <option value="Cartão de Débito">Cartão de Débito</option>
                                                 <option value="Boleto">Boleto</option>
-                                                <option value="Dinheiro">Dinheiro</option>
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Observações</label>
-                                            <input
-                                                type="text"
-                                                value={checkoutObs}
-                                                onChange={e => setCheckoutObs(e.target.value)}
-                                                placeholder="Cor, detalhe, etc."
-                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
-                                            />
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Observações da Peça</label>
+                                            <input type="text" value={checkoutObs} onChange={e => setCheckoutObs(e.target.value)} placeholder="Cor, nome p/ gravar..." className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Total e Botão de Finalizar */}
-                                <div className="border-t border-slate-200 pt-4 space-y-3 shrink-0">
-                                    <div className="flex justify-between items-center font-black text-base">
+                                {/* Resumo Financeiro e Botão de Finalizar */}
+                                <div className="border-t border-slate-200 pt-3 space-y-2 shrink-0">
+                                    <div className="flex justify-between text-xs font-bold text-slate-500">
+                                        <span>Subtotal dos Produtos:</span>
+                                        <span>{formatMoney(subtotalCarrinho)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs font-bold text-slate-500">
+                                        <span>Frete ({checkoutModalidadeFrete}):</span>
+                                        <span>{checkoutValorFrete === 0 ? 'A combinar / Grátis' : formatMoney(checkoutValorFrete)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center font-black text-base pt-1 border-t border-slate-100">
                                         <span>Total do Pedido:</span>
-                                        <span className="text-emerald-600 text-xl">{formatMoney(totalCarrinho)}</span>
+                                        <span className="text-emerald-600 text-xl">{formatMoney(totalComFrete)}</span>
                                     </div>
                                     <button
                                         type="submit"
                                         disabled={enviandoPedido}
                                         className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-lg transition-colors cursor-pointer"
                                     >
-                                        {enviandoPedido ? 'Enviando Pedido...' : 'Finalizar Pedido'}
+                                        {enviandoPedido ? 'Registrando Pedido...' : 'Confirmar e Finalizar Pedido'}
                                     </button>
                                 </div>
                             </form>
