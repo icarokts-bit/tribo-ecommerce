@@ -53,14 +53,42 @@ export default function Produtos({ user, permissoes }) {
 
     const donoUid = permissoes?.donoUid || user?.uid;
 
+    // Função auxiliar que sincroniza Produtos e Categorias em todos os documentos da vitrine pública
+    const sincronizarCatalogoPublico = async (novosProdutos, novasCategorias) => {
+        if (!donoUid) return;
+        const payload = {};
+        if (novosProdutos !== undefined) {
+            payload.products = novosProdutos;
+            payload.produtos = novosProdutos;
+        }
+        if (novasCategorias !== undefined) {
+            payload.categories = novasCategorias;
+            payload.categorias = novasCategorias;
+        }
+        payload.donoUid = donoUid;
+        payload.updatedAt = new Date().toISOString();
+
+        await Promise.all([
+            db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set(payload, { merge: true }),
+            db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/loja`).set(payload, { merge: true }),
+            db.doc(`lojas/${donoUid}`).set(payload, { merge: true })
+        ]);
+    };
+
     useEffect(() => {
         if (!donoUid) return;
         const fetchData = async () => {
             try {
                 const docRef = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get();
                 if (docRef.exists) {
-                    setProducts(docRef.data().products || []);
-                    setCategoriesList(docRef.data().categories || []);
+                    const data = docRef.data();
+                    const prodsCarregados = data.products || [];
+                    const catsCarregadas = data.categories || [];
+                    setProducts(prodsCarregados);
+                    setCategoriesList(catsCarregadas);
+
+                    // Garante que os documentos públicos estejam sincronizados logo ao abrir a tela
+                    sincronizarCatalogoPublico(prodsCarregados, catsCarregadas).catch(() => {});
                 }
 
                 const recSnap = await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`).get();
@@ -166,8 +194,10 @@ export default function Produtos({ user, permissoes }) {
         e.target.value = '';
     };
 
-    // Gestão de Categorias
-    const opcoesPadraoTag = ['DESTAQUE', 'LANÇAMENTOS', 'OFERTAS', 'MAIS VENDIDOS', 'NOVIDADES', 'PERSONALIZADOS', 'DEPARTAMENTO', ''];
+    // ==========================================
+    // GESTÃO DE CATEGORIAS
+    // ==========================================
+    const opcoesPadraoTag = ['DESTAQUE', 'LANÇAMENTOS', 'OFERTAS', 'MAIS VENDIDOS', 'NOVIDADES', 'PERSONALIZADOS', 'CATEGORIA', ''];
 
     const selecionarCategoriaParaEditar = (cat) => {
         const tagAtual = cat.tag !== undefined ? cat.tag : 'DESTAQUE';
@@ -202,9 +232,7 @@ export default function Produtos({ user, permissoes }) {
             : [...categoriesList, newCat];
 
         try {
-            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
-                categories: updatedCats
-            }, { merge: true });
+            await sincronizarCatalogoPublico(products, updatedCats);
             setCategoriesList(updatedCats);
             setCatForm({ id: '', name: '', imageUrl: '', tagOption: 'DESTAQUE', customTag: '' });
         } catch (error) {
@@ -216,13 +244,13 @@ export default function Produtos({ user, permissoes }) {
     const handleDeleteCategory = async (id) => {
         if (!window.confirm("Excluir esta categoria?")) return;
         const updatedCats = categoriesList.filter(c => c.id !== id);
-        await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
-            categories: updatedCats
-        }, { merge: true });
+        await sincronizarCatalogoPublico(products, updatedCats);
         setCategoriesList(updatedCats);
     };
 
-    // Gestão de Produtos
+    // ==========================================
+    // GESTÃO DE PRODUTOS
+    // ==========================================
     const openModal = (product = null) => {
         if (product) {
             setEditingId(product.id);
@@ -259,7 +287,7 @@ export default function Produtos({ user, permissoes }) {
             setFormData(prev => ({
                 ...prev,
                 name: prodCusto.nome || '',
-                price: prodCusto.precoVenda || 0,
+                price: prodCusto.precoVenda || prodCusto.precoSugerido || 0,
                 weight: prodCusto.peso || 0,
                 dimensions: {
                     length: prodCusto.comprimento || 0,
@@ -292,16 +320,21 @@ export default function Produtos({ user, permissoes }) {
         e.preventDefault();
         setSaving(true);
         
+        const precoNormal = Number(formData.price || 0);
+        const precoPromocional = Number(formData.promoPrice || 0);
+        const precoFinalVenda = formData.isPromo && precoPromocional > 0 ? precoPromocional : precoNormal;
+
         const newProduct = {
             id: editingId || crypto.randomUUID(),
             ...formData,
-            price: Number(formData.price),
-            promoPrice: Number(formData.promoPrice),
-            weight: Number(formData.weight),
+            price: precoNormal,
+            promoPrice: precoPromocional,
+            sellingPrice: precoFinalVenda,
+            weight: Number(formData.weight || 0),
             dimensions: {
-                length: Number(formData.dimensions.length),
-                width: Number(formData.dimensions.width),
-                height: Number(formData.dimensions.height)
+                length: Number(formData.dimensions.length || 0),
+                width: Number(formData.dimensions.width || 0),
+                height: Number(formData.dimensions.height || 0)
             }
         };
 
@@ -310,9 +343,7 @@ export default function Produtos({ user, permissoes }) {
             : [...products, newProduct];
 
         try {
-            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
-                products: updatedProducts
-            }, { merge: true });
+            await sincronizarCatalogoPublico(updatedProducts, categoriesList);
             setProducts(updatedProducts);
             setIsModalOpen(false);
         } catch (error) {
@@ -322,11 +353,9 @@ export default function Produtos({ user, permissoes }) {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm("Tem a certeza que deseja remover este produto do catálogo?")) return;
+        if (!window.confirm("Tem certeza que deseja remover este produto do catálogo?")) return;
         const updatedProducts = products.filter(p => p.id !== id);
-        await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({
-            products: updatedProducts
-        }, { merge: true });
+        await sincronizarCatalogoPublico(updatedProducts, categoriesList);
         setProducts(updatedProducts);
     };
 
@@ -422,7 +451,7 @@ export default function Produtos({ user, permissoes }) {
                         <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                             <div>
                                 <h3 className="font-black text-slate-800 text-lg uppercase">Categorias do Mosaico</h3>
-                                <p className="text-xs font-bold text-slate-400">Padrão Universal 900x600 px: encaixa automaticamente em todos os cards do mosaico</p>
+                                <p className="text-xs font-bold text-slate-400">Padrão Universal 900x600 px: encaixa automaticamente no celular e no PC</p>
                             </div>
                             <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-black"><Icon name="x" size={24} /></button>
                         </div>
@@ -477,7 +506,7 @@ export default function Produtos({ user, permissoes }) {
                                                 <option value="OFERTAS">OFERTAS</option>
                                                 <option value="MAIS VENDIDOS">MAIS VENDIDOS</option>
                                                 <option value="PERSONALIZADOS">PERSONALIZADOS</option>
-                                                <option value="DEPARTAMENTO">DEPARTAMENTO</option>
+                                                <option value="CATEGORIA">CATEGORIA</option>
                                                 <option value="">Sem Texto Laranja</option>
                                                 <option value="OUTRO">Digitar Outro Texto...</option>
                                             </select>
@@ -568,7 +597,7 @@ export default function Produtos({ user, permissoes }) {
                                         </option>
                                         {produtosDoCusto.map(prod => (
                                             <option key={prod.id} value={prod.id}>
-                                                {prod.nome} (Custo base: {formatMoney(prod.custoTotal || 0)})
+                                                {prod.nome} (Custo: {formatMoney(prod.custoTotal || 0)} • Sugerido: {formatMoney(prod.precoSugerido || prod.precoVenda || 0)})
                                             </option>
                                         ))}
                                     </select>
@@ -752,9 +781,7 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             )}
 
-            {/* ===================================================================== */}
-            {/* MODAL INTERATIVO DE CORTE E ENQUADRAMENTO (PRODUTOS E MOSAICO)        */}
-            {/* ===================================================================== */}
+            {/* MODAL INTERATIVO DE CORTE E ENQUADRAMENTO */}
             {cropModal.open && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
@@ -822,7 +849,6 @@ export default function Produtos({ user, permissoes }) {
                                 </button>
                             </div>
 
-                            {/* Preview com Grade de Enquadramento Segura */}
                             <div className={`mx-auto rounded-2xl border-2 border-indigo-500 shadow-inner overflow-hidden bg-slate-100 relative ${
                                 cropModal.aspect === '1:1' ? 'w-64 h-64' : 'w-72 h-48'
                             }`}>
@@ -837,7 +863,6 @@ export default function Produtos({ user, permissoes }) {
                                 </div>
                             </div>
 
-                            {/* Controles de Zoom e Posição */}
                             <div className="space-y-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
                                 <div>
                                     <div className="flex justify-between font-black uppercase text-[10px] text-slate-600 mb-1">
