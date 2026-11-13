@@ -22,6 +22,10 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const [deptOpen, setDeptOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
 
+    // Estado do Modal de Visualização Ampliada (Lightbox / Zoom da Foto)
+    const [produtoZoom, setProdutoZoom] = useState(null);
+    const [superZoomAtivo, setSuperZoomAtivo] = useState(false);
+
     // Estado do Cliente Logado + Pedidos Sincronizados com Firebase
     const [clienteLogado, setClienteLogado] = useState(null);
     const [mensagemTopo, setMensagemTopo] = useState('');
@@ -106,6 +110,11 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
     const contarProdutosCategoria = (nomeCat) => {
         if (!nomeCat) return 0;
         return produtos.filter(p => (p.category || '').toLowerCase() === nomeCat.toLowerCase()).length;
+    };
+
+    const abrirZoomProduto = (produto) => {
+        setSuperZoomAtivo(false);
+        setProdutoZoom(produto);
     };
 
     // =====================================================
@@ -728,7 +737,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     ativo ? 'border-orange-500 ring-4 ring-orange-500/25' : 'border-white shadow-md'
                 }`}
             >
-                {/* Imagem com Zoom Suave + Leve Rotação Cinematográfica no Hover */}
                 {cat.imageUrl ? (
                     <img
                         src={cat.imageUrl}
@@ -741,18 +749,13 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </div>
                 )}
 
-                {/* Vinheta Escura Gradual + Iluminação no Hover */}
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/25 to-black/10 group-hover:from-slate-950/80 transition-all duration-500" />
-
-                {/* Feixe de Brilho Diagonal (Shine Effect) que atravessa o card no Hover */}
                 <div className="absolute -inset-full top-0 block w-1/2 -skew-x-12 bg-gradient-to-r from-transparent to-white/25 opacity-0 group-hover:opacity-100 group-hover:translate-x-[360%] transition-all duration-1000 ease-out pointer-events-none" />
 
-                {/* Contador flutuante em Vidro Fosco ( canto superior direito ) */}
                 <div className="absolute top-3.5 right-3.5 z-10 bg-black/40 backdrop-blur-md border border-white/20 text-white/90 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
                     {qtdItens} {qtdItens === 1 ? 'item' : 'itens'}
                 </div>
 
-                {/* Conteúdo Inferior com Animação de Subida */}
                 <div className="absolute inset-x-0 bottom-0 p-5 z-10 flex items-end justify-between gap-3">
                     <div className="transform transition-transform duration-300 group-hover:-translate-y-1">
                         {tagExibida && (
@@ -765,7 +768,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                         </h3>
                     </div>
 
-                    {/* Botão "Explorar ->" que desliza no hover */}
                     <div className="w-9 h-9 rounded-full bg-white/20 group-hover:bg-orange-500 backdrop-blur-md border border-white/30 text-white flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-110 shadow-lg">
                         <span className="text-sm font-black transform transition-transform group-hover:translate-x-0.5">→</span>
                     </div>
@@ -1052,9 +1054,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
             {/* CONTEÚDO PRINCIPAL */}
             <main className="w-full px-4 md:px-10 xl:px-16 py-8 space-y-12 flex-1">
                 
-                {/* ========================================================================= */}
-                {/* 5. MOSAICO ASSIMÉTRICO DINÂMICO (BENTO GRID) COM EFEITOS DE HOVER         */}
-                {/* ========================================================================= */}
+                {/* 5. MOSAICO ASSIMÉTRICO DINÂMICO (BENTO GRID) */}
                 {categorias.length > 0 && (
                     <section className="relative py-2">
                         {totalPaginasMosaico > 1 && (
@@ -1082,10 +1082,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                         )}
 
                         <div className="space-y-5">
-                            {/* BLOCO SUPERIOR ASSIMÉTRICO: 3 Colunas (Vertical) + 3 Colunas (2 Empilhados) + 6 Colunas (Panorâmico) */}
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
-                                
-                                {/* Slot 0: Vertical Alto */}
                                 {categoriasMosaicoAtual[0] && renderCardMosaico(
                                     categoriasMosaicoAtual[0],
                                     'md:col-span-3 min-h-[340px] md:min-h-[370px]',
@@ -1093,7 +1090,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     'text-xl md:text-2xl'
                                 )}
 
-                                {/* Slots 1 e 2: Dupla Empilhada Assimétrica */}
                                 {(categoriasMosaicoAtual[1] || categoriasMosaicoAtual[2]) && (
                                     <div className="md:col-span-3 flex flex-col gap-5 justify-between">
                                         {categoriasMosaicoAtual[1] && renderCardMosaico(
@@ -1111,7 +1107,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     </div>
                                 )}
 
-                                {/* Slot 3: vitrine Panorâmica Principal */}
                                 {categoriasMosaicoAtual[3] && renderCardMosaico(
                                     categoriasMosaicoAtual[3],
                                     'md:col-span-6 min-h-[340px] md:min-h-[370px]',
@@ -1120,7 +1115,6 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 )}
                             </div>
 
-                            {/* BLOCO INFERIOR DINÂMICO: Larguras Assimétricas (4 cols + 3 cols + 3 cols + 2 cols) */}
                             {categoriasMosaicoAtual.length > 4 && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-5">
                                     {categoriasMosaicoAtual.slice(4, 8).map((cat, index) => {
@@ -1193,7 +1187,7 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </section>
                 )}
 
-                {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES */}
+                {/* 7. CARROSSÉIS: DESTAQUES + PROMOÇÕES (COM ZOOM AO PASSAR O MOUSE) */}
                 {(listaCarrosselDestaque.length > 0 || listaCarrosselPromo.length > 0) && categoriaFiltro === 'todas' && !busca && (
                     <section className={`grid grid-cols-1 ${listaCarrosselDestaque.length > 0 && listaCarrosselPromo.length > 0 ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
                         {listaCarrosselDestaque.length > 0 && (() => {
@@ -1213,13 +1207,27 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     </div>
 
                                     <div className="p-6 grid grid-cols-1 sm:grid-cols-12 gap-6 items-center flex-1 bg-gradient-to-br from-white via-slate-50 to-amber-50/30">
-                                        <div className="sm:col-span-5 flex items-center justify-center bg-white rounded-2xl p-3 border border-slate-200/80 h-52 shadow-inner relative overflow-hidden">
+                                        <div
+                                            onClick={() => abrirZoomProduto(prodSlide)}
+                                            className="sm:col-span-5 group/img flex items-center justify-center bg-white rounded-2xl p-3 border border-slate-200/80 h-52 shadow-inner relative overflow-hidden cursor-zoom-in"
+                                        >
                                             <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
                                                 <span className="bg-emerald-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">TOP</span>
                                                 {prodSlide.novidade && <span className="bg-blue-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">NOVO</span>}
                                                 {prodSlide.maisVendido && <span className="bg-amber-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">MAIS VENDIDO</span>}
                                             </div>
-                                            {prodSlide.imageUrl ? <img src={prodSlide.imageUrl} alt={prodSlide.name} className="w-full h-full object-contain hover:scale-105 transition-transform" /> : <Icon name="image" size={48} className="text-slate-200" />}
+                                            {prodSlide.imageUrl ? (
+                                                <>
+                                                    <img src={prodSlide.imageUrl} alt={prodSlide.name} className="w-full h-full object-contain group-hover/img:scale-105 transition-transform duration-300" />
+                                                    <div className="absolute inset-0 bg-slate-900/35 opacity-0 group-hover/img:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                                                        <span className="bg-white/95 text-slate-900 px-3 py-1.5 rounded-full font-black text-[10px] uppercase tracking-wider shadow-lg flex items-center gap-1.5">
+                                                            <Icon name="maximize" size={13} /> Ampliar Foto
+                                                        </span>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <Icon name="image" size={48} className="text-slate-200" />
+                                            )}
                                         </div>
                                         <div className="sm:col-span-7 space-y-3">
                                             <span className="text-xs font-black uppercase text-orange-500 block">{prodSlide.category || 'Destaque'}</span>
@@ -1259,13 +1267,27 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                     </div>
 
                                     <div className="p-6 grid grid-cols-1 sm:grid-cols-12 gap-6 items-center flex-1 bg-gradient-to-br from-white via-rose-50/20 to-orange-50/30">
-                                        <div className="sm:col-span-5 flex items-center justify-center bg-white rounded-2xl p-3 border border-rose-100 h-52 shadow-inner relative overflow-hidden">
+                                        <div
+                                            onClick={() => abrirZoomProduto(promoSlide)}
+                                            className="sm:col-span-5 group/img flex items-center justify-center bg-white rounded-2xl p-3 border border-rose-100 h-52 shadow-inner relative overflow-hidden cursor-zoom-in"
+                                        >
                                             <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
                                                 <span className="bg-rose-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">-{descPerc}% OFF</span>
                                                 {promoSlide.novidade && <span className="bg-blue-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">NOVO</span>}
                                                 {promoSlide.maisVendido && <span className="bg-amber-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded">MAIS VENDIDO</span>}
                                             </div>
-                                            {promoSlide.imageUrl ? <img src={promoSlide.imageUrl} alt={promoSlide.name} className="w-full h-full object-contain hover:scale-105 transition-transform" /> : <Icon name="image" size={48} className="text-slate-200" />}
+                                            {promoSlide.imageUrl ? (
+                                                <>
+                                                    <img src={promoSlide.imageUrl} alt={promoSlide.name} className="w-full h-full object-contain group-hover/img:scale-105 transition-transform duration-300" />
+                                                    <div className="absolute inset-0 bg-slate-900/35 opacity-0 group-hover/img:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                                                        <span className="bg-white/95 text-slate-900 px-3 py-1.5 rounded-full font-black text-[10px] uppercase tracking-wider shadow-lg flex items-center gap-1.5">
+                                                            <Icon name="maximize" size={13} /> Ampliar Foto
+                                                        </span>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <Icon name="image" size={48} className="text-slate-200" />
+                                            )}
                                         </div>
                                         <div className="sm:col-span-7 space-y-3">
                                             <span className="text-xs font-black uppercase text-rose-600 block">Em Promoção</span>
@@ -1323,7 +1345,9 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     </div>
                 </section>
 
-                {/* 9. GRADE DE PRODUTOS COM FOTOS QUADRADAS PADRONIZADAS (1:1) */}
+                {/* ========================================================================= */}
+                {/* 9. GRADE DE PRODUTOS COM BOTÃO DE AMPLIAR FOTO AO PASSAR O MOUSE          */}
+                {/* ========================================================================= */}
                 <section id="vitrine" className="space-y-6">
                     <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-3 gap-2">
                         <div>
@@ -1350,32 +1374,46 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                                 const isFav = favoritos.includes(p.id);
                                 return (
                                     <div key={p.id} className="bg-white rounded-2xl p-4 border border-slate-200/80 hover:border-[var(--cor-primaria)] hover:shadow-xl transition-all duration-300 flex flex-col justify-between group relative">
-                                        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 items-start">
+                                        <div className="absolute top-3 left-3 z-20 flex flex-col gap-1 items-start pointer-events-none">
                                             {descontoPerc > 0 && <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm">-{descontoPerc}%</span>}
                                             {p.destaque && <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase">Top</span>}
                                             {p.novidade && <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase">Novidade</span>}
                                             {p.maisVendido && <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase">Mais Vendido</span>}
                                         </div>
 
-                                        <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
-                                            <button onClick={() => toggleFavorito(p.id)} title="Favoritar" className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-sm transition-all ${isFav ? 'bg-rose-500 border-rose-500 text-white scale-110' : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500'}`}>
+                                        <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5">
+                                            <button onClick={() => toggleFavorito(p.id)} title="Favoritar" className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-sm transition-all cursor-pointer ${isFav ? 'bg-rose-500 border-rose-500 text-white scale-110' : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500'}`}>
                                                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                                             </button>
-                                            <button onClick={() => handleCompartilhar(p)} title="Compartilhar" className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-[var(--cor-primaria)] flex items-center justify-center shadow-sm transition-colors">
+                                            <button onClick={() => handleCompartilhar(p)} title="Compartilhar" className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-[var(--cor-primaria)] flex items-center justify-center shadow-sm transition-colors cursor-pointer">
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
                                             </button>
                                         </div>
-                                        {copiadoId === p.id && <span className="absolute top-12 right-12 z-20 bg-slate-900 text-white text-[10px] font-bold px-2.5 py-1 rounded shadow">Link copiado!</span>}
+                                        {copiadoId === p.id && <span className="absolute top-12 right-12 z-30 bg-slate-900 text-white text-[10px] font-bold px-2.5 py-1 rounded shadow">Link copiado!</span>}
                                         
-                                        {/* Caixa Quadrada Padrão 1:1 para todas as fotos de produtos */}
-                                        <div className="w-full aspect-square flex items-center justify-center mb-3 bg-slate-50 rounded-xl overflow-hidden relative">
-                                            {p.imageUrl ? <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" /> : <Icon name="image" size={44} className="text-slate-300" />}
+                                        {/* Caixa Quadrada Padrão 1:1 com Botão "Ampliar Foto" ao passar o mouse */}
+                                        <div
+                                            onClick={() => abrirZoomProduto(p)}
+                                            className="w-full aspect-square flex items-center justify-center mb-3 bg-slate-50 rounded-xl overflow-hidden relative cursor-zoom-in group/foto"
+                                        >
+                                            {p.imageUrl ? (
+                                                <>
+                                                    <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover/foto:scale-110 transition-transform duration-500" />
+                                                    <div className="absolute inset-0 bg-slate-900/35 opacity-0 group-hover/foto:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                                                        <span className="bg-white/95 text-slate-900 px-3.5 py-2 rounded-full font-black text-[11px] uppercase tracking-wider shadow-xl flex items-center gap-1.5 transform translate-y-2 group-hover/foto:translate-y-0 transition-transform duration-200">
+                                                            <Icon name="maximize" size={14} className="text-orange-500" /> Ampliar Foto
+                                                        </span>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <Icon name="image" size={44} className="text-slate-300" />
+                                            )}
                                         </div>
                                         
                                         <div className="space-y-1.5 flex-1 flex flex-col justify-between">
                                             <div>
                                                 <span className="text-[10px] font-black uppercase text-orange-500 block">{p.category || 'Geral'}</span>
-                                                <h3 className="font-bold text-sm text-slate-800 group-hover:text-[var(--cor-primaria)] transition-colors line-clamp-2 min-h-[40px]">{p.name}</h3>
+                                                <h3 onClick={() => abrirZoomProduto(p)} className="font-bold text-sm text-slate-800 group-hover:text-[var(--cor-primaria)] transition-colors line-clamp-2 min-h-[40px] cursor-pointer">{p.name}</h3>
                                                 {p.description && <p className="text-[11px] text-slate-500 line-clamp-2 mt-1">{p.description}</p>}
                                             </div>
                                             <div className="pt-2">
@@ -1512,6 +1550,133 @@ export default function TemplateVibrante({ loja, produtos, categorias, donoUid }
                     <span className="font-black text-xs">{telefoneAjustes || 'Atendimento Online'}</span>
                 </div>
             </a>
+
+            {/* ========================================================================= */}
+            {/* MODAL LIGHTBOX DE VISUALIZAÇÃO GRANDE DA FOTO E DETALHES DO PRODUTO        */}
+            {/* ========================================================================= */}
+            {produtoZoom && (
+                <div
+                    onClick={() => setProdutoZoom(null)}
+                    className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 overflow-y-auto"
+                >
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 relative my-auto animate-fadeIn"
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setProdutoZoom(null)}
+                            className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-slate-900/80 hover:bg-black text-white flex items-center justify-center text-lg font-black shadow-lg cursor-pointer transition-transform hover:scale-105"
+                            title="Fechar Visualização"
+                        >
+                            ✕
+                        </button>
+
+                        {/* Coluna Esquerda: Foto Grande com opção de Super Zoom 2x */}
+                        <div
+                            onClick={() => setSuperZoomAtivo(!superZoomAtivo)}
+                            className="md:col-span-7 bg-slate-100 flex items-center justify-center relative min-h-[340px] md:min-h-[480px] overflow-hidden cursor-zoom-in select-none p-4"
+                            title={superZoomAtivo ? "Clique para reduzir o zoom" : "Clique para aproximar 2x"}
+                        >
+                            {produtoZoom.imageUrl ? (
+                                <img
+                                    src={produtoZoom.imageUrl}
+                                    alt={produtoZoom.name}
+                                    className={`max-h-[460px] w-auto object-contain rounded-xl transition-transform duration-300 ${
+                                        superZoomAtivo ? 'scale-150 cursor-zoom-out' : 'scale-100 hover:scale-105'
+                                    }`}
+                                />
+                            ) : (
+                                <Icon name="image" size={64} className="text-slate-300" />
+                            )}
+                            <span className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-xs text-white text-[10px] font-black uppercase px-3 py-1 rounded-full pointer-events-none">
+                                {superZoomAtivo ? '🔍 Clique para voltar ao tamanho normal' : '🔍 Clique na imagem para dar Super Zoom'}
+                            </span>
+                        </div>
+
+                        {/* Coluna Direita: Informações Completas e Ações de Compra */}
+                        <div className="md:col-span-5 p-6 md:p-8 flex flex-col justify-between space-y-6 bg-white">
+                            <div className="space-y-3">
+                                <div className="flex flex-wrap gap-1.5">
+                                    <span className="text-[10px] font-black uppercase bg-orange-100 text-orange-700 px-2.5 py-0.5 rounded-full">
+                                        {produtoZoom.category || 'Catálogo'}
+                                    </span>
+                                    {produtoZoom.destaque && <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-700 px-2.5 py-0.5 rounded-full">★ Top</span>}
+                                    {produtoZoom.novidade && <span className="text-[10px] font-black uppercase bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full">Novidade</span>}
+                                    {produtoZoom.maisVendido && <span className="text-[10px] font-black uppercase bg-amber-100 text-amber-700 px-2.5 py-0.5 rounded-full">Mais Vendido</span>}
+                                </div>
+
+                                <h3 className="text-2xl font-black text-slate-900 leading-tight">
+                                    {produtoZoom.name}
+                                </h3>
+
+                                {produtoZoom.sku && (
+                                    <span className="text-[11px] font-bold text-slate-400 block">
+                                        Código SKU: {produtoZoom.sku}
+                                    </span>
+                                )}
+
+                                <div className="pt-2 flex items-baseline gap-3">
+                                    <span className="text-3xl font-black text-rose-600">
+                                        {formatMoney(produtoZoom.sellingPrice)}
+                                    </span>
+                                    {produtoZoom.isPromo && (
+                                        <span className="text-sm text-slate-400 line-through font-bold">
+                                            {formatMoney(produtoZoom.price)}
+                                        </span>
+                                    )}
+                                </div>
+
+                                <p className="text-xs md:text-sm text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+                                    {produtoZoom.description || 'Peça produzida com materiais de alta resistência e acabamento de precisão.'}
+                                </p>
+
+                                {/* Exibe variações se houver */}
+                                {Array.isArray(produtoZoom.variations) && produtoZoom.variations.length > 0 && (
+                                    <div className="space-y-2 pt-2">
+                                        {produtoZoom.variations.map((v, i) => (
+                                            <div key={i}>
+                                                <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">{v.name}:</span>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {(v.options || []).map((opt, idx) => (
+                                                        <span key={idx} className="text-xs font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200">
+                                                            {opt}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2.5 pt-4 border-t border-slate-100">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const prod = produtoZoom;
+                                        setProdutoZoom(null);
+                                        handleComprarDireto(prod);
+                                    }}
+                                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-lg transition-colors cursor-pointer"
+                                >
+                                    Comprar Agora
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        adicionarAoCarrinho(produtoZoom, false);
+                                        setProdutoZoom(null);
+                                    }}
+                                    className="w-full py-3 bg-orange-50 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200 rounded-xl font-black uppercase text-xs tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                    <Icon name="shopping-cart" size={15} /> Adicionar ao Carrinho
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* 13. MODAL DE LOGIN E CADASTRO */}
             {authModal.open && (
