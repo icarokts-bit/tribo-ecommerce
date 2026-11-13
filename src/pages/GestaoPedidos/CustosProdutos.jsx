@@ -25,7 +25,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         taxaFalhaPadrao: 5
     });
 
-    // Formulário da Ficha (Tempo em Minutos com conversão automática para Horas)
+    // Formulário da Ficha
     const [formData, setFormData] = useState({
         nome: '',
         precoVenda: '',
@@ -44,10 +44,10 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         ingredientes: []
     });
 
-    // Campos temporários para adicionar Insumo / Filamento
+    // Campos para adicionar Insumo / Filamento
     const [insumoSelectId, setInsumoSelectId] = useState('');
     const [ingNome, setIngNome] = useState('');
-    const [ingUnidade, setIngUnidade] = useState('g_kg');
+    const [ingUnidade, setIngUnidade] = useState('g'); // 'g' (Gramas usando preço do Kg), 'un' (Unidade), 'ml' (Mililitros usando preço do Litro)
     const [ingQtdUsada, setIngQtdUsada] = useState('');
     const [ingCustoUnitario, setIngCustoUnitario] = useState('');
 
@@ -75,7 +75,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
     const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-    // Converte minutos para texto claro: Ex: 40 -> "40 min (0.67h)" | 150 -> "2h 30min (2.50h)"
     const formatarMinutosParaTexto = (totalMin) => {
         const minNum = Number(totalMin || 0);
         if (minNum <= 0) return '0 min (0h)';
@@ -86,6 +85,28 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         if (h > 0) return `${h}h (${dec}h)`;
         return `${m} min (${dec}h)`;
     };
+
+    // Função centralizada que calcula o custo exato do item (dividindo por 1000 quando for gramas ou ml)
+    const calcularCustoItem = (unidade, qtd, precoBase) => {
+        const q = Number(qtd || 0);
+        const p = Number(precoBase || 0);
+        const un = String(unidade || 'g').toLowerCase();
+
+        if (un === 'g' || un === 'g_kg' || un === 'gramas' || un === 'kg') {
+            // Se o usuário digitou o preço do Kg (ex: R$ 68,00 ou R$ 95,00), divide por 1000 e multiplica pelas gramas!
+            // Caso ele tenha digitado o preço já por grama (ex: 0.08), mantém proporcional.
+            return p > 1 ? (p / 1000) * q : p * q;
+        }
+        if (un === 'ml' || un === 'l') {
+            return p > 1 ? (p / 1000) * q : p * q;
+        }
+        // Para unidades ('un', tags NFC, argolas, caixas) multiplica direto
+        return p * q;
+    };
+
+    const previewCustoItemAtual = useMemo(() => {
+        return calcularCustoItem(ingUnidade, ingQtdUsada, ingCustoUnitario);
+    }, [ingUnidade, ingQtdUsada, ingCustoUnitario]);
 
     const handleSalvarConfigTaxas = async (e) => {
         e.preventDefault();
@@ -106,6 +127,15 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 ? Number(ficha.tempoTotalMaquinaMinutos)
                 : (Number(ficha.tempoMaquinaHoras || 0) * 60) + Number(ficha.tempoMaquinaMinutos || 0);
 
+            // Normaliza ingredientes antigos caso algum tenha sido salvo multiplicado por quilo sem dividir por 1000
+            const ingredientesCorrigidos = (Array.isArray(ficha.ingredientes) ? ficha.ingredientes : []).map(ing => {
+                if ((ing.unidade === 'g' || ing.modoCalculo === 'g_kg') && Number(ing.custoBaseInformado) > 1 && Number(ing.custoTotal) > Number(ing.custoBaseInformado)) {
+                    const recalculado = (Number(ing.custoBaseInformado) / 1000) * Number(ing.qtd);
+                    return { ...ing, custoTotal: Number(recalculado.toFixed(4)) };
+                }
+                return ing;
+            });
+
             setFormData({
                 nome: ficha.nome || ficha.name || '',
                 precoVenda: ficha.precoVenda || ficha.price || 0,
@@ -121,7 +151,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 custoHoraMaoDeObra: ficha.custoHoraMaoDeObra ?? configTaxas.custoHoraMaoDeObra,
                 taxaFalhaPerc: ficha.taxaFalhaPerc ?? configTaxas.taxaFalhaPadrao,
                 embalagemCusto: ficha.embalagemCusto ?? 0,
-                ingredientes: Array.isArray(ficha.ingredientes) ? ficha.ingredientes : []
+                ingredientes: ingredientesCorrigidos
             });
         } else {
             setEditingId(null);
@@ -145,7 +175,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         }
         setInsumoSelectId('');
         setIngNome('');
-        setIngUnidade('g_kg');
+        setIngUnidade('g');
         setIngQtdUsada('');
         setIngCustoUnitario('');
         setIsModalOpen(true);
@@ -157,25 +187,35 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         if (!id) return;
         const item = estoqueInsumos.find(i => i.id === id);
         if (item) {
-            setIngNome(item.nome || item.name || '');
-            setIngUnidade(item.unidade || 'un');
-            setIngCustoUnitario(item.custoUnitario || item.precoCusto || '');
+            const nomeItem = item.nome || item.name || '';
+            const unItem = String(item.unidade || item.unit || '').toLowerCase();
+            setIngNome(nomeItem);
+
+            // Se for filamento, resina, kg ou g, seleciona automaticamente Gramas (calculado por Kg)
+            if (unItem.includes('kg') || unItem === 'g' || nomeItem.toLowerCase().includes('filamento')) {
+                setIngUnidade('g');
+            } else if (unItem.includes('l') || unItem === 'ml') {
+                setIngUnidade('ml');
+            } else {
+                setIngUnidade('un');
+            }
+
+            setIngCustoUnitario(item.custoUnitario || item.precoCusto || item.price || item.valor || '');
         }
     };
 
     const handleAdicionarIngrediente = () => {
-        if (!ingNome.trim() || !ingQtdUsada) return alert("Preencha o nome do material/insumo e a quantidade usada.");
+        if (!ingNome.trim() || !ingQtdUsada) {
+            return alert("Preencha o nome do material/filamento e a quantidade usada.");
+        }
         const qtd = Number(ingQtdUsada || 0);
         const valorInformado = Number(ingCustoUnitario || 0);
-
-        const custoFinalItem = ingUnidade === 'g_kg'
-            ? (valorInformado / 1000) * qtd
-            : valorInformado * qtd;
+        const custoFinalItem = calcularCustoItem(ingUnidade, qtd, valorInformado);
 
         const novoIng = {
             id: crypto.randomUUID(),
             nome: ingNome.trim(),
-            unidade: ingUnidade === 'g_kg' ? 'g' : ingUnidade,
+            unidade: ingUnidade === 'g' ? 'g' : ingUnidade,
             qtd: qtd,
             custoBaseInformado: valorInformado,
             modoCalculo: ingUnidade,
@@ -199,7 +239,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         }));
     };
 
-    // Cálculo automático em tempo real convertendo Minutos -> Horas
+    // Cálculo automático em tempo real convertendo Minutos -> Horas e Gramas -> Kg
     const resumoCalculado = useMemo(() => {
         const custoMateriais = formData.ingredientes.reduce((acc, i) => acc + Number(i.custoTotal || 0), 0);
 
@@ -404,8 +444,8 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 </span>
                                             </td>
                                             <td className="p-4 text-right whitespace-nowrap">
-                                                <button onClick={() => abrirModalNovaFicha(f)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1"><Icon name="edit" size={16} /></button>
-                                                <button onClick={() => handleExcluirFicha(f.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={16} /></button>
+                                                <button onClick={() => abrirModalNovaFicha(f)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1 cursor-pointer"><Icon name="edit" size={16} /></button>
+                                                <button onClick={() => handleExcluirFicha(f.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg cursor-pointer"><Icon name="trash-2" size={16} /></button>
                                             </td>
                                         </tr>
                                     );
@@ -471,7 +511,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                             <span className="text-xs font-black uppercase text-indigo-800 tracking-wider">
                                                 ⚡ 2. Tempo em Minutos, Energia & Máquina
                                             </span>
-                                            <span className="text-[10px] font-black uppercase bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
+                                            <span className="text-[10px] font-black uppercase bg-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded">
                                                 Minutos → Horas
                                             </span>
                                         </div>
@@ -615,93 +655,121 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                     </div>
                                 </div>
 
-                                {/* COLUNA DIREITA */}
+                                {/* COLUNA DIREITA: MATERIAIS E FILAMENTO (LAYOUT ESPAÇOSO EM 2 LINHAS SEM CORTAR TEXTO) */}
                                 <div className="lg:col-span-6 flex flex-col justify-between space-y-5">
                                     <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-4 flex-1 flex flex-col">
                                         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                                             <span className="text-xs font-black uppercase text-indigo-700 tracking-wider">
                                                 📦 4. Matéria-Prima, Filamento e Insumos
                                             </span>
-                                            <span className="text-xs font-black text-slate-500">
+                                            <span className="text-xs font-black text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
                                                 Subtotal: {formatMoney(resumoCalculado.custoMateriais)}
                                             </span>
                                         </div>
 
-                                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3.5">
                                             {estoqueInsumos.length > 0 && (
-                                                <select
-                                                    value={insumoSelectId}
-                                                    onChange={handleSelecionarInsumoEstoque}
-                                                    className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none cursor-pointer"
-                                                >
-                                                    <option value="">Puxar insumo/filamento do Estoque (Opcional)...</option>
-                                                    {estoqueInsumos.map(item => (
-                                                        <option key={item.id} value={item.id}>{item.nome || item.name}</option>
-                                                    ))}
-                                                </select>
+                                                <div>
+                                                    <label className="text-[10px] font-black uppercase text-indigo-700 block mb-1">
+                                                        Puxar do Estoque (Opcional)
+                                                    </label>
+                                                    <select
+                                                        value={insumoSelectId}
+                                                        onChange={handleSelecionarInsumoEstoque}
+                                                        className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                                                    >
+                                                        <option value="">-- Selecionar filamento ou insumo do Estoque --</option>
+                                                        {estoqueInsumos.map(item => (
+                                                            <option key={item.id} value={item.id}>{item.nome || item.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                             )}
 
-                                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+                                            {/* Linha 1 Ampla: Nome do Material/Filamento (Não corta mais o texto!) */}
+                                            <div>
+                                                <label className="text-[10px] font-black uppercase text-slate-600 block mb-1">
+                                                    Nome do Material / Filamento / Insumo *
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={ingNome}
+                                                    onChange={e => setIngNome(e.target.value)}
+                                                    placeholder="Ex: Filamento PETG Branco, Tag NFC, Argola de Chaveiro..."
+                                                    className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold outline-none focus:border-indigo-600"
+                                                />
+                                            </div>
+
+                                            {/* Linha 2 Ampla: Unidade + Peso/Qtd + Preço do Rolo/Unidade */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                                                 <div className="sm:col-span-5">
-                                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Material / Filamento</label>
-                                                    <input
-                                                        type="text"
-                                                        value={ingNome}
-                                                        onChange={e => setIngNome(e.target.value)}
-                                                        placeholder="Ex: Filamento PETG, Tag NFC..."
-                                                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
-                                                    />
-                                                </div>
-                                                <div className="sm:col-span-3">
-                                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Unidade</label>
+                                                    <label className="text-[10px] font-black uppercase text-slate-600 block mb-1">
+                                                        Como calcular?
+                                                    </label>
                                                     <select
                                                         value={ingUnidade}
                                                         onChange={e => setIngUnidade(e.target.value)}
-                                                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                                                        className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold outline-none cursor-pointer"
                                                     >
-                                                        <option value="g_kg">Gramas (Informar R$/Kg)</option>
-                                                        <option value="un">Unidade (R$/un)</option>
-                                                        <option value="g">Gramas (R$/g)</option>
-                                                        <option value="ml">Mililitros (R$/ml)</option>
+                                                        <option value="g">Gramas (Usar preço de 1 Kg)</option>
+                                                        <option value="un">Unidade (Preço por peça)</option>
+                                                        <option value="ml">Mililitros (Usar preço de 1 Litro)</option>
                                                     </select>
                                                 </div>
-                                                <div className="sm:col-span-2">
-                                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                                                        {ingUnidade.startsWith('g') ? 'Peso (g)' : 'Qtd'}
+
+                                                <div className="sm:col-span-3">
+                                                    <label className="text-[10px] font-black uppercase text-slate-600 block mb-1">
+                                                        {ingUnidade === 'g' ? 'Peso Usado (g)' : ingUnidade === 'ml' ? 'Qtd (ml)' : 'Qtd (un)'}
                                                     </label>
                                                     <input
                                                         type="number"
                                                         step="any"
                                                         value={ingQtdUsada}
                                                         onChange={e => setIngQtdUsada(e.target.value)}
-                                                        placeholder="30"
-                                                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center"
+                                                        placeholder={ingUnidade === 'g' ? 'Ex: 20' : 'Ex: 1'}
+                                                        className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-center outline-none focus:border-indigo-600"
                                                     />
                                                 </div>
-                                                <div className="sm:col-span-2">
-                                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                                                        {ingUnidade === 'g_kg' ? 'Preço 1Kg' : 'Custo Un.'}
+
+                                                <div className="sm:col-span-4">
+                                                    <label className="text-[10px] font-black uppercase text-emerald-700 block mb-1">
+                                                        {ingUnidade === 'g' ? 'Preço Rolo 1 Kg (R$)' : ingUnidade === 'ml' ? 'Preço 1 Litro (R$)' : 'Custo Unitário (R$)'}
                                                     </label>
                                                     <input
                                                         type="number"
                                                         step="any"
                                                         value={ingCustoUnitario}
                                                         onChange={e => setIngCustoUnitario(e.target.value)}
-                                                        placeholder={ingUnidade === 'g_kg' ? '95.00' : '1.50'}
-                                                        className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center"
+                                                        placeholder={ingUnidade === 'g' ? 'Ex: 68.00' : 'Ex: 1.50'}
+                                                        className="w-full p-2.5 bg-white border border-emerald-300 rounded-xl text-xs font-black text-center outline-none focus:border-emerald-600"
                                                     />
                                                 </div>
                                             </div>
 
+                                            {/* Preview em tempo real da conversão antes de adicionar */}
+                                            {ingQtdUsada && ingCustoUnitario && (
+                                                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 flex items-center justify-between text-[11px]">
+                                                    <span className="font-bold text-indigo-800">
+                                                        {ingUnidade === 'g'
+                                                            ? `Cálculo: (${formatMoney(ingCustoUnitario)} ÷ 1000g) × ${ingQtdUsada}g`
+                                                            : `Cálculo: ${ingQtdUsada} × ${formatMoney(ingCustoUnitario)}`}
+                                                    </span>
+                                                    <strong className="font-black text-indigo-900">
+                                                        = {formatMoney(previewCustoItemAtual)}
+                                                    </strong>
+                                                </div>
+                                            )}
+
                                             <button
                                                 type="button"
                                                 onClick={handleAdicionarIngrediente}
-                                                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-xs uppercase cursor-pointer"
+                                                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase cursor-pointer shadow-xs transition-colors"
                                             >
                                                 + Adicionar Material / Insumo na Ficha
                                             </button>
                                         </div>
 
+                                        {/* Lista de Materiais Adicionados */}
                                         <div className="flex-1 overflow-y-auto max-h-48 space-y-2 pr-1">
                                             {formData.ingredientes.length === 0 ? (
                                                 <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center text-xs font-bold text-slate-400">
@@ -709,14 +777,16 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 </div>
                                             ) : (
                                                 formData.ingredientes.map(item => (
-                                                    <div key={item.id} className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 text-xs">
+                                                    <div key={item.id} className="flex items-center justify-between bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs">
                                                         <div>
                                                             <span className="font-black text-slate-800">{item.nome}</span>
-                                                            <span className="text-slate-400 font-bold ml-2">({item.qtd}{item.unidade})</span>
+                                                            <span className="text-slate-500 font-bold ml-2">
+                                                                ({item.qtd}{item.unidade} {item.unidade === 'g' && item.custoBaseInformado ? `• R$ ${item.custoBaseInformado}/kg` : ''})
+                                                            </span>
                                                         </div>
                                                         <div className="flex items-center gap-3">
                                                             <span className="font-black text-rose-600">{formatMoney(item.custoTotal)}</span>
-                                                            <button type="button" onClick={() => removerIngrediente(item.id)} className="text-red-400 hover:text-red-600 font-black">✕</button>
+                                                            <button type="button" onClick={() => removerIngrediente(item.id)} className="text-red-400 hover:text-red-600 font-black cursor-pointer">✕</button>
                                                         </div>
                                                     </div>
                                                 ))
