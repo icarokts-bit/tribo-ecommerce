@@ -16,19 +16,21 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
     const [saving, setSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
 
-    // Tarifas padrão salvas no banco
+    // Tarifas padrão salvas no banco (incluindo Markup Padrão para Preço Sugerido)
     const [configTaxas, setConfigTaxas] = useState({
         tarifaKwh: 0.95,
         potenciaMediaWatts: 180,
         custoHoraMaquina: 1.20,
         custoHoraMaoDeObra: 25.00,
-        taxaFalhaPadrao: 5
+        taxaFalhaPadrao: 5,
+        markupSugeridoPadrao: 3.0 // Multiplicador 3x (66.7% de margem bruta)
     });
 
     // Formulário da Ficha
     const [formData, setFormData] = useState({
         nome: '',
         precoVenda: '',
+        markupEscolhido: 3.0,
         peso: 0.300,
         comprimento: 20,
         largura: 15,
@@ -47,7 +49,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
     // Campos para adicionar Insumo / Filamento
     const [insumoSelectId, setInsumoSelectId] = useState('');
     const [ingNome, setIngNome] = useState('');
-    const [ingUnidade, setIngUnidade] = useState('g'); // 'g' (Gramas usando preço do Kg), 'un' (Unidade), 'ml' (Mililitros usando preço do Litro)
+    const [ingUnidade, setIngUnidade] = useState('g');
     const [ingQtdUsada, setIngQtdUsada] = useState('');
     const [ingCustoUnitario, setIngCustoUnitario] = useState('');
 
@@ -86,21 +88,17 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         return `${m} min (${dec}h)`;
     };
 
-    // Função centralizada que calcula o custo exato do item (dividindo por 1000 quando for gramas ou ml)
     const calcularCustoItem = (unidade, qtd, precoBase) => {
         const q = Number(qtd || 0);
         const p = Number(precoBase || 0);
         const un = String(unidade || 'g').toLowerCase();
 
         if (un === 'g' || un === 'g_kg' || un === 'gramas' || un === 'kg') {
-            // Se o usuário digitou o preço do Kg (ex: R$ 68,00 ou R$ 95,00), divide por 1000 e multiplica pelas gramas!
-            // Caso ele tenha digitado o preço já por grama (ex: 0.08), mantém proporcional.
             return p > 1 ? (p / 1000) * q : p * q;
         }
         if (un === 'ml' || un === 'l') {
             return p > 1 ? (p / 1000) * q : p * q;
         }
-        // Para unidades ('un', tags NFC, argolas, caixas) multiplica direto
         return p * q;
     };
 
@@ -114,7 +112,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         try {
             await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/cost_rates`).set(configTaxas, { merge: true });
             setIsConfigOpen(false);
-            alert("Tarifas padrão salvas com sucesso!");
+            alert("Tarifas e multiplicador padrão salvos com sucesso!");
         } catch (err) {
             alert("Erro ao salvar tarifas.");
         }
@@ -127,7 +125,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 ? Number(ficha.tempoTotalMaquinaMinutos)
                 : (Number(ficha.tempoMaquinaHoras || 0) * 60) + Number(ficha.tempoMaquinaMinutos || 0);
 
-            // Normaliza ingredientes antigos caso algum tenha sido salvo multiplicado por quilo sem dividir por 1000
             const ingredientesCorrigidos = (Array.isArray(ficha.ingredientes) ? ficha.ingredientes : []).map(ing => {
                 if ((ing.unidade === 'g' || ing.modoCalculo === 'g_kg') && Number(ing.custoBaseInformado) > 1 && Number(ing.custoTotal) > Number(ing.custoBaseInformado)) {
                     const recalculado = (Number(ing.custoBaseInformado) / 1000) * Number(ing.qtd);
@@ -139,6 +136,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
             setFormData({
                 nome: ficha.nome || ficha.name || '',
                 precoVenda: ficha.precoVenda || ficha.price || 0,
+                markupEscolhido: ficha.markupEscolhido ?? configTaxas.markupSugeridoPadrao ?? 3.0,
                 peso: ficha.peso ?? 0.300,
                 comprimento: ficha.comprimento ?? 20,
                 largura: ficha.largura ?? 15,
@@ -158,6 +156,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
             setFormData({
                 nome: '',
                 precoVenda: '',
+                markupEscolhido: configTaxas.markupSugeridoPadrao ?? 3.0,
                 peso: 0.300,
                 comprimento: 20,
                 largura: 15,
@@ -191,7 +190,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
             const unItem = String(item.unidade || item.unit || '').toLowerCase();
             setIngNome(nomeItem);
 
-            // Se for filamento, resina, kg ou g, seleciona automaticamente Gramas (calculado por Kg)
             if (unItem.includes('kg') || unItem === 'g' || nomeItem.toLowerCase().includes('filamento')) {
                 setIngUnidade('g');
             } else if (unItem.includes('l') || unItem === 'ml') {
@@ -239,7 +237,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         }));
     };
 
-    // Cálculo automático em tempo real convertendo Minutos -> Horas e Gramas -> Kg
+    // Cálculo automático em tempo real + Preços Sugeridos de Venda
     const resumoCalculado = useMemo(() => {
         const custoMateriais = formData.ingredientes.reduce((acc, i) => acc + Number(i.custoTotal || 0), 0);
 
@@ -259,6 +257,14 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         const custoTaxaFalha = baseRisco * (Number(formData.taxaFalhaPerc || 0) / 100);
 
         const custoTotalProducao = subtotalProducao + custoTaxaFalha;
+
+        // Preços Sugeridos de Venda (Baseados em Markup sob o Custo Total)
+        const multiplicadorPersonalizado = Math.max(1.1, Number(formData.markupEscolhido || 3.0));
+        const precoSugeridoAtacado = custoTotalProducao * 2.0;      // 50% margem
+        const precoSugeridoPadrao = custoTotalProducao * 3.0;       // 66.7% margem
+        const precoSugeridoPremium = custoTotalProducao * 4.0;      // 75% margem
+        const precoSugeridoPersonalizado = custoTotalProducao * multiplicadorPersonalizado;
+
         const venda = Number(formData.precoVenda || 0);
         const lucroBruto = venda - custoTotalProducao;
         const margemPerc = venda > 0 ? (lucroBruto / venda) * 100 : 0;
@@ -274,11 +280,25 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
             custoEmbalagem,
             custoTaxaFalha,
             custoTotalProducao,
+            precoSugeridoAtacado,
+            precoSugeridoPadrao,
+            precoSugeridoPremium,
+            precoSugeridoPersonalizado,
             venda,
             lucroBruto,
             margemPerc
         };
     }, [formData]);
+
+    const aplicarPrecoSugerido = (valorSugerido, markupRef = null) => {
+        // Arredonda de forma comercial ou para 2 casas decimais
+        const valorFormatado = Number(valorSugerido || 0).toFixed(2);
+        setFormData(prev => ({
+            ...prev,
+            precoVenda: valorFormatado,
+            ...(markupRef ? { markupEscolhido: markupRef } : {})
+        }));
+    };
 
     const handleSalvarFicha = async (e) => {
         e.preventDefault();
@@ -295,6 +315,8 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 ...formData,
                 nome: formData.nome.trim(),
                 precoVenda: Number(formData.precoVenda || 0),
+                precoSugerido: Number(resumoCalculado.precoSugeridoPersonalizado.toFixed(2)),
+                markupEscolhido: Number(formData.markupEscolhido || 3.0),
                 tempoTotalMaquinaMinutos: minTotais,
                 tempoMaquinaHoras: Math.floor(minTotais / 60),
                 tempoMaquinaMinutos: Math.round(minTotais % 60),
@@ -341,10 +363,10 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                     </div>
                     <div>
                         <h1 className="font-black text-slate-900 text-base md:text-lg uppercase tracking-wider leading-none">
-                            Engenharia & Fichas de Custos
+                            Engenharia, Custos & Preço Sugerido
                         </h1>
                         <span className="text-xs font-bold text-slate-400">
-                            Matéria-Prima, Energia (kWh), Hora-Máquina, Mão de Obra e Embalagem
+                            Matéria-Prima, Energia (kWh), Hora-Máquina, Mão de Obra e Precificação Inteligente
                         </span>
                     </div>
                 </div>
@@ -354,7 +376,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                         onClick={() => setIsConfigOpen(true)}
                         className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl font-black uppercase text-xs tracking-wider flex items-center gap-2 cursor-pointer"
                     >
-                        <Icon name="settings" size={15} /> Configurar Tarifas (kWh / Hora)
+                        <Icon name="settings" size={15} /> Configurar Tarifas & Markup
                     </button>
 
                     <button
@@ -367,7 +389,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
             </header>
 
             {/* CARDS RESUMO DAS TARIFAS */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                 <div className="bg-white p-4 rounded-2xl border border-slate-200">
                     <span className="text-[10px] font-black uppercase text-amber-600 block">Tarifa de Energia</span>
                     <span className="text-lg font-black text-slate-800">{formatMoney(configTaxas.tarifaKwh)} / kWh</span>
@@ -388,9 +410,14 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                     <span className="text-lg font-black text-slate-800">{configTaxas.taxaFalhaPadrao}% padrão</span>
                     <span className="text-[11px] text-slate-400 font-bold block">Segurança contra perdas</span>
                 </div>
+                <div className="bg-white p-4 rounded-2xl border border-emerald-200 bg-emerald-50/30">
+                    <span className="text-[10px] font-black uppercase text-emerald-700 block">Markup Sugerido</span>
+                    <span className="text-lg font-black text-emerald-800">{configTaxas.markupSugeridoPadrao || 3}x o Custo</span>
+                    <span className="text-[11px] text-emerald-600 font-bold block">Multiplicador padrão</span>
+                </div>
             </div>
 
-            {/* TABELA DE FICHAS */}
+            {/* TABELA DE FICHAS COM COLUNA DE PREÇO SUGERIDO */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
                     <input
@@ -410,9 +437,9 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                 <th className="p-4 text-center">Tempo Máq.</th>
                                 <th className="p-4 text-right">Materiais</th>
                                 <th className="p-4 text-right">Energia + Máq.</th>
-                                <th className="p-4 text-right">Mão de Obra</th>
                                 <th className="p-4 text-right">Custo Total</th>
-                                <th className="p-4 text-right">Preço Venda</th>
+                                <th className="p-4 text-right text-indigo-600">Preço Sugerido</th>
+                                <th className="p-4 text-right text-emerald-600">Preço Praticado</th>
                                 <th className="p-4 text-center">Lucro Bruto</th>
                                 <th className="p-4 text-right">Ações</th>
                             </tr>
@@ -428,6 +455,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                     const minSalvos = f.tempoTotalMaquinaMinutos !== undefined
                                         ? Number(f.tempoTotalMaquinaMinutos)
                                         : (Number(f.tempoMaquinaHoras || 0) * 60) + Number(f.tempoMaquinaMinutos || 0);
+                                    const sugerido = f.precoSugerido || (Number(f.custoTotal || 0) * (configTaxas.markupSugeridoPadrao || 3));
 
                                     return (
                                         <tr key={f.id} className="border-b border-slate-100 hover:bg-slate-50/80 text-xs">
@@ -435,8 +463,10 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                             <td className="p-4 text-center font-bold text-slate-500">{formatarMinutosParaTexto(minSalvos)}</td>
                                             <td className="p-4 text-right font-bold text-slate-600">{formatMoney(f.custoMateriais)}</td>
                                             <td className="p-4 text-right font-bold text-amber-700">{formatMoney(energiaMaisMaq)}</td>
-                                            <td className="p-4 text-right font-bold text-purple-700">{formatMoney(f.custoMaoDeObra)}</td>
                                             <td className="p-4 text-right font-black text-rose-600">{formatMoney(f.custoTotal)}</td>
+                                            <td className="p-4 text-right font-black text-indigo-600 bg-indigo-50/30">
+                                                {formatMoney(sugerido)}
+                                            </td>
                                             <td className="p-4 text-right font-black text-emerald-600">{formatMoney(f.precoVenda)}</td>
                                             <td className="p-4 text-center">
                                                 <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2.5 py-1 rounded-full text-[10px]">
@@ -456,7 +486,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 </div>
             </div>
 
-            {/* MODAL: CRIAR / EDITAR FICHA DE CUSTOS */}
+            {/* MODAL: CRIAR / EDITAR FICHA DE CUSTOS COM CALCULADORA DE PREÇO SUGERIDO */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
@@ -476,9 +506,11 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                 
                                 {/* COLUNA ESQUERDA */}
                                 <div className="lg:col-span-6 space-y-5">
-                                    <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
+                                    
+                                    {/* 1. Info Base + Preço Sugerido Inteligente */}
+                                    <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3.5">
                                         <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block border-b border-slate-100 pb-2">
-                                            1. Info Base do Produto
+                                            1. Info Base & Preço de Venda
                                         </span>
                                         <div>
                                             <label className="text-xs font-black uppercase text-slate-700 block mb-1">Nome do Produto *</label>
@@ -491,8 +523,84 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:border-indigo-600"
                                             />
                                         </div>
+
+                                        {/* BLOCO DE PREÇOS SUGERIDOS AUTOMÁTICOS (CLICOU, APLICOU) */}
+                                        <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3 space-y-2.5">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase text-emerald-800 flex items-center gap-1">
+                                                    💡 Sugestões de Preço (Clique para aplicar):
+                                                </span>
+                                                <div className="flex items-center gap-1 text-[10px] font-black text-indigo-700">
+                                                    <span>Markup Livre:</span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.1"
+                                                        min="1.1"
+                                                        value={formData.markupEscolhido}
+                                                        onChange={e => setFormData({ ...formData, markupEscolhido: e.target.value })}
+                                                        className="w-12 p-1 bg-white border border-indigo-300 rounded text-center font-black"
+                                                    />
+                                                    <span>x =</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => aplicarPrecoSugerido(resumoCalculado.precoSugeridoPersonalizado)}
+                                                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-0.5 rounded cursor-pointer"
+                                                        title="Aplicar este preço sugerido"
+                                                    >
+                                                        {formatMoney(resumoCalculado.precoSugeridoPersonalizado)}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => aplicarPrecoSugerido(resumoCalculado.precoSugeridoAtacado, 2.0)}
+                                                    className="p-2 bg-white hover:bg-emerald-100/70 border border-emerald-200 rounded-lg text-center transition-all cursor-pointer group"
+                                                >
+                                                    <span className="text-[9px] font-black uppercase text-slate-400 group-hover:text-emerald-700 block">
+                                                        Atacado (2x • 50%)
+                                                    </span>
+                                                    <strong className="text-xs font-black text-slate-800 block mt-0.5">
+                                                        {formatMoney(resumoCalculado.precoSugeridoAtacado)}
+                                                    </strong>
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => aplicarPrecoSugerido(resumoCalculado.precoSugeridoPadrao, 3.0)}
+                                                    className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-center transition-all cursor-pointer shadow-2xs"
+                                                >
+                                                    <span className="text-[9px] font-black uppercase text-emerald-100 block">
+                                                        ★ Ideal Loja (3x • 67%)
+                                                    </span>
+                                                    <strong className="text-xs font-black text-white block mt-0.5">
+                                                        {formatMoney(resumoCalculado.precoSugeridoPadrao)}
+                                                    </strong>
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => aplicarPrecoSugerido(resumoCalculado.precoSugeridoPremium, 4.0)}
+                                                    className="p-2 bg-white hover:bg-emerald-100/70 border border-emerald-200 rounded-lg text-center transition-all cursor-pointer group"
+                                                >
+                                                    <span className="text-[9px] font-black uppercase text-slate-400 group-hover:text-emerald-700 block">
+                                                        Premium (4x • 75%)
+                                                    </span>
+                                                    <strong className="text-xs font-black text-slate-800 block mt-0.5">
+                                                        {formatMoney(resumoCalculado.precoSugeridoPremium)}
+                                                    </strong>
+                                                </button>
+                                            </div>
+                                        </div>
+
                                         <div>
-                                            <label className="text-xs font-black uppercase text-slate-700 block mb-1">Preço de Venda Praticado (R$) *</label>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="text-xs font-black uppercase text-slate-700">Preço de Venda Praticado (R$) *</label>
+                                                <span className="text-[10px] font-bold text-slate-400">
+                                                    Sugerido ({formData.markupEscolhido}x): <strong className="text-indigo-600">{formatMoney(resumoCalculado.precoSugeridoPersonalizado)}</strong>
+                                                </span>
+                                            </div>
                                             <input
                                                 type="number"
                                                 step="any"
@@ -500,12 +608,12 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 value={formData.precoVenda}
                                                 onChange={e => setFormData({ ...formData, precoVenda: e.target.value })}
                                                 placeholder="Ex: 49.90"
-                                                className="w-full p-3 bg-emerald-50/60 border border-emerald-300 rounded-xl text-base font-black text-emerald-800 outline-none"
+                                                className="w-full p-3 bg-emerald-50/60 border-2 border-emerald-400 rounded-xl text-base font-black text-emerald-900 outline-none focus:border-emerald-600"
                                             />
                                         </div>
                                     </div>
 
-                                    {/* BLOCO DE TEMPO EM MINUTOS + ENERGIA */}
+                                    {/* 2. BLOCO DE TEMPO EM MINUTOS + ENERGIA */}
                                     <div className="p-4 rounded-2xl border-2 border-indigo-100 bg-indigo-50/20 space-y-4">
                                         <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
                                             <span className="text-xs font-black uppercase text-indigo-800 tracking-wider">
@@ -655,7 +763,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                     </div>
                                 </div>
 
-                                {/* COLUNA DIREITA: MATERIAIS E FILAMENTO (LAYOUT ESPAÇOSO EM 2 LINHAS SEM CORTAR TEXTO) */}
+                                {/* COLUNA DIREITA: MATERIAIS E FILAMENTO + PAINEL PRETO COM PREÇO SUGERIDO */}
                                 <div className="lg:col-span-6 flex flex-col justify-between space-y-5">
                                     <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-4 flex-1 flex flex-col">
                                         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -686,7 +794,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 </div>
                                             )}
 
-                                            {/* Linha 1 Ampla: Nome do Material/Filamento (Não corta mais o texto!) */}
                                             <div>
                                                 <label className="text-[10px] font-black uppercase text-slate-600 block mb-1">
                                                     Nome do Material / Filamento / Insumo *
@@ -700,7 +807,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 />
                                             </div>
 
-                                            {/* Linha 2 Ampla: Unidade + Peso/Qtd + Preço do Rolo/Unidade */}
                                             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                                                 <div className="sm:col-span-5">
                                                     <label className="text-[10px] font-black uppercase text-slate-600 block mb-1">
@@ -746,7 +852,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 </div>
                                             </div>
 
-                                            {/* Preview em tempo real da conversão antes de adicionar */}
                                             {ingQtdUsada && ingCustoUnitario && (
                                                 <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 flex items-center justify-between text-[11px]">
                                                     <span className="font-bold text-indigo-800">
@@ -769,8 +874,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                             </button>
                                         </div>
 
-                                        {/* Lista de Materiais Adicionados */}
-                                        <div className="flex-1 overflow-y-auto max-h-48 space-y-2 pr-1">
+                                        <div className="flex-1 overflow-y-auto max-h-44 space-y-2 pr-1">
                                             {formData.ingredientes.length === 0 ? (
                                                 <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center text-xs font-bold text-slate-400">
                                                     Nenhum material adicionado.
@@ -794,9 +898,9 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                         </div>
                                     </div>
 
-                                    {/* PAINEL ESCURO DE LUCRO */}
-                                    <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3 shadow-lg">
-                                        <div className="space-y-1 text-xs border-b border-slate-800 pb-3">
+                                    {/* PAINEL ESCURO DE RESULTADO COM COMPARATIVO DE PREÇO SUGERIDO */}
+                                    <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-2.5 shadow-lg">
+                                        <div className="space-y-1 text-xs border-b border-slate-800 pb-2.5">
                                             <div className="flex justify-between text-slate-400 font-bold">
                                                 <span>Matéria-Prima / Filamento / Insumos:</span>
                                                 <span>{formatMoney(resumoCalculado.custoMateriais)}</span>
@@ -816,8 +920,23 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                             <span className="text-rose-400 text-base">-{formatMoney(resumoCalculado.custoTotalProducao)}</span>
                                         </div>
 
-                                        <div className="flex justify-between items-center text-xs font-black uppercase tracking-wider border-b border-slate-800 pb-3">
-                                            <span className="text-slate-400">Venda Projetada</span>
+                                        {/* Linha de Destaque do Preço Sugerido no Painel Escuro */}
+                                        <div className="flex justify-between items-center text-xs font-black uppercase tracking-wider bg-indigo-500/15 border border-indigo-400/30 px-3 py-2 rounded-xl">
+                                            <span className="text-indigo-300">💡 Preço Sugerido ({formData.markupEscolhido}x):</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-indigo-300 text-base">{formatMoney(resumoCalculado.precoSugeridoPersonalizado)}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => aplicarPrecoSugerido(resumoCalculado.precoSugeridoPersonalizado)}
+                                                    className="bg-indigo-500 hover:bg-indigo-400 text-white text-[9px] font-black uppercase px-2 py-1 rounded cursor-pointer"
+                                                >
+                                                    Usar este
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-xs font-black uppercase tracking-wider border-b border-slate-800 pb-2.5">
+                                            <span className="text-slate-400">Venda Praticada</span>
                                             <span className="text-emerald-400 text-base">{formatMoney(resumoCalculado.venda)}</span>
                                         </div>
 
@@ -858,13 +977,13 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 </div>
             )}
 
-            {/* MODAL: CONFIGURAR TARIFAS PADRÃO */}
+            {/* MODAL: CONFIGURAR TARIFAS PADRÃO E MARKUP SUGERIDO */}
             {isConfigOpen && (
                 <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
                         <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
                             <div>
-                                <h3 className="font-black text-base uppercase">Tarifas Padrão de Produção</h3>
+                                <h3 className="font-black text-base uppercase">Tarifas Padrão & Precificação</h3>
                                 <span className="text-xs text-slate-400">Preenchidas automaticamente em novas fichas</span>
                             </div>
                             <button type="button" onClick={() => setIsConfigOpen(false)} className="text-white/70 hover:text-white text-xl">✕</button>
@@ -917,15 +1036,28 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="font-black uppercase text-slate-600 block mb-1">Margem de Segurança / Falha (%)</label>
-                                <input
-                                    type="number"
-                                    step="any"
-                                    value={configTaxas.taxaFalhaPadrao}
-                                    onChange={e => setConfigTaxas({ ...configTaxas, taxaFalhaPadrao: Number(e.target.value) })}
-                                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold"
-                                />
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Margem de Falha (%)</label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        value={configTaxas.taxaFalhaPadrao}
+                                        onChange={e => setConfigTaxas({ ...configTaxas, taxaFalhaPadrao: Number(e.target.value) })}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="font-black uppercase text-emerald-700 block mb-1">Markup Padrão (Ex: 3x)</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        min="1.1"
+                                        value={configTaxas.markupSugeridoPadrao}
+                                        onChange={e => setConfigTaxas({ ...configTaxas, markupSugeridoPadrao: Number(e.target.value) })}
+                                        className="w-full p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl font-black text-emerald-800"
+                                    />
+                                </div>
                             </div>
 
                             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
