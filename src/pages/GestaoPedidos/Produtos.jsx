@@ -14,18 +14,17 @@ export default function Produtos({ user, permissoes }) {
     const [saving, setSaving] = useState(false);
 
     // =====================================================================
-    // ESTADOS DO RECORTADOR INTELIGENTE (RESPEITA A PROPORÇÃO DA FOTO SUBIDA)
+    // ESTADOS DO RECORTADOR (OTIMIZADO PARA NÃO ESTOURAR 1MB DO FIREBASE)
     // =====================================================================
     const [cropModal, setCropModal] = useState({
         open: false,
         rawImage: '',
         target: 'product', // 'product' | 'category'
-        aspect: 'original', // 'original' (Proporção da foto), '3:2' (900x600), '16:9' (1200x680), '1:1' (800x800)
-        mode: 'contain',   // 'contain' (Foto Inteira sem cortar textos) | 'cover' (Preencher/Cortar)
+        aspect: 'original',// 'original' (Respeita a foto subida), '1:1', '3:2', '16:9'
+        mode: 'contain',   // 'contain' (Foto 100% inteira) | 'cover' (Preencher cortando sobras)
         zoom: 1,
         offsetX: 0,
-        offsetY: 0,
-        imgRatio: 1
+        offsetY: 0
     });
     const canvasPreviewRef = useRef(null);
     const loadedImgRef = useRef(null);
@@ -45,7 +44,6 @@ export default function Produtos({ user, permissoes }) {
         id: '',
         name: '',
         imageUrl: '',
-        imageAspect: 'auto',
         tagOption: 'DESTAQUE',
         customTag: ''
     });
@@ -55,26 +53,31 @@ export default function Produtos({ user, permissoes }) {
 
     const donoUid = permissoes?.donoUid || user?.uid;
 
-    // Sincroniza Produtos e Categorias em todos os documentos da vitrine pública
+    // Sincroniza o catálogo com segurança sem travar caso algum espelho secundário falhe
     const sincronizarCatalogoPublico = async (novosProdutos, novasCategorias) => {
-        if (!donoUid) return;
-        const payload = {};
+        if (!donoUid) throw new Error("Usuário não autenticado.");
+
+        const payload = { updatedAt: new Date().toISOString() };
         if (novosProdutos !== undefined) {
             payload.products = novosProdutos;
-            payload.produtos = novosProdutos;
         }
         if (novasCategorias !== undefined) {
             payload.categories = novasCategorias;
-            payload.categorias = novasCategorias;
         }
-        payload.donoUid = donoUid;
-        payload.updatedAt = new Date().toISOString();
 
-        await Promise.all([
-            db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set(payload, { merge: true }),
-            db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/loja`).set(payload, { merge: true }),
-            db.doc(`lojas/${donoUid}`).set(payload, { merge: true })
-        ]);
+        // 1. Gravação principal obrigatória no catalog_state
+        await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set(payload, { merge: true });
+
+        // 2. Espelhamento secundário opcional (não bloqueia se exceder ou não existir permissão)
+        try {
+            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/loja`).set({
+                ...payload,
+                ...(novosProdutos !== undefined ? { produtos: novosProdutos } : {}),
+                ...(novasCategorias !== undefined ? { categorias: novasCategorias } : {})
+            }, { merge: true });
+        } catch (e) {
+            console.warn("Aviso ao espelhar em settings/loja:", e);
+        }
     };
 
     useEffect(() => {
@@ -84,12 +87,8 @@ export default function Produtos({ user, permissoes }) {
                 const docRef = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get();
                 if (docRef.exists) {
                     const data = docRef.data();
-                    const prodsCarregados = data.products || [];
-                    const catsCarregadas = data.categories || [];
-                    setProducts(prodsCarregados);
-                    setCategoriesList(catsCarregadas);
-
-                    sincronizarCatalogoPublico(prodsCarregados, catsCarregadas).catch(() => {});
+                    setProducts(data.products || []);
+                    setCategoriesList(data.categories || []);
                 }
 
                 const recSnap = await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`).get();
@@ -104,7 +103,7 @@ export default function Produtos({ user, permissoes }) {
     }, [donoUid]);
 
     // =====================================================================
-    // LÓGICA DO RECORTADOR QUE MANTÉM A ARTE INTEIRA SEM CORTAR TEXTOS
+    // LÓGICA DO RECORTADOR COM COMPRESSÃO INTELIGENTE (EVITA ERRO DE 1MB)
     // =====================================================================
     const abrirRecortadorComArquivo = (file, destino = 'product') => {
         if (!file) return;
@@ -122,18 +121,15 @@ export default function Produtos({ user, permissoes }) {
         img.src = imgSrc;
         img.onload = () => {
             loadedImgRef.current = img;
-            const ratio = img.width / (img.height || 1);
             setCropModal({
                 open: true,
                 rawImage: imgSrc,
                 target: destino,
-                // Abre respeitando o formato original da arte na categoria para nunca cortar textos
-                aspect: destino === 'category' ? 'original' : '1:1',
+                aspect: 'original',
                 mode: 'contain',
                 zoom: 1,
                 offsetX: 0,
-                offsetY: 0,
-                imgRatio: ratio
+                offsetY: 0
             });
         };
     };
@@ -145,38 +141,38 @@ export default function Produtos({ user, permissoes }) {
         const ctx = canvas.getContext('2d');
         const img = loadedImgRef.current;
 
-        let W = 800;
-        let H = 800;
+        // Resolução calibrada (550px) para gerar imagens leves (~30KB) que cabem às dezenas no Firestore
+        let W = 550;
+        let H = 550;
 
         if (cropModal.aspect === 'original') {
-            const maxDim = 960;
+            const maxDim = 560;
             if (img.width >= img.height) {
                 W = maxDim;
-                H = Math.round(maxDim / (img.width / img.height));
+                H = Math.max(240, Math.round((img.height / img.width) * maxDim));
             } else {
                 H = maxDim;
-                W = Math.round(maxDim * (img.width / img.height));
+                W = Math.max(240, Math.round((img.width / img.height) * maxDim));
             }
         } else if (cropModal.aspect === '3:2') {
-            W = 900; H = 600;
+            W = 600; H = 400;
         } else if (cropModal.aspect === '16:9') {
-            W = 1200; H = 680;
+            W = 640; H = 360;
         }
 
         canvas.width = W;
         canvas.height = H;
 
-        // Se for Categoria em modo "Foto Inteira", preenche o fundo com a própria imagem desfocada (sem bordas brancas)
-        if (cropModal.target === 'category' && cropModal.mode === 'contain') {
+        if (cropModal.mode === 'contain') {
             ctx.save();
-            ctx.filter = 'blur(24px) brightness(0.65)';
-            const bgScale = Math.max(W / img.width, H / img.height) * 1.15;
+            ctx.filter = 'blur(18px) brightness(0.75)';
+            const bgScale = Math.max(W / img.width, H / img.height) * 1.1;
             const bgW = img.width * bgScale;
             const bgH = img.height * bgScale;
             ctx.drawImage(img, (W - bgW) / 2, (H - bgH) / 2, bgW, bgH);
             ctx.restore();
         } else {
-            ctx.fillStyle = '#FFFFFF';
+            ctx.fillStyle = '#0F172A';
             ctx.fillRect(0, 0, W, H);
         }
 
@@ -188,8 +184,8 @@ export default function Produtos({ user, permissoes }) {
         const drawWidth = img.width * finalScale;
         const drawHeight = img.height * finalScale;
 
-        const maxShiftX = Math.max(250, Math.abs(drawWidth - W) / 2 + 150);
-        const maxShiftY = Math.max(250, Math.abs(drawHeight - H) / 2 + 150);
+        const maxShiftX = Math.max(180, Math.abs(drawWidth - W) / 2 + 100);
+        const maxShiftY = Math.max(180, Math.abs(drawHeight - H) / 2 + 100);
 
         const centerX = (W - drawWidth) / 2 + (Number(cropModal.offsetX) / 100) * maxShiftX;
         const centerY = (H - drawHeight) / 2 + (Number(cropModal.offsetY) / 100) * maxShiftY;
@@ -199,18 +195,16 @@ export default function Produtos({ user, permissoes }) {
 
     const confirmarRecortePadraoSite = () => {
         if (!canvasPreviewRef.current) return;
-        const canvas = canvasPreviewRef.current;
-        const urlFinalPadronizada = canvas.toDataURL('image/webp', 0.86);
-        const proporcaoSalva = Number((canvas.width / (canvas.height || 1)).toFixed(2));
+        // Usa WebP/JPEG com compressão 0.72 para garantir salvamento instantâneo no Firebase
+        let urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/webp', 0.72);
+        if (urlFinalPadronizada.length > 140000) {
+            urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/jpeg', 0.65);
+        }
 
         if (cropModal.target === 'product') {
             setFormData(prev => ({ ...prev, imageUrl: urlFinalPadronizada }));
         } else {
-            setCatForm(prev => ({
-                ...prev,
-                imageUrl: urlFinalPadronizada,
-                imageAspect: proporcaoSalva
-            }));
+            setCatForm(prev => ({ ...prev, imageUrl: urlFinalPadronizada }));
         }
 
         setCropModal(prev => ({ ...prev, open: false }));
@@ -228,6 +222,36 @@ export default function Produtos({ user, permissoes }) {
         e.target.value = '';
     };
 
+    // Função utilitária que re-comprime imagens antigas pesadas já salvas na lista
+    const comprimirImagemBase64Antiga = (base64Str) => {
+        return new Promise((resolve) => {
+            if (!base64Str || !base64Str.startsWith('data:image') || base64Str.length < 110000) {
+                return resolve(base64Str);
+            }
+            const img = new Image();
+            img.src = base64Str;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const maxDim = 540;
+                let w = img.width;
+                let h = img.height;
+                if (w >= h && w > maxDim) {
+                    h = Math.round((h * maxDim) / w);
+                    w = maxDim;
+                } else if (h > w && h > maxDim) {
+                    w = Math.round((w * maxDim) / h);
+                    h = maxDim;
+                }
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', 0.68));
+            };
+            img.onerror = () => resolve(base64Str);
+        });
+    };
+
     // ==========================================
     // GESTÃO DE CATEGORIAS
     // ==========================================
@@ -240,7 +264,6 @@ export default function Produtos({ user, permissoes }) {
             id: cat.id,
             name: cat.name || '',
             imageUrl: cat.imageUrl || '',
-            imageAspect: cat.imageAspect || 'auto',
             tagOption: ehPadrao ? tagAtual : 'OUTRO',
             customTag: ehPadrao ? '' : tagAtual
         });
@@ -251,28 +274,38 @@ export default function Produtos({ user, permissoes }) {
         if (!catForm.name.trim()) return;
         setSaving(true);
 
-        const tagFinal = catForm.tagOption === 'OUTRO'
-            ? catForm.customTag.trim().toUpperCase()
-            : catForm.tagOption;
-
-        const newCat = {
-            id: catForm.id || crypto.randomUUID(),
-            name: catForm.name.trim(),
-            imageUrl: catForm.imageUrl || '',
-            imageAspect: catForm.imageAspect || 'auto',
-            tag: tagFinal
-        };
-
-        const updatedCats = catForm.id
-            ? categoriesList.map(c => c.id === catForm.id ? newCat : c)
-            : [...categoriesList, newCat];
-
         try {
-            await sincronizarCatalogoPublico(products, updatedCats);
+            const tagFinal = catForm.tagOption === 'OUTRO'
+                ? catForm.customTag.trim().toUpperCase()
+                : catForm.tagOption;
+
+            const imagemOtimizada = await comprimirImagemBase64Antiga(catForm.imageUrl || '');
+
+            const newCat = {
+                id: catForm.id || crypto.randomUUID(),
+                name: catForm.name.trim(),
+                imageUrl: imagemOtimizada,
+                tag: tagFinal
+            };
+
+            const rawUpdatedCats = catForm.id
+                ? categoriesList.map(c => c.id === catForm.id ? newCat : c)
+                : [...categoriesList, newCat];
+
+            // Otimiza também categorias anteriores que estivessem pesadas para nunca exceder 1MB
+            const updatedCats = await Promise.all(
+                rawUpdatedCats.map(async (c) => ({
+                    ...c,
+                    imageUrl: await comprimirImagemBase64Antiga(c.imageUrl || '')
+                }))
+            );
+
+            await sincronizarCatalogoPublico(undefined, updatedCats);
             setCategoriesList(updatedCats);
-            setCatForm({ id: '', name: '', imageUrl: '', imageAspect: 'auto', tagOption: 'DESTAQUE', customTag: '' });
+            setCatForm({ id: '', name: '', imageUrl: '', tagOption: 'DESTAQUE', customTag: '' });
         } catch (error) {
-            alert("Erro ao salvar categoria.");
+            console.error("Erro detalhado ao salvar categoria:", error);
+            alert("Erro ao salvar categoria: " + (error.message || "Verifique sua conexão."));
         }
         setSaving(false);
     };
@@ -280,7 +313,7 @@ export default function Produtos({ user, permissoes }) {
     const handleDeleteCategory = async (id) => {
         if (!window.confirm("Excluir esta categoria?")) return;
         const updatedCats = categoriesList.filter(c => c.id !== id);
-        await sincronizarCatalogoPublico(products, updatedCats);
+        await sincronizarCatalogoPublico(undefined, updatedCats);
         setCategoriesList(updatedCats);
     };
 
@@ -356,34 +389,44 @@ export default function Produtos({ user, permissoes }) {
         e.preventDefault();
         setSaving(true);
         
-        const precoNormal = Number(formData.price || 0);
-        const precoPromocional = Number(formData.promoPrice || 0);
-        const precoFinalVenda = formData.isPromo && precoPromocional > 0 ? precoPromocional : precoNormal;
-
-        const newProduct = {
-            id: editingId || crypto.randomUUID(),
-            ...formData,
-            price: precoNormal,
-            promoPrice: precoPromocional,
-            sellingPrice: precoFinalVenda,
-            weight: Number(formData.weight || 0),
-            dimensions: {
-                length: Number(formData.dimensions.length || 0),
-                width: Number(formData.dimensions.width || 0),
-                height: Number(formData.dimensions.height || 0)
-            }
-        };
-
-        const updatedProducts = editingId
-            ? products.map(p => p.id === editingId ? newProduct : p)
-            : [...products, newProduct];
-
         try {
-            await sincronizarCatalogoPublico(updatedProducts, categoriesList);
+            const precoNormal = Number(formData.price || 0);
+            const precoPromocional = Number(formData.promoPrice || 0);
+            const precoFinalVenda = formData.isPromo && precoPromocional > 0 ? precoPromocional : precoNormal;
+            const imgOtimizada = await comprimirImagemBase64Antiga(formData.imageUrl || '');
+
+            const newProduct = {
+                id: editingId || crypto.randomUUID(),
+                ...formData,
+                imageUrl: imgOtimizada,
+                price: precoNormal,
+                promoPrice: precoPromocional,
+                sellingPrice: precoFinalVenda,
+                weight: Number(formData.weight || 0),
+                dimensions: {
+                    length: Number(formData.dimensions.length || 0),
+                    width: Number(formData.dimensions.width || 0),
+                    height: Number(formData.dimensions.height || 0)
+                }
+            };
+
+            const rawUpdatedProducts = editingId
+                ? products.map(p => p.id === editingId ? newProduct : p)
+                : [...products, newProduct];
+
+            const updatedProducts = await Promise.all(
+                rawUpdatedProducts.map(async (p) => ({
+                    ...p,
+                    imageUrl: await comprimirImagemBase64Antiga(p.imageUrl || '')
+                }))
+            );
+
+            await sincronizarCatalogoPublico(updatedProducts, undefined);
             setProducts(updatedProducts);
             setIsModalOpen(false);
         } catch (error) {
-            alert("Erro ao salvar.");
+            console.error("Erro ao salvar produto:", error);
+            alert("Erro ao salvar produto: " + (error.message || "Tente novamente."));
         }
         setSaving(false);
     };
@@ -391,7 +434,7 @@ export default function Produtos({ user, permissoes }) {
     const handleDelete = async (id) => {
         if (!window.confirm("Tem certeza que deseja remover este produto do catálogo?")) return;
         const updatedProducts = products.filter(p => p.id !== id);
-        await sincronizarCatalogoPublico(updatedProducts, categoriesList);
+        await sincronizarCatalogoPublico(updatedProducts, undefined);
         setProducts(updatedProducts);
     };
 
@@ -406,7 +449,7 @@ export default function Produtos({ user, permissoes }) {
                     <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center text-white"><Icon name="box" size={20}/></div>
                     <div>
                         <h1 className="font-black text-slate-800 text-lg uppercase tracking-widest leading-none">Meus Produtos</h1>
-                        <span className="text-xs font-bold text-slate-500">Gestão de Catálogo, Mosaico Adaptável e Enquadramento Inteligente</span>
+                        <span className="text-xs font-bold text-slate-500">Gestão de Catálogo, Mosaico de Categorias e Recorte Padrão</span>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -480,14 +523,14 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             </main>
 
-            {/* MODAL DE CATEGORIAS */}
+            {/* MODAL DE CATEGORIAS COM FOTO PADRONIZADA */}
             {isCatModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
                         <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                             <div>
                                 <h3 className="font-black text-slate-800 text-lg uppercase">Categorias do Mosaico</h3>
-                                <p className="text-xs font-bold text-slate-400">O layout adapta-se automaticamente à foto que subir (sem cortar textos)</p>
+                                <p className="text-xs font-bold text-slate-400">O sistema adapta e otimiza automaticamente a foto que você subir</p>
                             </div>
                             <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-black"><Icon name="x" size={24} /></button>
                         </div>
@@ -496,13 +539,13 @@ export default function Produtos({ user, permissoes }) {
                             <form onSubmit={handleSaveCategory} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
                                 <div className="flex flex-col md:flex-row gap-4 items-center">
                                     <div className="flex flex-col items-center gap-1.5 shrink-0">
-                                        <div className="w-32 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-slate-900 flex items-center justify-center relative overflow-hidden cursor-pointer group">
+                                        <div className="w-32 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-white flex items-center justify-center relative overflow-hidden cursor-pointer group">
                                             {catForm.imageUrl ? (
-                                                <img src={catForm.imageUrl} alt="Cat" className="w-full h-full object-contain" />
+                                                <img src={catForm.imageUrl} alt="Cat" className="w-full h-full object-cover" />
                                             ) : (
                                                 <div className="text-center p-2">
-                                                    <Icon name="camera" size={22} className="text-slate-400 mx-auto group-hover:text-indigo-400"/>
-                                                    <span className="text-[9px] font-black uppercase text-slate-300 block mt-1">Subir Foto</span>
+                                                    <Icon name="camera" size={22} className="text-slate-300 mx-auto group-hover:text-indigo-500"/>
+                                                    <span className="text-[9px] font-black uppercase text-slate-400 block mt-1">Escolher Foto</span>
                                                 </div>
                                             )}
                                             <input type="file" accept="image/*" onChange={handleCatImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
@@ -524,7 +567,7 @@ export default function Produtos({ user, permissoes }) {
                                             <input 
                                                 type="text" required value={catForm.name} 
                                                 onChange={e => setCatForm({...catForm, name: e.target.value})} 
-                                                placeholder="Ex: Lembranças & Eventos..."
+                                                placeholder="Ex: Chaveiros, Combos..."
                                                 className="w-full p-2.5 bg-white border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-indigo-500"
                                             />
                                         </div>
@@ -564,10 +607,10 @@ export default function Produtos({ user, permissoes }) {
 
                                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-200/70">
                                     {catForm.id && (
-                                        <button type="button" onClick={() => setCatForm({ id: '', name: '', imageUrl: '', imageAspect: 'auto', tagOption: 'DESTAQUE', customTag: '' })} className="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg font-black text-xs uppercase">Cancelar</button>
+                                        <button type="button" onClick={() => setCatForm({ id: '', name: '', imageUrl: '', tagOption: 'DESTAQUE', customTag: '' })} className="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg font-black text-xs uppercase cursor-pointer">Cancelar</button>
                                     )}
                                     <button type="submit" disabled={saving} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-xs uppercase cursor-pointer">
-                                        {catForm.id ? 'Atualizar Categoria' : 'Adicionar Categoria'}
+                                        {saving ? 'Salvando...' : catForm.id ? 'Atualizar Categoria' : 'Adicionar Categoria'}
                                     </button>
                                 </div>
                             </form>
@@ -576,8 +619,8 @@ export default function Produtos({ user, permissoes }) {
                                 {categoriesList.map(cat => (
                                     <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-14 h-11 rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
-                                                {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-contain" alt={cat.name} /> : <Icon name="image" size={18} className="text-slate-500" />}
+                                            <div className="w-14 h-11 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
+                                                {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-cover" alt={cat.name} /> : <Icon name="image" size={18} className="text-slate-300" />}
                                             </div>
                                             <div>
                                                 {cat.tag && <span className="text-[9px] font-black uppercase text-orange-500 block leading-none mb-0.5">{cat.tag}</span>}
@@ -592,7 +635,7 @@ export default function Produtos({ user, permissoes }) {
                                                     if (cat.imageUrl) iniciarModalCrop(cat.imageUrl, 'category');
                                                 }}
                                                 className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
-                                                title="Ajustar Foto"
+                                                title="Cortar / Ajustar Foto"
                                             >
                                                 ✂️
                                             </button>
@@ -644,7 +687,7 @@ export default function Produtos({ user, permissoes }) {
                                 {formData.imageUrl ? (
                                     <div className="flex flex-col items-center space-y-3">
                                         <div className="w-44 h-44 rounded-2xl shadow-sm border border-slate-200 bg-white overflow-hidden flex items-center justify-center">
-                                            <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-contain" />
+                                            <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
                                         </div>
                                         <div className="flex flex-wrap items-center justify-center gap-2">
                                             <label className="text-[11px] font-black uppercase text-slate-700 bg-white hover:bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-xs cursor-pointer transition-colors">
@@ -656,7 +699,7 @@ export default function Produtos({ user, permissoes }) {
                                                 onClick={() => iniciarModalCrop(formData.imageUrl, 'product')}
                                                 className="text-[11px] font-black uppercase text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-full shadow-xs cursor-pointer transition-colors flex items-center gap-1"
                                             >
-                                                ✂️ Ajustar / Enquadrar Foto
+                                                ✂️ Ajustar / Cortar Foto
                                             </button>
                                         </div>
                                     </div>
@@ -665,7 +708,7 @@ export default function Produtos({ user, permissoes }) {
                                         <Icon name="camera" size={36} className="text-slate-300 mx-auto mb-3" />
                                         <span className="text-xs font-black uppercase text-slate-600 block">Clique para selecionar foto do produto</span>
                                         <p className="text-[10px] font-bold text-indigo-600 mt-1 uppercase tracking-wider">
-                                            Adapta automaticamente à foto ou ajusta no padrão quadrado (800x800 px)
+                                            Abre automaticamente o ajustador de imagem otimizado
                                         </p>
                                         <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                                     </label>
@@ -817,59 +860,57 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             )}
 
-            {/* ===================================================================== */}
-            {/* MODAL DE AJUSTE DE IMAGEM (RESPEITA A FOTO SUBIDA SEM CORTAR TEXTOS)  */}
-            {/* ===================================================================== */}
+            {/* MODAL INTERATIVO DE CORTE E ENQUADRAMENTO */}
             {cropModal.open && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
                         <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
                             <div>
-                                <h3 className="font-black text-sm uppercase tracking-wider">✂️ Ajustar Imagem p/ o Site</h3>
-                                <span className="text-[11px] text-emerald-400 font-bold">
-                                    {cropModal.aspect === 'original' ? '✓ Formato Original da Foto (Sem cortes)' : cropModal.aspect === '3:2' ? 'Mosaico (900x600 px)' : cropModal.aspect === '16:9' ? 'Largo (1200x680 px)' : 'Quadrado (800x800 px)'}
+                                <h3 className="font-black text-sm uppercase tracking-wider">✂️ Ajustar Imagem conforme Foto Subida</h3>
+                                <span className="text-[11px] text-slate-400">
+                                    {cropModal.aspect === 'original' ? 'Formato Original da Sua Arte (Sem Cortes)' : cropModal.aspect === '3:2' ? 'Mosaico (3:2)' : cropModal.aspect === '16:9' ? 'Largo (16:9)' : 'Quadrado (1:1)'}
                                 </span>
                             </div>
                             <button type="button" onClick={() => setCropModal(prev => ({ ...prev, open: false }))} className="text-white/70 hover:text-white text-xl cursor-pointer">✕</button>
                         </div>
 
                         <div className="p-5 space-y-3.5">
-                            <div className="grid grid-cols-4 gap-1 bg-indigo-50 p-1 rounded-xl border border-indigo-100">
+                            <div className="grid grid-cols-4 gap-1 bg-indigo-50 p-1.5 rounded-xl border border-indigo-100">
                                 <button
                                     type="button"
-                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: 'original', zoom: 1, offsetX: 0, offsetY: 0 }))}
+                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: 'original', mode: 'contain', zoom: 1, offsetX: 0, offsetY: 0 }))}
                                     className={`py-1.5 px-1 rounded-lg font-black text-[9px] uppercase cursor-pointer ${
                                         cropModal.aspect === 'original' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
                                     }`}
                                 >
-                                    Original Foto
+                                    📐 Original
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '3:2', zoom: 1, offsetX: 0, offsetY: 0 }))}
+                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '3:2' }))}
                                     className={`py-1.5 px-1 rounded-lg font-black text-[9px] uppercase cursor-pointer ${
                                         cropModal.aspect === '3:2' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
                                     }`}
                                 >
-                                    Mosaico (3:2)
+                                    Mosaico
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '16:9', zoom: 1, offsetX: 0, offsetY: 0 }))}
+                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '16:9' }))}
                                     className={`py-1.5 px-1 rounded-lg font-black text-[9px] uppercase cursor-pointer ${
                                         cropModal.aspect === '16:9' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
                                     }`}
                                 >
-                                    Largo (16:9)
+                                    Largo
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '1:1', zoom: 1, offsetX: 0, offsetY: 0 }))}
+                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '1:1' }))}
                                     className={`py-1.5 px-1 rounded-lg font-black text-[9px] uppercase cursor-pointer ${
                                         cropModal.aspect === '1:1' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
                                     }`}
                                 >
-                                    Quadrado (1:1)
+                                    Quadrado
                                 </button>
                             </div>
 
@@ -878,10 +919,10 @@ export default function Produtos({ user, permissoes }) {
                                     type="button"
                                     onClick={() => setCropModal(prev => ({ ...prev, mode: 'contain', zoom: 1, offsetX: 0, offsetY: 0 }))}
                                     className={`py-2 rounded-lg font-black text-xs uppercase transition-all cursor-pointer ${
-                                        cropModal.mode === 'contain' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                                        cropModal.mode === 'contain' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                                     }`}
                                 >
-                                    🖼️ Foto Inteira (Sem Cortar)
+                                    🖼️ Arte Inteira (Sem Cortar)
                                 </button>
                                 <button
                                     type="button"
@@ -894,8 +935,8 @@ export default function Produtos({ user, permissoes }) {
                                 </button>
                             </div>
 
-                            <div className="mx-auto w-72 h-56 rounded-2xl border-2 border-indigo-500 shadow-inner overflow-hidden bg-slate-900 flex items-center justify-center relative">
-                                <canvas ref={canvasPreviewRef} className="max-w-full max-h-full object-contain" />
+                            <div className="w-72 max-h-64 mx-auto rounded-2xl border-2 border-indigo-500 shadow-inner overflow-hidden bg-slate-900 flex items-center justify-center relative">
+                                <canvas ref={canvasPreviewRef} className="max-w-full max-h-60 w-auto h-auto object-contain" />
                             </div>
 
                             <div className="space-y-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
@@ -917,9 +958,7 @@ export default function Produtos({ user, permissoes }) {
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <div className="flex justify-between font-black uppercase text-[10px] text-slate-600 mb-1">
-                                            <span>↔️ Horizontal</span>
-                                        </div>
+                                        <span className="font-black uppercase text-[10px] text-slate-600 block mb-1">↔️ Horizontal</span>
                                         <input
                                             type="range"
                                             min="-100"
@@ -931,9 +970,7 @@ export default function Produtos({ user, permissoes }) {
                                         />
                                     </div>
                                     <div>
-                                        <div className="flex justify-between font-black uppercase text-[10px] text-slate-600 mb-1">
-                                            <span>↕️ Vertical</span>
-                                        </div>
+                                        <span className="font-black uppercase text-[10px] text-slate-600 block mb-1">↕️ Vertical</span>
                                         <input
                                             type="range"
                                             min="-100"
@@ -960,7 +997,7 @@ export default function Produtos({ user, permissoes }) {
                                     onClick={confirmarRecortePadraoSite}
                                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase shadow-md cursor-pointer"
                                 >
-                                    ✓ Confirmar Foto
+                                    ✓ Salvar Imagem
                                 </button>
                             </div>
                         </div>
