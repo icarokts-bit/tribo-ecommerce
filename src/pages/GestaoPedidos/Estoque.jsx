@@ -16,9 +16,9 @@ export default function Estoque({ user, permissoes, donoUid: propDonoUid }) {
     // Formulário do Insumo
     const [formData, setFormData] = useState({
         nome: '',
-        unidade: 'un', // 'un', 'g' (kg), 'ml' (litros)
+        unidade: 'un', // 'un', 'g', 'ml'
         quantidadeEstoque: '',
-        custoUnitario: '' // R$/un, R$/kg ou R$/Litro
+        custoUnitario: '' 
     });
 
     useEffect(() => {
@@ -89,8 +89,15 @@ export default function Estoque({ user, permissoes, donoUid: propDonoUid }) {
 
     const insumosFiltrados = insumos.filter(i => (i.nome || '').toLowerCase().includes(busca.toLowerCase()));
 
-    // Total em dinheiro parado no estoque
-    const valorEmEstoque = insumos.reduce((acc, curr) => acc + (Number(curr.quantidadeEstoque || 0) * Number(curr.custoUnitario || 0)), 0);
+    // Total em dinheiro parado no estoque (Calcula corretamente gramas e ml dividindo por 1000)
+    const valorEmEstoque = insumos.reduce((acc, curr) => {
+        const qtd = Number(curr.quantidadeEstoque || 0);
+        const custo = Number(curr.custoUnitario || 0);
+        if (curr.unidade === 'g' || curr.unidade === 'ml') {
+            return acc + ((qtd / 1000) * custo);
+        }
+        return acc + (qtd * custo);
+    }, 0);
 
     return (
         <div className="p-4 md:p-6 space-y-6 font-sans min-h-screen bg-slate-100 text-slate-800">
@@ -156,7 +163,9 @@ export default function Estoque({ user, permissoes, donoUid: propDonoUid }) {
                                 insumosFiltrados.map(i => {
                                     const qtd = Number(i.quantidadeEstoque || 0);
                                     const custo = Number(i.custoUnitario || 0);
-                                    const total = qtd * custo;
+                                    
+                                    // Se for grama ou ml, divide por 1000 para calcular o custo total do estoque
+                                    const total = (i.unidade === 'g' || i.unidade === 'ml') ? (qtd / 1000) * custo : qtd * custo;
 
                                     return (
                                         <tr key={i.id} className="border-b border-slate-100 hover:bg-slate-50/80 text-xs">
@@ -171,7 +180,7 @@ export default function Estoque({ user, permissoes, donoUid: propDonoUid }) {
                                                 </span>
                                             </td>
                                             <td className="p-4 text-center font-bold text-slate-600">
-                                                {qtd} {i.unidade === 'g' ? 'Kg' : i.unidade === 'ml' ? 'Litros' : 'un'}
+                                                {qtd} {i.unidade === 'g' ? 'g' : i.unidade === 'ml' ? 'ml' : 'un'}
                                             </td>
                                             <td className="p-4 text-right font-bold text-slate-600">
                                                 {formatMoney(custo)}
@@ -227,21 +236,21 @@ export default function Estoque({ user, permissoes, donoUid: propDonoUid }) {
                                         onChange={e => setFormData({ ...formData, unidade: e.target.value })}
                                         className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none cursor-pointer focus:border-orange-500"
                                     >
-                                        <option value="un">Unidade (Caixas, Argolas)</option>
+                                        <option value="un">Unidade (Ex: Caixas, Argolas)</option>
                                         <option value="g">Gramas (Usar preço do Kg)</option>
                                         <option value="ml">Mililitros (Usar preço do Litro)</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                                        Qtd. em {formData.unidade === 'g' ? 'Kilos (Kg)' : formData.unidade === 'ml' ? 'Litros (L)' : 'Estoque'}
+                                        Qtd. em Estoque ({formData.unidade === 'g' ? 'g' : formData.unidade === 'ml' ? 'ml' : 'un'})
                                     </label>
                                     <input
                                         type="number"
                                         step="any"
                                         value={formData.quantidadeEstoque}
                                         onChange={e => setFormData({ ...formData, quantidadeEstoque: e.target.value })}
-                                        placeholder="Ex: 5"
+                                        placeholder={formData.unidade === 'g' ? 'Ex: 1000 (para 1kg)' : formData.unidade === 'ml' ? 'Ex: 500 (para 500ml)' : 'Ex: 50'}
                                         className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-center outline-none focus:border-orange-500"
                                     />
                                 </div>
@@ -249,7 +258,7 @@ export default function Estoque({ user, permissoes, donoUid: propDonoUid }) {
 
                             <div>
                                 <label className="text-[10px] font-black uppercase text-emerald-700 block mb-1">
-                                    Preço Base Custo ({formData.unidade === 'g' ? 'Preço de 1 Kg' : formData.unidade === 'ml' ? 'Preço de 1 Litro' : 'Custo da Unidade'}) *
+                                    Preço Base Custo ({formData.unidade === 'g' ? 'Preço de 1 Kg (R$)' : formData.unidade === 'ml' ? 'Preço de 1 Litro (R$)' : 'Custo Unitário (R$)'}) *
                                 </label>
                                 <input
                                     type="number"

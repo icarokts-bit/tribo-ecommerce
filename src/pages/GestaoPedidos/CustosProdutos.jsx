@@ -10,13 +10,11 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
     const [loading, setLoading] = useState(true);
     const [busca, setBusca] = useState('');
 
-    // Modais
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
 
-    // Tarifas padrão salvas no banco
     const [configTaxas, setConfigTaxas] = useState({
         tarifaKwh: 0.95,
         potenciaMediaWatts: 180,
@@ -24,33 +22,17 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         custoHoraMaoDeObra: 25.00,
         taxaFalhaPadrao: 5,
         markupSugeridoPadrao: 3.0,
-        taxaMarketplacePerc: 18,
+        taxaMarketplacePerc: 18, 
         taxaMarketplaceFixa: 3.00
     });
 
-    // Formulário da Ficha
     const [formData, setFormData] = useState({
-        nome: '',
-        precoVenda: '',
-        markupEscolhido: 3.0,
-        taxaMarketplacePerc: 18,
-        taxaMarketplaceFixa: 3.00,
-        peso: 0.000,
-        comprimento: 0,
-        largura: 0,
-        altura: 0,
-        tempoTotalMaquinaMinutos: 0,
-        potenciaWatts: 180,
-        tarifaKwh: 0.95,
-        custoHoraMaquina: 1.20,
-        tempoManualMinutos: 0,
-        custoHoraMaoDeObra: 25.00,
-        taxaFalhaPerc: 5,
-        embalagemCusto: 0,
-        ingredientes: []
+        nome: '', precoVenda: '', markupEscolhido: 3.0, taxaMarketplacePerc: 18, taxaMarketplaceFixa: 3.00,
+        peso: 0.000, comprimento: 0, largura: 0, altura: 0,
+        tempoTotalMaquinaMinutos: 0, potenciaWatts: 180, tarifaKwh: 0.95, custoHoraMaquina: 1.20,
+        tempoManualMinutos: 0, custoHoraMaoDeObra: 25.00, taxaFalhaPerc: 5, embalagemCusto: 0, ingredientes: []
     });
 
-    // Campos para adicionar Insumo / Filamento
     const [insumoSelectId, setInsumoSelectId] = useState('');
     const [ingNome, setIngNome] = useState('');
     const [ingUnidade, setIngUnidade] = useState('g');
@@ -61,9 +43,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         if (!donoUid) return;
 
         db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/cost_rates`).get().then(doc => {
-            if (doc.exists) {
-                setConfigTaxas(prev => ({ ...prev, ...doc.data() }));
-            }
+            if (doc.exists) setConfigTaxas(prev => ({ ...prev, ...doc.data() }));
         });
 
         db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/estoque`).get().then(snap => {
@@ -97,12 +77,8 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         const p = Number(precoBase || 0);
         const un = String(unidade || 'g').toLowerCase();
 
-        if (un === 'g' || un === 'g_kg' || un === 'gramas' || un === 'kg') {
-            return p > 1 ? (p / 1000) * q : p * q;
-        }
-        if (un === 'ml' || un === 'l') {
-            return p > 1 ? (p / 1000) * q : p * q;
-        }
+        if (un === 'g' || un === 'g_kg' || un === 'gramas' || un === 'kg') return p > 1 ? (p / 1000) * q : p * q;
+        if (un === 'ml' || un === 'l') return p > 1 ? (p / 1000) * q : p * q;
         return p * q;
     };
 
@@ -116,46 +92,29 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         try {
             await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/cost_rates`).set(configTaxas, { merge: true });
             setIsConfigOpen(false);
-            alert("Tarifas e multiplicador padrão salvos com sucesso!");
-        } catch (err) {
-            alert("Erro ao salvar tarifas.");
-        }
+            alert("Configurações salvas com sucesso!");
+        } catch (err) { alert("Erro ao salvar tarifas."); }
     };
 
     const abrirModalNovaFicha = (ficha = null) => {
         if (ficha) {
             setEditingId(ficha.id);
-            const minutosConvertidos = ficha.tempoTotalMaquinaMinutos !== undefined
-                ? Number(ficha.tempoTotalMaquinaMinutos)
-                : (Number(ficha.tempoMaquinaHoras || 0) * 60) + Number(ficha.tempoMaquinaMinutos || 0);
-
-            const ingredientesCorrigidos = (Array.isArray(ficha.ingredientes) ? ficha.ingredientes : []).map(ing => {
+            const minConv = ficha.tempoTotalMaquinaMinutos !== undefined ? Number(ficha.tempoTotalMaquinaMinutos) : (Number(ficha.tempoMaquinaHoras || 0) * 60) + Number(ficha.tempoMaquinaMinutos || 0);
+            
+            const ingCorrigidos = (Array.isArray(ficha.ingredientes) ? ficha.ingredientes : []).map(ing => {
                 if ((ing.unidade === 'g' || ing.unidade === 'ml' || ing.modoCalculo === 'g_kg') && Number(ing.custoBaseInformado) > 1 && Number(ing.custoTotal) > Number(ing.custoBaseInformado)) {
-                    const recalculado = (Number(ing.custoBaseInformado) / 1000) * Number(ing.qtd);
-                    return { ...ing, custoTotal: Number(recalculado.toFixed(4)) };
+                    return { ...ing, custoTotal: Number(((Number(ing.custoBaseInformado) / 1000) * Number(ing.qtd)).toFixed(4)) };
                 }
                 return ing;
             });
 
             setFormData({
-                nome: ficha.nome || ficha.name || '',
-                precoVenda: ficha.precoVenda || ficha.price || 0,
+                ...ficha,
                 markupEscolhido: ficha.markupEscolhido ?? configTaxas.markupSugeridoPadrao ?? 3.0,
                 taxaMarketplacePerc: ficha.taxaMarketplacePerc ?? configTaxas.taxaMarketplacePerc ?? 0,
                 taxaMarketplaceFixa: ficha.taxaMarketplaceFixa ?? configTaxas.taxaMarketplaceFixa ?? 0,
-                peso: ficha.peso ?? 0.000,
-                comprimento: ficha.comprimento ?? 0,
-                largura: ficha.largura ?? 0,
-                altura: ficha.altura ?? 0,
-                tempoTotalMaquinaMinutos: minutosConvertidos,
-                potenciaWatts: ficha.potenciaWatts ?? configTaxas.potenciaMediaWatts,
-                tarifaKwh: ficha.tarifaKwh ?? configTaxas.tarifaKwh,
-                custoHoraMaquina: ficha.custoHoraMaquina ?? configTaxas.custoHoraMaquina,
-                tempoManualMinutos: ficha.tempoManualMinutos ?? 0,
-                custoHoraMaoDeObra: ficha.custoHoraMaoDeObra ?? configTaxas.custoHoraMaoDeObra,
-                taxaFalhaPerc: ficha.taxaFalhaPerc ?? configTaxas.taxaFalhaPadrao,
-                embalagemCusto: ficha.embalagemCusto ?? 0,
-                ingredientes: ingredientesCorrigidos
+                tempoTotalMaquinaMinutos: minConv,
+                ingredientes: ingCorrigidos
             });
         } else {
             setEditingId(null);
@@ -183,30 +142,22 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
             const n = item.nome || item.name || '';
             const u = String(item.unidade || item.unit || '').toLowerCase();
             setIngNome(n);
-            
             if (u.includes('kg') || u === 'g' || n.toLowerCase().includes('filamento')) setIngUnidade('g');
             else if (u.includes('l') || u === 'ml' || n.toLowerCase().includes('resina')) setIngUnidade('ml');
             else setIngUnidade('un');
-            
             setIngCustoUnitario(item.custoUnitario || item.precoCusto || item.price || item.valor || '');
         }
     };
 
     const handleAdicionarIngrediente = () => {
         if (!ingNome.trim() || !ingQtdUsada) return alert("Preencha o nome do material/filamento e a quantidade usada.");
-        
         const qtd = Number(ingQtdUsada || 0);
         const valorInformado = Number(ingCustoUnitario || 0);
         const custoFinalItem = calcularCustoItem(ingUnidade, qtd, valorInformado);
 
         const novoIng = {
-            id: crypto.randomUUID(),
-            nome: ingNome.trim(),
-            unidade: ingUnidade,
-            qtd: qtd,
-            custoBaseInformado: valorInformado,
-            modoCalculo: ingUnidade,
-            custoTotal: Number(custoFinalItem.toFixed(4))
+            id: crypto.randomUUID(), nome: ingNome.trim(), unidade: ingUnidade,
+            qtd: qtd, custoBaseInformado: valorInformado, modoCalculo: ingUnidade, custoTotal: Number(custoFinalItem.toFixed(4))
         };
 
         setFormData(prev => {
@@ -215,36 +166,22 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
             let novoC = prev.comprimento || 0;
             let novoL = prev.largura || 0;
             let novoA = prev.altura || 0;
-            
             const nomeMin = ingNome.toLowerCase();
 
-            // Auto-Soma de Peso: Converte gramas ou ml (resina) em Kg para Correios (1ml ~= 1g)
-            if (novoIng.unidade === 'g' || novoIng.unidade === 'ml') {
-                novoPeso += (qtd / 1000);
-            }
+            if (novoIng.unidade === 'g' || novoIng.unidade === 'ml') novoPeso += (qtd / 1000);
 
-            // Auto-Extração das Medidas da Caixa
             if (nomeMin.includes('caixa') || nomeMin.includes('papelão') || nomeMin.includes('embalagem')) {
                 novoCustoEmb += custoFinalItem;
                 const matchMedidas = nomeMin.match(/(\d+)\s*[xX*]\s*(\d+)\s*[xX*]\s*(\d+)/);
                 if (matchMedidas) {
-                    novoC = Number(matchMedidas[1]);
-                    novoL = Number(matchMedidas[2]);
-                    novoA = Number(matchMedidas[3]);
+                    novoC = Number(matchMedidas[1]); novoL = Number(matchMedidas[2]); novoA = Number(matchMedidas[3]);
                 }
-                if (novoPeso === 0 || (novoPeso < 0.05 && novoIng.unidade !== 'g' && novoIng.unidade !== 'ml')) {
-                    novoPeso += 0.050; 
-                }
+                if (novoPeso === 0 || (novoPeso < 0.05 && novoIng.unidade !== 'g' && novoIng.unidade !== 'ml')) novoPeso += 0.050; 
             }
 
             return {
-                ...prev,
-                peso: Number(novoPeso.toFixed(3)),
-                embalagemCusto: Number(novoCustoEmb.toFixed(2)),
-                comprimento: novoC,
-                largura: novoL,
-                altura: novoA,
-                ingredientes: [...prev.ingredientes, novoIng]
+                ...prev, peso: Number(novoPeso.toFixed(3)), embalagemCusto: Number(novoCustoEmb.toFixed(2)),
+                comprimento: novoC, largura: novoL, altura: novoA, ingredientes: [...prev.ingredientes, novoIng]
             };
         });
 
@@ -354,19 +291,12 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
     return (
         <div className="p-4 md:p-6 space-y-6 font-sans min-h-screen bg-slate-100 text-slate-800">
-            
             <header className="bg-white rounded-2xl border border-slate-200 px-6 py-4 flex flex-wrap items-center justify-between gap-4 shadow-xs">
                 <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
-                        <Icon name="pie-chart" size={22} />
-                    </div>
+                    <div className="w-11 h-11 bg-indigo-600 rounded-xl flex items-center justify-center text-white"><Icon name="pie-chart" size={22} /></div>
                     <div>
-                        <h1 className="font-black text-slate-900 text-base md:text-lg uppercase tracking-wider leading-none">
-                            Engenharia, Custos & Marketplace
-                        </h1>
-                        <span className="text-xs font-bold text-slate-400">
-                            Cálculo de Preço Sugerido com integração de taxas Shopee, ML e Cartões
-                        </span>
+                        <h1 className="font-black text-slate-900 text-base md:text-lg uppercase tracking-wider leading-none">Engenharia, Custos & Marketplace</h1>
+                        <span className="text-xs font-bold text-slate-400">Cálculo de Preço Sugerido com integração de taxas Shopee, ML e Cartões</span>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2.5">
@@ -409,15 +339,8 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
                 <div className="p-4 border-b border-slate-100">
-                    <input
-                        type="text"
-                        value={busca}
-                        onChange={e => setBusca(e.target.value)}
-                        placeholder="Buscar produto na ficha de custos..."
-                        className="w-full max-w-md px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-500"
-                    />
+                    <input type="text" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar produto na ficha de custos..." className="w-full max-w-md px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-500" />
                 </div>
-
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
@@ -441,7 +364,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                 fichasFiltradas.map(f => {
                                     const minSalvos = f.tempoTotalMaquinaMinutos !== undefined ? Number(f.tempoTotalMaquinaMinutos) : (Number(f.tempoMaquinaHoras || 0) * 60) + Number(f.tempoMaquinaMinutos || 0);
                                     const sugerido = f.precoSugerido || 0;
-
                                     return (
                                         <tr key={f.id} className="border-b border-slate-100 hover:bg-slate-50/80 text-xs">
                                             <td className="p-4 font-black text-slate-800">{f.nome}</td>
@@ -454,9 +376,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 {f.custoVendaMarketplace > 0 && <span className="text-[9px] text-slate-400 font-bold block">-{formatMoney(f.custoVendaMarketplace)} taxas</span>}
                                             </td>
                                             <td className="p-4 text-center">
-                                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2.5 py-1 rounded-full text-[10px]">
-                                                    {formatMoney(f.lucroBruto)} ({Number(f.margemLucro || 0).toFixed(0)}%)
-                                                </span>
+                                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2.5 py-1 rounded-full text-[10px]">{formatMoney(f.lucroBruto)} ({Number(f.margemLucro || 0).toFixed(0)}%)</span>
                                             </td>
                                             <td className="p-4 text-right whitespace-nowrap">
                                                 <button onClick={() => abrirModalNovaFicha(f)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1 cursor-pointer"><Icon name="edit" size={16} /></button>
@@ -471,37 +391,27 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 </div>
             </div>
 
-            {/* MODAL: NOVA FICHA DE CUSTOS COM MARKETPLACE E AUTOMAÇÃO */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
-                        
                         <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-white shrink-0">
                             <div className="flex items-center gap-2.5">
                                 <Icon name="pie-chart" size={20} className="text-indigo-600" />
-                                <h3 className="font-black text-slate-900 text-base uppercase tracking-wider">
-                                    {editingId ? 'Editar Ficha de Custos' : 'Nova Ficha de Custos'}
-                                </h3>
+                                <h3 className="font-black text-slate-900 text-base uppercase tracking-wider">{editingId ? 'Editar Ficha de Custos' : 'Nova Ficha de Custos'}</h3>
                             </div>
                             <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-800 text-xl cursor-pointer">✕</button>
                         </div>
 
                         <form onSubmit={handleSalvarFicha} className="flex flex-col flex-1 min-h-0 overflow-hidden">
                             <div className="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
-                                
-                                {/* COLUNA ESQUERDA */}
                                 <div className="lg:col-span-6 space-y-4">
-                                    
                                     {/* 1. INFO BASE */}
                                     <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3.5">
-                                        <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block border-b border-slate-100 pb-2">
-                                            1. Produto & Taxas Marketplace
-                                        </span>
+                                        <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block border-b border-slate-100 pb-2">1. Produto & Taxas Marketplace</span>
                                         <div>
                                             <label className="text-xs font-black uppercase text-slate-700 block mb-1">Nome do Produto *</label>
                                             <input type="text" required value={formData.nome} onChange={e => setFormData({ ...formData, nome: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:border-indigo-600" />
                                         </div>
-
                                         <div className="grid grid-cols-2 gap-3 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl">
                                             <div>
                                                 <label className="text-[10px] font-black uppercase text-indigo-800 block mb-1">Taxa Shopee/ML (%)</label>
@@ -512,10 +422,9 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 <input type="number" step="any" value={formData.taxaMarketplaceFixa} onChange={e => setFormData({ ...formData, taxaMarketplaceFixa: e.target.value })} className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-xs font-bold text-center outline-none" />
                                             </div>
                                         </div>
-
                                         <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3 space-y-2.5 mt-2">
                                             <div className="flex items-center justify-between">
-                                                <span className="text-[10px] font-black uppercase text-emerald-800 flex items-center gap-1">💡 Preço Sugerido Seguro (Cobre as Taxas):</span>
+                                                <span className="text-[10px] font-black uppercase text-emerald-800 flex items-center gap-1">💡 Preço Sugerido Seguro:</span>
                                                 <div className="flex items-center gap-1 text-[10px] font-black text-indigo-700">
                                                     <span>Markup:</span>
                                                     <input type="number" step="0.1" min="1.1" value={formData.markupEscolhido} onChange={e => setFormData({ ...formData, markupEscolhido: e.target.value })} className="w-12 p-1 bg-white border border-indigo-300 rounded text-center font-black" />
@@ -538,7 +447,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 </button>
                                             </div>
                                         </div>
-
                                         <div>
                                             <div className="flex justify-between items-center mb-1">
                                                 <label className="text-xs font-black uppercase text-slate-700">Preço Venda Praticado *</label>
@@ -590,38 +498,22 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                         </div>
                                     </div>
 
-                                    {/* 3. LOGÍSTICA (AUTOMÁTICO E MANUAL) */}
+                                    {/* 3. LOGÍSTICA */}
                                     <div className="p-4 rounded-2xl border border-orange-200 bg-orange-50/30 space-y-3">
                                         <div className="flex justify-between items-center border-b border-orange-200/60 pb-2">
                                             <span className="text-xs font-black uppercase text-orange-800 tracking-wider flex items-center gap-1.5"><Icon name="truck" size={15} /> 3. Caixa & Logística</span>
-                                            <span className="text-[9px] font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded">Preenchido Automa. ao add materiais</span>
                                         </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 items-end">
-                                            <div>
-                                                <label className="text-[10px] font-black uppercase text-orange-900 block mb-1">Peso (kg)</label>
-                                                <input type="number" step="any" value={formData.peso} onChange={e => setFormData({ ...formData, peso: e.target.value })} className="w-full p-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-center" />
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-black uppercase text-orange-900 block mb-1">Comp. (cm)</label>
-                                                <input type="number" step="any" value={formData.comprimento} onChange={e => setFormData({ ...formData, comprimento: e.target.value })} className="w-full p-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-center" />
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-black uppercase text-orange-900 block mb-1">Larg. (cm)</label>
-                                                <input type="number" step="any" value={formData.largura} onChange={e => setFormData({ ...formData, largura: e.target.value })} className="w-full p-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-center" />
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-black uppercase text-orange-900 block mb-1">Alt. (cm)</label>
-                                                <input type="number" step="any" value={formData.altura} onChange={e => setFormData({ ...formData, altura: e.target.value })} className="w-full p-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-center" />
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-black uppercase text-emerald-800 block mb-1">Custo Caixa (R$)</label>
-                                                <input type="number" step="any" value={formData.embalagemCusto} onChange={e => setFormData({ ...formData, embalagemCusto: e.target.value })} className="w-full p-2 bg-white border border-emerald-300 rounded-xl text-xs font-black text-center" />
-                                            </div>
+                                            <div><label className="text-[10px] font-black uppercase text-orange-900 block mb-1">Peso (kg)</label><input type="number" step="any" value={formData.peso} onChange={e => setFormData({ ...formData, peso: e.target.value })} className="w-full p-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-center" /></div>
+                                            <div><label className="text-[10px] font-black uppercase text-orange-900 block mb-1">Comp. (cm)</label><input type="number" step="any" value={formData.comprimento} onChange={e => setFormData({ ...formData, comprimento: e.target.value })} className="w-full p-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-center" /></div>
+                                            <div><label className="text-[10px] font-black uppercase text-orange-900 block mb-1">Larg. (cm)</label><input type="number" step="any" value={formData.largura} onChange={e => setFormData({ ...formData, largura: e.target.value })} className="w-full p-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-center" /></div>
+                                            <div><label className="text-[10px] font-black uppercase text-orange-900 block mb-1">Alt. (cm)</label><input type="number" step="any" value={formData.altura} onChange={e => setFormData({ ...formData, altura: e.target.value })} className="w-full p-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-center" /></div>
+                                            <div><label className="text-[10px] font-black uppercase text-emerald-800 block mb-1">Custo Caixa</label><input type="number" step="any" value={formData.embalagemCusto} onChange={e => setFormData({ ...formData, embalagemCusto: e.target.value })} className="w-full p-2 bg-white border border-emerald-300 rounded-xl text-xs font-black text-center" /></div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* COLUNA DIREITA: MATERIAIS */}
+                                {/* COLUNA DIREITA */}
                                 <div className="lg:col-span-6 flex flex-col justify-between space-y-4">
                                     <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-4 flex-1 flex flex-col">
                                         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -630,16 +522,16 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                         </div>
 
                                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3.5">
-                                            {estoqueInsumos.length > 0 && (
-                                                <div>
-                                                    <select value={insumoSelectId} onChange={handleSelecionarInsumoEstoque} className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold outline-none cursor-pointer">
-                                                        <option value="">-- Selecionar filamento ou caixa do Estoque --</option>
-                                                        {estoqueInsumos.map(item => (
-                                                            <option key={item.id} value={item.id}>{item.nome || item.name}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
+                                            {/* SELECT AGORA ESTÁ SEMPRE VISÍVEL! */}
+                                            <div>
+                                                <select value={insumoSelectId} onChange={handleSelecionarInsumoEstoque} className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold outline-none cursor-pointer">
+                                                    <option value="">-- Puxar material cadastrado no Estoque --</option>
+                                                    {estoqueInsumos.length === 0 && <option value="" disabled>(Nenhum insumo cadastrado no estoque ainda)</option>}
+                                                    {estoqueInsumos.map(item => (
+                                                        <option key={item.id} value={item.id}>{item.nome || item.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
 
                                             <div>
                                                 <label className="text-[10px] font-black uppercase text-slate-600 block mb-1">Nome do Item *</label>
@@ -674,7 +566,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 </div>
                                             )}
                                             <button type="button" onClick={handleAdicionarIngrediente} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase cursor-pointer shadow-xs transition-colors">
-                                                + Adicionar Material / Insumo na Ficha
+                                                + Adicionar Material
                                             </button>
                                         </div>
 
@@ -699,33 +591,27 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                     {/* RESULTADO FINANCEIRO FINAL */}
                                     <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-2.5 shadow-lg">
                                         <div className="flex justify-between items-center text-xs font-black uppercase tracking-wider">
-                                            <span className="text-slate-400">Custo Total de Produção</span>
+                                            <span className="text-slate-400">Custo de Produção</span>
                                             <span className="text-rose-400 text-base">-{formatMoney(resumoCalculado.custoTotalProducao)}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-xs font-black uppercase tracking-wider">
-                                            <span className="text-slate-400">Taxas de Venda (Shopee/Cartão)</span>
+                                            <span className="text-slate-400">Taxas Marketplace</span>
                                             <span className="text-rose-400 text-base">-{formatMoney(resumoCalculado.custoMarketplaceReal)}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-xs font-black uppercase tracking-wider border-b border-slate-800 pb-2.5 pt-1">
                                             <span className="text-slate-400">Venda Praticada</span>
                                             <span className="text-emerald-400 text-base">{formatMoney(resumoCalculado.vendaPraticada)}</span>
                                         </div>
-
                                         <div className="flex justify-between items-center pt-1">
-                                            <span className="font-black text-sm uppercase tracking-wider">Lucro Líquido Real</span>
+                                            <span className="font-black text-sm uppercase tracking-wider">Lucro Real</span>
                                             <div className="text-right">
-                                                <span className={`text-2xl font-black block leading-none ${resumoCalculado.lucroBruto >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-                                                    {formatMoney(resumoCalculado.lucroBruto)}
-                                                </span>
-                                                <span className="inline-block mt-1 px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-black text-[10px] uppercase">
-                                                    {resumoCalculado.margemPerc.toFixed(1)}% Margem Livre
-                                                </span>
+                                                <span className={`text-2xl font-black block leading-none ${resumoCalculado.lucroBruto >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>{formatMoney(resumoCalculado.lucroBruto)}</span>
+                                                <span className="inline-block mt-1 px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-black text-[10px] uppercase">{resumoCalculado.margemPerc.toFixed(1)}% Margem</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-
                             <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end items-center gap-3 shrink-0">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase hover:bg-slate-100 cursor-pointer">Cancelar</button>
                                 <button type="submit" disabled={saving} className="px-7 py-3 bg-slate-900 hover:bg-black text-white rounded-xl font-black text-xs uppercase shadow-md flex items-center gap-2 cursor-pointer">
