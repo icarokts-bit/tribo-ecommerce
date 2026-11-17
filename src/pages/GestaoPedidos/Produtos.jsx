@@ -133,7 +133,7 @@ export default function Produtos({ user, permissoes }) {
                 rawImage: imgSrc,
                 target: destino,
                 aspect: propDetectada,
-                mode: 'cover', // Preenche 100% da proporção escolhida (ex: 1:1 encaixa em 1:1 sem sobras)
+                mode: 'cover',
                 zoom: 1,
                 offsetX: 0,
                 offsetY: 0
@@ -202,7 +202,6 @@ export default function Produtos({ user, permissoes }) {
         if (cropModal.target === 'product') {
             setFormData(prev => ({ ...prev, imageUrl: urlFinalPadronizada }));
         } else {
-            // Salva a imagem recortada E a proporção escolhida (1:1, 3:2, 16:9) na categoria!
             setCatForm(prev => ({
                 ...prev,
                 imageUrl: urlFinalPadronizada,
@@ -268,7 +267,6 @@ export default function Produtos({ user, permissoes }) {
         return `${slot}º • Linha Inferior do Mosaico`;
     };
 
-    // Move a categoria para cima ou para baixo para trocar a posição dela no Mosaico
     const moverPosicaoCategoria = async (indexAtual, direcao) => {
         const novoIndex = indexAtual + direcao;
         if (novoIndex < 0 || novoIndex >= categoriesList.length) return;
@@ -674,7 +672,6 @@ export default function Produtos({ user, permissoes }) {
                                 {categoriesList.map((cat, index) => (
                                     <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-xs hover:border-indigo-300 transition-all">
                                         <div className="flex items-center gap-3.5">
-                                            {/* Botões de Subir / Descer Posição no Mosaico */}
                                             <div className="flex flex-col gap-1">
                                                 <button
                                                     type="button"
@@ -761,11 +758,18 @@ export default function Produtos({ user, permissoes }) {
                                                 ? "Selecione um produto cadastrado no custo..." 
                                                 : "Você ainda não cadastrou nenhuma ficha técnica..."}
                                         </option>
-                                        {produtosDoCusto.map(prod => (
-                                            <option key={prod.id} value={prod.id}>
-                                                {prod.nome} (Custo: {formatMoney(prod.custoTotal || 0)} • Sugerido: {formatMoney(prod.precoSugerido || prod.precoVenda || 0)})
-                                            </option>
-                                        ))}
+                                        {produtosDoCusto.map(prod => {
+                                            const custo = Number(prod.custoTotal || 0);
+                                            const markup = Number(prod.markupEscolhido || 3);
+                                            const precoLoja = custo * markup;
+                                            const precoMkt = Number(prod.precoSugerido || prod.precoVenda || 0);
+                                            
+                                            return (
+                                                <option key={prod.id} value={prod.id}>
+                                                    {prod.nome} (Custo: {formatMoney(custo)} • Sug. Loja: {formatMoney(precoLoja)} • Sug. Mkt: {formatMoney(precoMkt)})
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
                             )}
@@ -1022,7 +1026,6 @@ export default function Produtos({ user, permissoes }) {
                                 </button>
                             </div>
 
-                            {/* Preview que mostra exatamente o formato 1:1, 3:2 ou 16:9 */}
                             <div className="w-72 max-h-64 mx-auto rounded-2xl border-2 border-indigo-500 shadow-inner overflow-hidden bg-slate-900 flex items-center justify-center relative">
                                 <canvas ref={canvasPreviewRef} className="max-w-full max-h-60 w-auto h-auto object-contain" />
                             </div>
