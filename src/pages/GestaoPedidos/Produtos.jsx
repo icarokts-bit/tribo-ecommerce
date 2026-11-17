@@ -14,14 +14,14 @@ export default function Produtos({ user, permissoes }) {
     const [saving, setSaving] = useState(false);
 
     // =====================================================================
-    // ESTADOS DO RECORTADOR (OTIMIZADO PARA NÃO ESTOURAR 1MB DO FIREBASE)
+    // ESTADOS DO RECORTADOR (GRAVA A PROPORÇÃO 1:1, 3:2 OU 16:9 NO CARD)
     // =====================================================================
     const [cropModal, setCropModal] = useState({
         open: false,
         rawImage: '',
         target: 'product', // 'product' | 'category'
-        aspect: 'original',// 'original' (Respeita a foto subida), '1:1', '3:2', '16:9'
-        mode: 'contain',   // 'contain' (Foto 100% inteira) | 'cover' (Preencher cortando sobras)
+        aspect: '1:1',     // '1:1' (Quadrado), '3:2' (Mosaico), '16:9' (Largo), 'original'
+        mode: 'cover',     // 'cover' (Encaixar preenchendo 100% da proporção escolhida) | 'contain' (Foto inteira)
         zoom: 1,
         offsetX: 0,
         offsetY: 0
@@ -39,11 +39,12 @@ export default function Produtos({ user, permissoes }) {
         variations: []
     });
 
-    // Estado do formulário de Categoria com Foto e Selo Laranja
+    // Estado do formulário de Categoria com Foto, Proporção (aspect) e Selo Laranja
     const [catForm, setCatForm] = useState({
         id: '',
         name: '',
         imageUrl: '',
+        aspect: '1:1',
         tagOption: 'DESTAQUE',
         customTag: ''
     });
@@ -53,7 +54,6 @@ export default function Produtos({ user, permissoes }) {
 
     const donoUid = permissoes?.donoUid || user?.uid;
 
-    // Sincroniza o catálogo com segurança sem travar caso algum espelho secundário falhe
     const sincronizarCatalogoPublico = async (novosProdutos, novasCategorias) => {
         if (!donoUid) throw new Error("Usuário não autenticado.");
 
@@ -65,10 +65,8 @@ export default function Produtos({ user, permissoes }) {
             payload.categories = novasCategorias;
         }
 
-        // 1. Gravação principal obrigatória no catalog_state
         await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set(payload, { merge: true });
 
-        // 2. Espelhamento secundário opcional (não bloqueia se exceder ou não existir permissão)
         try {
             await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/loja`).set({
                 ...payload,
@@ -103,7 +101,7 @@ export default function Produtos({ user, permissoes }) {
     }, [donoUid]);
 
     // =====================================================================
-    // LÓGICA DO RECORTADOR COM COMPRESSÃO INTELIGENTE (EVITA ERRO DE 1MB)
+    // LÓGICA DO RECORTADOR COM ENCAIXE EXATO NA PROPORÇÃO SELECIONADA
     // =====================================================================
     const abrirRecortadorComArquivo = (file, destino = 'product') => {
         if (!file) return;
@@ -114,19 +112,28 @@ export default function Produtos({ user, permissoes }) {
         };
     };
 
-    const iniciarModalCrop = (imgSrc, destino = 'product') => {
+    const iniciarModalCrop = (imgSrc, destino = 'product', aspectInicial = null) => {
         if (!imgSrc) return;
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.src = imgSrc;
         img.onload = () => {
             loadedImgRef.current = img;
+            // Detecta automaticamente a proporção mais próxima da imagem subida caso não tenha sido escolhida
+            let propDetectada = aspectInicial || (destino === 'category' ? (catForm.aspect || '1:1') : '1:1');
+            if (!aspectInicial && destino === 'category') {
+                const ratio = img.width / img.height;
+                if (ratio > 1.6) propDetectada = '16:9';
+                else if (ratio > 1.2) propDetectada = '3:2';
+                else propDetectada = '1:1';
+            }
+
             setCropModal({
                 open: true,
                 rawImage: imgSrc,
                 target: destino,
-                aspect: 'original',
-                mode: 'contain',
+                aspect: propDetectada,
+                mode: 'cover', // Preenche 100% da proporção escolhida (ex: 1:1 encaixa em 1:1 sem sobras)
                 zoom: 1,
                 offsetX: 0,
                 offsetY: 0
@@ -141,12 +148,18 @@ export default function Produtos({ user, permissoes }) {
         const ctx = canvas.getContext('2d');
         const img = loadedImgRef.current;
 
-        // Resolução calibrada (550px) para gerar imagens leves (~30KB) que cabem às dezenas no Firestore
-        let W = 550;
-        let H = 550;
+        // Resolução exata e leve para cada proporção escolhida
+        let W = 560;
+        let H = 560;
 
-        if (cropModal.aspect === 'original') {
-            const maxDim = 560;
+        if (cropModal.aspect === '1:1') {
+            W = 560; H = 560;
+        } else if (cropModal.aspect === '3:2') {
+            W = 600; H = 400;
+        } else if (cropModal.aspect === '16:9') {
+            W = 640; H = 360;
+        } else if (cropModal.aspect === 'original') {
+            const maxDim = 580;
             if (img.width >= img.height) {
                 W = maxDim;
                 H = Math.max(240, Math.round((img.height / img.width) * maxDim));
@@ -154,27 +167,13 @@ export default function Produtos({ user, permissoes }) {
                 H = maxDim;
                 W = Math.max(240, Math.round((img.width / img.height) * maxDim));
             }
-        } else if (cropModal.aspect === '3:2') {
-            W = 600; H = 400;
-        } else if (cropModal.aspect === '16:9') {
-            W = 640; H = 360;
         }
 
         canvas.width = W;
         canvas.height = H;
 
-        if (cropModal.mode === 'contain') {
-            ctx.save();
-            ctx.filter = 'blur(18px) brightness(0.75)';
-            const bgScale = Math.max(W / img.width, H / img.height) * 1.1;
-            const bgW = img.width * bgScale;
-            const bgH = img.height * bgScale;
-            ctx.drawImage(img, (W - bgW) / 2, (H - bgH) / 2, bgW, bgH);
-            ctx.restore();
-        } else {
-            ctx.fillStyle = '#0F172A';
-            ctx.fillRect(0, 0, W, H);
-        }
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
 
         const baseScale = cropModal.mode === 'cover'
             ? Math.max(W / img.width, H / img.height)
@@ -184,8 +183,8 @@ export default function Produtos({ user, permissoes }) {
         const drawWidth = img.width * finalScale;
         const drawHeight = img.height * finalScale;
 
-        const maxShiftX = Math.max(180, Math.abs(drawWidth - W) / 2 + 100);
-        const maxShiftY = Math.max(180, Math.abs(drawHeight - H) / 2 + 100);
+        const maxShiftX = Math.max(180, Math.abs(drawWidth - W) / 2 + 120);
+        const maxShiftY = Math.max(180, Math.abs(drawHeight - H) / 2 + 120);
 
         const centerX = (W - drawWidth) / 2 + (Number(cropModal.offsetX) / 100) * maxShiftX;
         const centerY = (H - drawHeight) / 2 + (Number(cropModal.offsetY) / 100) * maxShiftY;
@@ -195,16 +194,20 @@ export default function Produtos({ user, permissoes }) {
 
     const confirmarRecortePadraoSite = () => {
         if (!canvasPreviewRef.current) return;
-        // Usa WebP/JPEG com compressão 0.72 para garantir salvamento instantâneo no Firebase
-        let urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/webp', 0.72);
-        if (urlFinalPadronizada.length > 140000) {
-            urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/jpeg', 0.65);
+        let urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/webp', 0.75);
+        if (urlFinalPadronizada.length > 135000) {
+            urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/jpeg', 0.68);
         }
 
         if (cropModal.target === 'product') {
             setFormData(prev => ({ ...prev, imageUrl: urlFinalPadronizada }));
         } else {
-            setCatForm(prev => ({ ...prev, imageUrl: urlFinalPadronizada }));
+            // Salva a imagem recortada E a proporção escolhida (1:1, 3:2, 16:9) na categoria!
+            setCatForm(prev => ({
+                ...prev,
+                imageUrl: urlFinalPadronizada,
+                aspect: cropModal.aspect
+            }));
         }
 
         setCropModal(prev => ({ ...prev, open: false }));
@@ -222,17 +225,16 @@ export default function Produtos({ user, permissoes }) {
         e.target.value = '';
     };
 
-    // Função utilitária que re-comprime imagens antigas pesadas já salvas na lista
     const comprimirImagemBase64Antiga = (base64Str) => {
         return new Promise((resolve) => {
-            if (!base64Str || !base64Str.startsWith('data:image') || base64Str.length < 110000) {
+            if (!base64Str || !base64Str.startsWith('data:image') || base64Str.length < 115000) {
                 return resolve(base64Str);
             }
             const img = new Image();
             img.src = base64Str;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const maxDim = 540;
+                const maxDim = 550;
                 let w = img.width;
                 let h = img.height;
                 if (w >= h && w > maxDim) {
@@ -252,10 +254,36 @@ export default function Produtos({ user, permissoes }) {
         });
     };
 
-    // ==========================================
-    // GESTÃO DE CATEGORIAS
-    // ==========================================
+    // =========================================================
+    // GESTÃO E ORDENAÇÃO DE POSIÇÃO DAS CATEGORIAS NO MOSAICO
+    // =========================================================
     const opcoesPadraoTag = ['DESTAQUE', 'LANÇAMENTOS', 'OFERTAS', 'MAIS VENDIDOS', 'NOVIDADES', 'PERSONALIZADOS', 'CATEGORIA', ''];
+
+    const obterDescricaoPosicaoMosaico = (idx) => {
+        const slot = (idx % 8) + 1;
+        if (slot === 1) return '1º • Card Esquerdo (Ideal 1:1 Quadrado)';
+        if (slot === 2) return '2º • Centro Topo (Ideal 16:9 ou 3:2)';
+        if (slot === 3) return '3º • Centro Base (Ideal 16:9 ou 3:2)';
+        if (slot === 4) return '4º • Destaque Direito Grande (Ideal 1:1 ou 3:2)';
+        return `${slot}º • Linha Inferior do Mosaico`;
+    };
+
+    // Move a categoria para cima ou para baixo para trocar a posição dela no Mosaico
+    const moverPosicaoCategoria = async (indexAtual, direcao) => {
+        const novoIndex = indexAtual + direcao;
+        if (novoIndex < 0 || novoIndex >= categoriesList.length) return;
+
+        const novaLista = [...categoriesList];
+        const [itemMovido] = novaLista.splice(indexAtual, 1);
+        novaLista.splice(novoIndex, 0, itemMovido);
+
+        setCategoriesList(novaLista);
+        try {
+            await sincronizarCatalogoPublico(undefined, novaLista);
+        } catch (err) {
+            alert("Erro ao reordenar posição no mosaico.");
+        }
+    };
 
     const selecionarCategoriaParaEditar = (cat) => {
         const tagAtual = cat.tag !== undefined ? cat.tag : 'DESTAQUE';
@@ -264,6 +292,7 @@ export default function Produtos({ user, permissoes }) {
             id: cat.id,
             name: cat.name || '',
             imageUrl: cat.imageUrl || '',
+            aspect: cat.aspect || '1:1',
             tagOption: ehPadrao ? tagAtual : 'OUTRO',
             customTag: ehPadrao ? '' : tagAtual
         });
@@ -285,6 +314,7 @@ export default function Produtos({ user, permissoes }) {
                 id: catForm.id || crypto.randomUUID(),
                 name: catForm.name.trim(),
                 imageUrl: imagemOtimizada,
+                aspect: catForm.aspect || '1:1',
                 tag: tagFinal
             };
 
@@ -292,7 +322,6 @@ export default function Produtos({ user, permissoes }) {
                 ? categoriesList.map(c => c.id === catForm.id ? newCat : c)
                 : [...categoriesList, newCat];
 
-            // Otimiza também categorias anteriores que estivessem pesadas para nunca exceder 1MB
             const updatedCats = await Promise.all(
                 rawUpdatedCats.map(async (c) => ({
                     ...c,
@@ -302,9 +331,9 @@ export default function Produtos({ user, permissoes }) {
 
             await sincronizarCatalogoPublico(undefined, updatedCats);
             setCategoriesList(updatedCats);
-            setCatForm({ id: '', name: '', imageUrl: '', tagOption: 'DESTAQUE', customTag: '' });
+            setCatForm({ id: '', name: '', imageUrl: '', aspect: '1:1', tagOption: 'DESTAQUE', customTag: '' });
         } catch (error) {
-            console.error("Erro detalhado ao salvar categoria:", error);
+            console.error("Erro ao salvar categoria:", error);
             alert("Erro ao salvar categoria: " + (error.message || "Verifique sua conexão."));
         }
         setSaving(false);
@@ -449,12 +478,12 @@ export default function Produtos({ user, permissoes }) {
                     <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center text-white"><Icon name="box" size={20}/></div>
                     <div>
                         <h1 className="font-black text-slate-800 text-lg uppercase tracking-widest leading-none">Meus Produtos</h1>
-                        <span className="text-xs font-bold text-slate-500">Gestão de Catálogo, Mosaico de Categorias e Recorte Padrão</span>
+                        <span className="text-xs font-bold text-slate-500">Gestão de Catálogo, Posição do Mosaico e Proporção de Fotos</span>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <button onClick={() => setIsCatModalOpen(true)} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg font-black uppercase text-xs tracking-widest flex items-center gap-2 transition-colors cursor-pointer">
-                        <Icon name="grid" size={16}/> Categorias e Fotos ({categoriesList.length})
+                        <Icon name="grid" size={16}/> Categorias e Posição do Mosaico ({categoriesList.length})
                     </button>
                     <button onClick={() => openModal()} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-black uppercase text-xs tracking-widest flex items-center gap-2 transition-colors cursor-pointer">
                         <Icon name="plus" size={16}/> Novo Produto
@@ -523,23 +552,23 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             </main>
 
-            {/* MODAL DE CATEGORIAS COM FOTO PADRONIZADA */}
+            {/* MODAL DE CATEGORIAS COM ORDENAÇÃO DE POSIÇÃO E PROPORÇÃO EXATA */}
             {isCatModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+                    <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
                         <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                             <div>
-                                <h3 className="font-black text-slate-800 text-lg uppercase">Categorias do Mosaico</h3>
-                                <p className="text-xs font-bold text-slate-400">O sistema adapta e otimiza automaticamente a foto que você subir</p>
+                                <h3 className="font-black text-slate-800 text-lg uppercase">Categorias & Posição no Mosaico</h3>
+                                <p className="text-xs font-bold text-slate-400">Escolha a proporção da foto (1:1, 3:2 ou 16:9) e use as setas ↑ ↓ para ordenar a posição</p>
                             </div>
-                            <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-black"><Icon name="x" size={24} /></button>
+                            <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-black cursor-pointer"><Icon name="x" size={24} /></button>
                         </div>
 
                         <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
                             <form onSubmit={handleSaveCategory} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
                                 <div className="flex flex-col md:flex-row gap-4 items-center">
                                     <div className="flex flex-col items-center gap-1.5 shrink-0">
-                                        <div className="w-32 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-white flex items-center justify-center relative overflow-hidden cursor-pointer group">
+                                        <div className="w-28 h-28 rounded-xl border-2 border-dashed border-slate-300 bg-white flex items-center justify-center relative overflow-hidden cursor-pointer group">
                                             {catForm.imageUrl ? (
                                                 <img src={catForm.imageUrl} alt="Cat" className="w-full h-full object-cover" />
                                             ) : (
@@ -553,15 +582,15 @@ export default function Produtos({ user, permissoes }) {
                                         {catForm.imageUrl && (
                                             <button
                                                 type="button"
-                                                onClick={() => iniciarModalCrop(catForm.imageUrl, 'category')}
+                                                onClick={() => iniciarModalCrop(catForm.imageUrl, 'category', catForm.aspect)}
                                                 className="text-[10px] font-black uppercase text-indigo-600 hover:underline cursor-pointer"
                                             >
-                                                ✂️ Ajustar Enquadramento
+                                                ✂️ Ajustar ({catForm.aspect || '1:1'})
                                             </button>
                                         )}
                                     </div>
 
-                                    <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         <div>
                                             <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Nome da Categoria *</label>
                                             <input 
@@ -570,6 +599,26 @@ export default function Produtos({ user, permissoes }) {
                                                 placeholder="Ex: Chaveiros, Combos..."
                                                 className="w-full p-2.5 bg-white border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-indigo-500"
                                             />
+                                        </div>
+
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-indigo-600 block mb-1">Formato do Card no Site</label>
+                                            <select
+                                                value={catForm.aspect || '1:1'}
+                                                onChange={e => {
+                                                    const novoAspect = e.target.value;
+                                                    setCatForm({...catForm, aspect: novoAspect});
+                                                    if (catForm.imageUrl) {
+                                                        iniciarModalCrop(catForm.imageUrl, 'category', novoAspect);
+                                                    }
+                                                }}
+                                                className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg font-black text-xs text-indigo-900 outline-none focus:border-indigo-500 cursor-pointer"
+                                            >
+                                                <option value="1:1">Quadrado (1:1)</option>
+                                                <option value="3:2">Retangular Mosaico (3:2)</option>
+                                                <option value="16:9">Panorâmico Largo (16:9)</option>
+                                                <option value="original">Proporção Livre da Foto</option>
+                                            </select>
                                         </div>
 
                                         <div>
@@ -592,7 +641,7 @@ export default function Produtos({ user, permissoes }) {
                                         </div>
 
                                         {catForm.tagOption === 'OUTRO' && (
-                                            <div className="sm:col-span-2">
+                                            <div className="sm:col-span-3">
                                                 <label className="text-[10px] font-black uppercase text-orange-600 block mb-1">Digite o Texto Personalizado do Selo *</label>
                                                 <input 
                                                     type="text" required value={catForm.customTag} 
@@ -607,7 +656,7 @@ export default function Produtos({ user, permissoes }) {
 
                                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-200/70">
                                     {catForm.id && (
-                                        <button type="button" onClick={() => setCatForm({ id: '', name: '', imageUrl: '', tagOption: 'DESTAQUE', customTag: '' })} className="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg font-black text-xs uppercase cursor-pointer">Cancelar</button>
+                                        <button type="button" onClick={() => setCatForm({ id: '', name: '', imageUrl: '', aspect: '1:1', tagOption: 'DESTAQUE', customTag: '' })} className="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg font-black text-xs uppercase cursor-pointer">Cancelar</button>
                                     )}
                                     <button type="submit" disabled={saving} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-xs uppercase cursor-pointer">
                                         {saving ? 'Salvando...' : catForm.id ? 'Atualizar Categoria' : 'Adicionar Categoria'}
@@ -615,32 +664,70 @@ export default function Produtos({ user, permissoes }) {
                                 </div>
                             </form>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {categoriesList.map(cat => (
-                                    <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-14 h-11 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
+                            {/* LISTA DE CATEGORIAS COM CONTROLE DE POSIÇÃO DO MOSAICO (SETAS ↑ ↓) */}
+                            <div className="space-y-2.5">
+                                <div className="flex items-center justify-between text-[11px] font-black uppercase text-slate-400 px-1">
+                                    <span>Ordem e Posição das Categorias no Mosaico do Site</span>
+                                    <span>Use ↑ ↓ para mudar de lugar</span>
+                                </div>
+
+                                {categoriesList.map((cat, index) => (
+                                    <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-xs hover:border-indigo-300 transition-all">
+                                        <div className="flex items-center gap-3.5">
+                                            {/* Botões de Subir / Descer Posição no Mosaico */}
+                                            <div className="flex flex-col gap-1">
+                                                <button
+                                                    type="button"
+                                                    disabled={index === 0}
+                                                    onClick={() => moverPosicaoCategoria(index, -1)}
+                                                    className="w-6 h-6 rounded bg-slate-100 hover:bg-indigo-600 hover:text-white disabled:opacity-30 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer transition-colors"
+                                                    title="Subir posição no mosaico"
+                                                >
+                                                    ↑
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={index === categoriesList.length - 1}
+                                                    onClick={() => moverPosicaoCategoria(index, 1)}
+                                                    className="w-6 h-6 rounded bg-slate-100 hover:bg-indigo-600 hover:text-white disabled:opacity-30 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer transition-colors"
+                                                    title="Descer posição no mosaico"
+                                                >
+                                                    ↓
+                                                </button>
+                                            </div>
+
+                                            <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
                                                 {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-cover" alt={cat.name} /> : <Icon name="image" size={18} className="text-slate-300" />}
                                             </div>
+
                                             <div>
-                                                {cat.tag && <span className="text-[9px] font-black uppercase text-orange-500 block leading-none mb-0.5">{cat.tag}</span>}
+                                                <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                                                    <span className="text-[10px] font-black uppercase bg-slate-900 text-white px-2 py-0.5 rounded">
+                                                        {obterDescricaoPosicaoMosaico(index)}
+                                                    </span>
+                                                    <span className="text-[10px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded">
+                                                        Formato: {cat.aspect || '1:1'}
+                                                    </span>
+                                                    {cat.tag && <span className="text-[10px] font-black uppercase bg-orange-100 text-orange-700 px-2 py-0.5 rounded">{cat.tag}</span>}
+                                                </div>
                                                 <span className="font-black text-slate-800 text-sm">{cat.name}</span>
                                             </div>
                                         </div>
-                                        <div className="flex gap-1">
+
+                                        <div className="flex items-center gap-1">
                                             <button
                                                 type="button"
                                                 onClick={() => {
                                                     selecionarCategoriaParaEditar(cat);
-                                                    if (cat.imageUrl) iniciarModalCrop(cat.imageUrl, 'category');
+                                                    if (cat.imageUrl) iniciarModalCrop(cat.imageUrl, 'category', cat.aspect || '1:1');
                                                 }}
-                                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
-                                                title="Cortar / Ajustar Foto"
+                                                className="px-2.5 py-1.5 text-xs font-black uppercase text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg cursor-pointer"
+                                                title="Cortar / Mudar Proporção (1:1, 3:2, 16:9)"
                                             >
-                                                ✂️
+                                                ✂️ Enquadrar
                                             </button>
-                                            <button onClick={() => selecionarCategoriaParaEditar(cat)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded cursor-pointer"><Icon name="edit-2" size={15}/></button>
-                                            <button onClick={() => handleDeleteCategory(cat.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer"><Icon name="trash" size={15}/></button>
+                                            <button onClick={() => selecionarCategoriaParaEditar(cat)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg cursor-pointer"><Icon name="edit-2" size={16}/></button>
+                                            <button onClick={() => handleDeleteCategory(cat.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg cursor-pointer"><Icon name="trash" size={16}/></button>
                                         </div>
                                     </div>
                                 ))}
@@ -696,10 +783,10 @@ export default function Produtos({ user, permissoes }) {
                                             </label>
                                             <button
                                                 type="button"
-                                                onClick={() => iniciarModalCrop(formData.imageUrl, 'product')}
+                                                onClick={() => iniciarModalCrop(formData.imageUrl, 'product', '1:1')}
                                                 className="text-[11px] font-black uppercase text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-full shadow-xs cursor-pointer transition-colors flex items-center gap-1"
                                             >
-                                                ✂️ Ajustar / Cortar Foto
+                                                ✂️ Ajustar / Cortar 1:1
                                             </button>
                                         </div>
                                     </div>
@@ -708,7 +795,7 @@ export default function Produtos({ user, permissoes }) {
                                         <Icon name="camera" size={36} className="text-slate-300 mx-auto mb-3" />
                                         <span className="text-xs font-black uppercase text-slate-600 block">Clique para selecionar foto do produto</span>
                                         <p className="text-[10px] font-bold text-indigo-600 mt-1 uppercase tracking-wider">
-                                            Abre automaticamente o ajustador de imagem otimizado
+                                            Enquadramento padrão 1:1 quadrado
                                         </p>
                                         <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                                     </label>
@@ -729,7 +816,7 @@ export default function Produtos({ user, permissoes }) {
                             <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase text-slate-500 ml-1 flex justify-between">
                                     <span>Categoria *</span>
-                                    <button type="button" onClick={() => setIsCatModalOpen(true)} className="text-indigo-600 hover:underline cursor-pointer">+ Gerenciar Categorias com Fotos e Selos</button>
+                                    <button type="button" onClick={() => setIsCatModalOpen(true)} className="text-indigo-600 hover:underline cursor-pointer">+ Gerenciar Categorias e Posições</button>
                                 </label>
                                 {categoriesList.length > 0 ? (
                                     <select required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-black">
@@ -860,15 +947,15 @@ export default function Produtos({ user, permissoes }) {
                 </div>
             )}
 
-            {/* MODAL INTERATIVO DE CORTE E ENQUADRAMENTO */}
+            {/* MODAL INTERATIVO DE CORTE QUE ENCAIXA EXATAMENTE NA PROPORÇÃO ESCOLHIDA (1:1, 3:2, 16:9) */}
             {cropModal.open && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
                         <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
                             <div>
-                                <h3 className="font-black text-sm uppercase tracking-wider">✂️ Ajustar Imagem conforme Foto Subida</h3>
+                                <h3 className="font-black text-sm uppercase tracking-wider">✂️ Escolher Proporção e Enquadrar</h3>
                                 <span className="text-[11px] text-slate-400">
-                                    {cropModal.aspect === 'original' ? 'Formato Original da Sua Arte (Sem Cortes)' : cropModal.aspect === '3:2' ? 'Mosaico (3:2)' : cropModal.aspect === '16:9' ? 'Largo (16:9)' : 'Quadrado (1:1)'}
+                                    {cropModal.aspect === '1:1' ? 'Quadrado 1:1 (Encaixa 100% em 1:1 no site)' : cropModal.aspect === '3:2' ? 'Mosaico 3:2 (Encaixa 100% em 3:2 no site)' : cropModal.aspect === '16:9' ? 'Largo 16:9 (Encaixa em card horizontal)' : 'Proporção Original da Foto'}
                                 </span>
                             </div>
                             <button type="button" onClick={() => setCropModal(prev => ({ ...prev, open: false }))} className="text-white/70 hover:text-white text-xl cursor-pointer">✕</button>
@@ -878,52 +965,43 @@ export default function Produtos({ user, permissoes }) {
                             <div className="grid grid-cols-4 gap-1 bg-indigo-50 p-1.5 rounded-xl border border-indigo-100">
                                 <button
                                     type="button"
-                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: 'original', mode: 'contain', zoom: 1, offsetX: 0, offsetY: 0 }))}
-                                    className={`py-1.5 px-1 rounded-lg font-black text-[9px] uppercase cursor-pointer ${
-                                        cropModal.aspect === 'original' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
-                                    }`}
-                                >
-                                    📐 Original
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '3:2' }))}
-                                    className={`py-1.5 px-1 rounded-lg font-black text-[9px] uppercase cursor-pointer ${
-                                        cropModal.aspect === '3:2' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
-                                    }`}
-                                >
-                                    Mosaico
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '16:9' }))}
-                                    className={`py-1.5 px-1 rounded-lg font-black text-[9px] uppercase cursor-pointer ${
-                                        cropModal.aspect === '16:9' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
-                                    }`}
-                                >
-                                    Largo
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '1:1' }))}
-                                    className={`py-1.5 px-1 rounded-lg font-black text-[9px] uppercase cursor-pointer ${
+                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '1:1', mode: 'cover', zoom: 1, offsetX: 0, offsetY: 0 }))}
+                                    className={`py-2 px-1 rounded-lg font-black text-[10px] uppercase cursor-pointer ${
                                         cropModal.aspect === '1:1' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
                                     }`}
                                 >
-                                    Quadrado
+                                    1:1 Quadrado
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '3:2', mode: 'cover', zoom: 1, offsetX: 0, offsetY: 0 }))}
+                                    className={`py-2 px-1 rounded-lg font-black text-[10px] uppercase cursor-pointer ${
+                                        cropModal.aspect === '3:2' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
+                                    }`}
+                                >
+                                    3:2 Mosaico
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: '16:9', mode: 'cover', zoom: 1, offsetX: 0, offsetY: 0 }))}
+                                    className={`py-2 px-1 rounded-lg font-black text-[10px] uppercase cursor-pointer ${
+                                        cropModal.aspect === '16:9' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
+                                    }`}
+                                >
+                                    16:9 Largo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCropModal(prev => ({ ...prev, aspect: 'original', mode: 'contain', zoom: 1, offsetX: 0, offsetY: 0 }))}
+                                    className={`py-2 px-1 rounded-lg font-black text-[10px] uppercase cursor-pointer ${
+                                        cropModal.aspect === 'original' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:bg-indigo-100'
+                                    }`}
+                                >
+                                    Livre
                                 </button>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
-                                <button
-                                    type="button"
-                                    onClick={() => setCropModal(prev => ({ ...prev, mode: 'contain', zoom: 1, offsetX: 0, offsetY: 0 }))}
-                                    className={`py-2 rounded-lg font-black text-xs uppercase transition-all cursor-pointer ${
-                                        cropModal.mode === 'contain' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                                    }`}
-                                >
-                                    🖼️ Arte Inteira (Sem Cortar)
-                                </button>
                                 <button
                                     type="button"
                                     onClick={() => setCropModal(prev => ({ ...prev, mode: 'cover', zoom: 1, offsetX: 0, offsetY: 0 }))}
@@ -931,10 +1009,20 @@ export default function Produtos({ user, permissoes }) {
                                         cropModal.mode === 'cover' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                                     }`}
                                 >
-                                    ✂️ Preencher / Cortar
+                                    ✂️ Preencher Tudo ({cropModal.aspect})
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCropModal(prev => ({ ...prev, mode: 'contain', zoom: 1, offsetX: 0, offsetY: 0 }))}
+                                    className={`py-2 rounded-lg font-black text-xs uppercase transition-all cursor-pointer ${
+                                        cropModal.mode === 'contain' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                                >
+                                    🖼️ Foto Inteira c/ Margem
                                 </button>
                             </div>
 
+                            {/* Preview que mostra exatamente o formato 1:1, 3:2 ou 16:9 */}
                             <div className="w-72 max-h-64 mx-auto rounded-2xl border-2 border-indigo-500 shadow-inner overflow-hidden bg-slate-900 flex items-center justify-center relative">
                                 <canvas ref={canvasPreviewRef} className="max-w-full max-h-60 w-auto h-auto object-contain" />
                             </div>
@@ -997,7 +1085,7 @@ export default function Produtos({ user, permissoes }) {
                                     onClick={confirmarRecortePadraoSite}
                                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase shadow-md cursor-pointer"
                                 >
-                                    ✓ Salvar Imagem
+                                    ✓ Aplicar Formato {cropModal.aspect}
                                 </button>
                             </div>
                         </div>

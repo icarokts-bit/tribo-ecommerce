@@ -777,46 +777,44 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
     };
 
     // =========================================================================
-    // RENDERIZADOR INTELIGENTE DO MOSAICO (ADAPTA QUALQUER FOTO SEM CORTAR A ARTE)
+    // RENDERIZADOR FIEL À PROPORÇÃO SELECIONADA (1:1 ENCAIXA EM 1:1, 3:2 EM 3:2)
     // =========================================================================
-    const renderCardMosaico = (cat, classesTamanho, tagPadrao = '', tamanhoTitulo = 'text-xl') => {
+    const renderCardMosaico = (cat, classesGrid, tagPadrao = '', tamanhoTitulo = 'text-xl', aspectPadraoSlot = null) => {
         if (!cat) return null;
         const ativo = categoriaFiltro.toLowerCase() === cat.name.toLowerCase();
         const tagExibida = cat.tag !== undefined ? cat.tag : tagPadrao;
         const qtdItens = contarProdutosCategoria(cat.name);
 
+        // Respeita a proporção salva na categoria ('1:1', '3:2', '16:9') ou a proporção do slot
+        const aspectEscolhido = aspectPadraoSlot || cat.aspect || '1:1';
+        const classeAspecto =
+            aspectEscolhido === '1:1' ? 'aspect-square' :
+            aspectEscolhido === '3:2' ? 'aspect-[3/2]' :
+            aspectEscolhido === '16:9' ? 'aspect-[16/9]' :
+            aspectEscolhido === '2:1' ? 'aspect-[2/1]' : '';
+
         return (
             <div
                 key={cat.id}
                 onClick={() => selecionarCategoriaMosaico(cat.name)}
-                className={`${classesTamanho} group relative rounded-3xl overflow-hidden cursor-pointer select-none bg-slate-900 transition-all duration-500 hover:-translate-y-1.5 hover:shadow-[0_22px_45px_-12px_rgba(15,23,42,0.38)] border-2 ${
+                className={`${classesGrid} ${classeAspecto} group relative rounded-3xl overflow-hidden cursor-pointer select-none bg-slate-900 transition-all duration-500 hover:-translate-y-1.5 hover:shadow-[0_22px_45px_-12px_rgba(15,23,42,0.38)] border-2 ${
                     ativo ? 'border-orange-500 ring-4 ring-orange-500/25' : 'border-white shadow-md'
                 }`}
             >
                 {cat.imageUrl ? (
-                    <>
-                        {/* Camada 1: Fundo ambiente desfocado da própria foto para preencher o bloco sem faixas pretas */}
-                        <img
-                            src={cat.imageUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className="absolute inset-0 w-full h-full object-cover object-center scale-125 blur-xl opacity-65 pointer-events-none"
-                        />
-                        {/* Camada 2: A arte que você subiu 100% visível e centralizada, sem cortar textos nem logos */}
-                        <img
-                            src={cat.imageUrl}
-                            alt={cat.name}
-                            className="relative z-[1] w-full h-full object-contain object-center transition-transform duration-700 ease-out group-hover:scale-105"
-                        />
-                    </>
+                    <img
+                        src={cat.imageUrl}
+                        alt={cat.name}
+                        className="w-full h-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105"
+                    />
                 ) : (
-                    <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-950 flex items-center justify-center text-slate-600">
+                    <div className="w-full h-full min-h-[220px] bg-gradient-to-br from-slate-800 to-slate-950 flex items-center justify-center text-slate-600">
                         <Icon name="box" size={56} />
                     </div>
                 )}
 
-                {/* Gradiente suave apenas no rodapé para leitura do título */}
-                <div className="absolute inset-x-0 bottom-0 h-28 z-[2] bg-gradient-to-t from-slate-950/95 via-slate-950/55 to-transparent pointer-events-none" />
+                {/* Gradiente discreto apenas no rodapé para destacar o nome da categoria */}
+                <div className="absolute inset-x-0 bottom-0 h-24 z-[2] bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent pointer-events-none" />
 
                 {/* Feixe de Brilho Diagonal no Hover */}
                 <div className="absolute -inset-full top-0 z-[3] block w-1/2 -skew-x-12 bg-gradient-to-r from-transparent to-white/25 opacity-0 group-hover:opacity-100 group-hover:translate-x-[360%] transition-all duration-1000 ease-out pointer-events-none" />
@@ -834,7 +832,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                 {tagExibida}
                             </span>
                         )}
-                        <h3 className={`${tamanhoTitulo} font-black text-white tracking-tight leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]`}>
+                        <h3 className={`${tamanhoTitulo} font-black text-white tracking-tight leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]`}>
                             {cat.name}
                         </h3>
                     </div>
@@ -1164,10 +1162,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                         }`}
                                     >
                                         {cat.imageUrl ? (
-                                            <>
-                                                <img src={cat.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover scale-125 blur-md opacity-60" />
-                                                <img src={cat.imageUrl} alt={cat.name} className="relative z-[1] w-full h-full object-contain" />
-                                            </>
+                                            <img src={cat.imageUrl} alt={cat.name} className="w-full h-full object-cover object-center" />
                                         ) : (
                                             <div className="absolute inset-0 bg-slate-800 flex items-center justify-center text-slate-500">
                                                 <Icon name="box" size={24} />
@@ -1197,7 +1192,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                 )}
 
                 {/* ========================================================================= */}
-                {/* 5B. COMPUTADOR (DESKTOP): MOSAICO BENTO GRID QUE SE ADAPTA ÀS SUAS FOTOS   */}
+                {/* 5B. COMPUTADOR (DESKTOP): MOSAICO QUE ENCAIXA EXATAMENTE NA PROPORÇÃO     */}
                 {/* ========================================================================= */}
                 {categorias.length > 0 && (
                     <section className="hidden md:block relative py-2">
@@ -1226,39 +1221,48 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                         )}
 
                         <div className="space-y-5">
-                            <div className="grid grid-cols-12 gap-5 items-stretch">
+                            {/* Linha Superior do Mosaico: Alinhada pela proporção escolhida em cada foto */}
+                            <div className="grid grid-cols-12 gap-5 items-start">
+                                {/* Posição 1 (Esquerda): Encaixe nativo 1:1 Quadrado (ou a proporção que você escolher) */}
                                 {categoriasMosaicoAtual[0] && renderCardMosaico(
                                     categoriasMosaicoAtual[0],
-                                    'col-span-3 min-h-[370px]',
+                                    'col-span-4',
                                     'CATEGORIA',
-                                    'text-2xl'
+                                    'text-2xl',
+                                    categoriasMosaicoAtual[0].aspect || '1:1'
                                 )}
 
+                                {/* Posições 2 e 3 (Centro): 2 Cards Empilhados */}
                                 {(categoriasMosaicoAtual[1] || categoriasMosaicoAtual[2]) && (
-                                    <div className="col-span-3 flex flex-col gap-5 justify-between">
+                                    <div className="col-span-4 flex flex-col gap-5 justify-between">
                                         {categoriasMosaicoAtual[1] && renderCardMosaico(
                                             categoriasMosaicoAtual[1],
-                                            'flex-1 min-h-[172px]',
+                                            'w-full',
                                             '',
-                                            'text-xl'
+                                            'text-xl',
+                                            categoriasMosaicoAtual[1].aspect || '2:1'
                                         )}
                                         {categoriasMosaicoAtual[2] && renderCardMosaico(
                                             categoriasMosaicoAtual[2],
-                                            'flex-1 min-h-[172px]',
+                                            'w-full',
                                             '',
-                                            'text-xl'
+                                            'text-xl',
+                                            categoriasMosaicoAtual[2].aspect || '2:1'
                                         )}
                                     </div>
                                 )}
 
+                                {/* Posição 4 (Direita): Encaixe nativo 1:1 Quadrado ou 3:2 conforme você selecionar na foto */}
                                 {categoriasMosaicoAtual[3] && renderCardMosaico(
                                     categoriasMosaicoAtual[3],
-                                    'col-span-6 min-h-[370px]',
+                                    'col-span-4',
                                     'DESTAQUE',
-                                    'text-3xl'
+                                    'text-2xl',
+                                    categoriasMosaicoAtual[3].aspect || '1:1'
                                 )}
                             </div>
 
+                            {/* Linha Inferior do Mosaico: Cada card encaixa exatamente na proporção escolhida (1:1, 3:2 ou 16:9) */}
                             {categoriasMosaicoAtual.length > 4 && (() => {
                                 const itensInferiores = categoriasMosaicoAtual.slice(4, 8);
                                 const qtdInf = itensInferiores.length;
@@ -1268,13 +1272,14 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                     qtdInf === 3 ? 'col-span-4' : 'col-span-3';
 
                                 return (
-                                    <div className="grid grid-cols-12 gap-5">
+                                    <div className="grid grid-cols-12 gap-5 items-start">
                                         {itensInferiores.map((cat) =>
                                             renderCardMosaico(
                                                 cat,
-                                                `${classeColuna} h-52`,
+                                                classeColuna,
                                                 '',
-                                                'text-xl'
+                                                'text-xl',
+                                                cat.aspect || '3:2'
                                             )
                                         )}
                                     </div>
