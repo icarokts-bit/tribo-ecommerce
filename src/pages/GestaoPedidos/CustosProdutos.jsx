@@ -15,6 +15,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
     const [fichas, setFichas] = useState([]);
     const [estoqueInsumos, setEstoqueInsumos] = useState([]);
+    const [categoriesList, setCategoriesList] = useState([]); // <-- Nova lista de categorias
     const [loading, setLoading] = useState(true);
     const [busca, setBusca] = useState('');
 
@@ -35,7 +36,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
     });
 
     const [formData, setFormData] = useState({
-        nome: '', precoVenda: '', markupEscolhido: 3.0, taxaMarketplacePerc: 18, taxaMarketplaceFixa: 3.00,
+        nome: '', categoria: '', precoVenda: '', markupEscolhido: 3.0, taxaMarketplacePerc: 18, taxaMarketplaceFixa: 3.00,
         peso: 0.000, comprimento: 0, largura: 0, altura: 0,
         tempoTotalMaquinaMinutos: 0, potenciaWatts: 180, tarifaKwh: 0.95, custoHoraMaquina: 1.20,
         tempoManualMinutos: 0, custoHoraMaoDeObra: 25.00, taxaFalhaPerc: 5, embalagemCusto: 0, ingredientes: []
@@ -49,6 +50,11 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
     useEffect(() => {
         if (!donoUid) return;
+
+        // Puxa as categorias do site
+        db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get().then(doc => {
+            if (doc.exists) setCategoriesList(doc.data().categories || []);
+        });
 
         db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/cost_rates`).get().then(doc => {
             if (doc.exists) setConfigTaxas(prev => ({ ...prev, ...doc.data() }));
@@ -120,6 +126,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         return {
             ...ficha,
             nome: ehDuplicacao ? `${ficha.nome || ficha.name} (Cópia)` : (ficha.nome || ficha.name || ''),
+            categoria: ficha.categoria || ficha.category || '',
             markupEscolhido: safeNum(ficha.markupEscolhido ?? configTaxas.markupSugeridoPadrao ?? 3.0),
             taxaMarketplacePerc: safeNum(ficha.taxaMarketplacePerc ?? configTaxas.taxaMarketplacePerc ?? 0),
             taxaMarketplaceFixa: safeNum(ficha.taxaMarketplaceFixa ?? configTaxas.taxaMarketplaceFixa ?? 0),
@@ -135,7 +142,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         } else {
             setEditingId(null);
             setFormData({
-                nome: '', precoVenda: '', peso: 0, comprimento: 0, largura: 0, altura: 0,
+                nome: '', categoria: '', precoVenda: '', peso: 0, comprimento: 0, largura: 0, altura: 0,
                 markupEscolhido: safeNum(configTaxas.markupSugeridoPadrao ?? 3.0),
                 taxaMarketplacePerc: safeNum(configTaxas.taxaMarketplacePerc ?? 0),
                 taxaMarketplaceFixa: safeNum(configTaxas.taxaMarketplaceFixa ?? 0),
@@ -268,8 +275,9 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
             const payload = {
                 id: idDoc,
-                ...formData, // Mantém compatibilidade com outros dados legados
+                ...formData,
                 nome: formData.nome.trim(),
+                categoria: formData.categoria || '',
                 precoVenda: safeNum(formData.precoVenda),
                 precoSugerido: safeNum(resumoCalculado.precoSugeridoPersonalizado),
                 markupEscolhido: safeNum(formData.markupEscolhido || 3.0),
@@ -373,7 +381,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                                <th className="p-4">Produto</th>
+                                <th className="p-4">Produto / Categoria</th>
                                 <th className="p-4 text-center">Tempo Máq.</th>
                                 <th className="p-4 text-right">Materiais</th>
                                 <th className="p-4 text-right">Custo Produção</th>
@@ -394,7 +402,10 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                     const sugerido = f.precoSugerido || 0;
                                     return (
                                         <tr key={f.id} className="border-b border-slate-100 hover:bg-slate-50/80 text-xs">
-                                            <td className="p-4 font-black text-slate-800">{f.nome}</td>
+                                            <td className="p-4">
+                                                <span className="font-black text-slate-800 block">{f.nome}</span>
+                                                <span className="text-[9px] font-bold uppercase text-slate-400 block mt-0.5">{f.categoria || f.category || 'Sem Categoria'}</span>
+                                            </td>
                                             <td className="p-4 text-center font-bold text-slate-500">{formatarMinutosParaTexto(minSalvos)}</td>
                                             <td className="p-4 text-right font-bold text-slate-600">{formatMoney(f.custoMateriais)}</td>
                                             <td className="p-4 text-right font-black text-rose-600">{formatMoney(f.custoTotal)}</td>
@@ -441,6 +452,17 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                         <div>
                                             <label className="text-xs font-black uppercase text-slate-700 block mb-1">Nome do Produto *</label>
                                             <input type="text" required value={formData.nome} onChange={e => setFormData({ ...formData, nome: e.target.value })} className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:border-indigo-600" />
+                                        </div>
+                                        <div className="pt-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Categoria *</label>
+                                            {categoriesList.length > 0 ? (
+                                                <select required value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none focus:border-indigo-600 cursor-pointer">
+                                                    <option value="">Selecione uma categoria...</option>
+                                                    {categoriesList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                                </select>
+                                            ) : (
+                                                <input type="text" required value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} placeholder="Ex: Chaveiros, Displays..." className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none focus:border-indigo-600" />
+                                            )}
                                         </div>
                                         <div className="grid grid-cols-2 gap-3 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl">
                                             <div>
@@ -637,9 +659,8 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                     </div>
                                 </div>
                             </div>
-                            
                             <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end items-center gap-3 shrink-0">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-black rounded-xl uppercase tracking-widest text-xs hover:bg-slate-100 cursor-pointer">Cancelar</button>
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-black text-xs uppercase hover:bg-slate-100 cursor-pointer">Cancelar</button>
                                 <button type="submit" disabled={saving} className="px-7 py-3 bg-slate-900 hover:bg-black text-white rounded-xl font-black text-xs uppercase shadow-md flex items-center gap-2 cursor-pointer">
                                     <Icon name="save" size={16} /> {saving ? 'Salvando...' : 'Salvar Custos'}
                                 </button>
