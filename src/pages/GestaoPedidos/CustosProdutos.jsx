@@ -15,9 +15,10 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
     const [fichas, setFichas] = useState([]);
     const [estoqueInsumos, setEstoqueInsumos] = useState([]);
-    const [categoriesList, setCategoriesList] = useState([]); // <-- Nova lista de categorias
+    const [categoriesList, setCategoriesList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busca, setBusca] = useState('');
+    const [categoriaFiltro, setCategoriaFiltro] = useState('todas');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -31,7 +32,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         custoHoraMaoDeObra: 25.00,
         taxaFalhaPadrao: 5,
         markupSugeridoPadrao: 3.0,
-        taxaMarketplacePerc: 18, 
+        taxaMarketplacePerc: 18,
         taxaMarketplaceFixa: 3.00
     });
 
@@ -112,11 +113,11 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
     const prepararFichaCorrigida = (ficha, ehDuplicacao = false) => {
         const minConv = ficha.tempoTotalMaquinaMinutos !== undefined ? safeNum(ficha.tempoTotalMaquinaMinutos) : (safeNum(ficha.tempoMaquinaHoras) * 60) + safeNum(ficha.tempoMaquinaMinutos);
-        
+
         const ingCorrigidos = (Array.isArray(ficha.ingredientes) ? ficha.ingredientes : []).map(ing => {
             const ingAjustado = { ...ing };
             if (ehDuplicacao) ingAjustado.id = crypto.randomUUID();
-            
+
             if ((ing.unidade === 'g' || ing.unidade === 'ml' || ing.modoCalculo === 'g_kg') && safeNum(ing.custoBaseInformado) > 1 && safeNum(ing.custoTotal) > safeNum(ing.custoBaseInformado)) {
                 ingAjustado.custoTotal = safeNum((safeNum(ing.custoBaseInformado) / 1000) * safeNum(ing.qtd));
             }
@@ -142,7 +143,9 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         } else {
             setEditingId(null);
             setFormData({
-                nome: '', categoria: '', precoVenda: '', peso: 0, comprimento: 0, largura: 0, altura: 0,
+                nome: '',
+                categoria: categoriaFiltro !== 'todas' && categoriaFiltro !== 'Sem Categoria' ? categoriaFiltro : '',
+                precoVenda: '', peso: 0, comprimento: 0, largura: 0, altura: 0,
                 markupEscolhido: safeNum(configTaxas.markupSugeridoPadrao ?? 3.0),
                 taxaMarketplacePerc: safeNum(configTaxas.taxaMarketplacePerc ?? 0),
                 taxaMarketplaceFixa: safeNum(configTaxas.taxaMarketplaceFixa ?? 0),
@@ -199,7 +202,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 if (matchMedidas) {
                     novoC = safeNum(matchMedidas[1]); novoL = safeNum(matchMedidas[2]); novoA = safeNum(matchMedidas[3]);
                 }
-                if (novoPeso === 0 || (novoPeso < 0.05 && novoIng.unidade !== 'g' && novoIng.unidade !== 'ml')) novoPeso += 0.050; 
+                if (novoPeso === 0 || (novoPeso < 0.05 && novoIng.unidade !== 'g' && novoIng.unidade !== 'ml')) novoPeso += 0.050;
             }
 
             return {
@@ -311,9 +314,9 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
             await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`).doc(idDoc).set(payload, { merge: true });
             setIsModalOpen(false);
-        } catch (err) { 
+        } catch (err) {
             console.error(err);
-            alert("Erro ao salvar ficha de custos: Verifique se todos os campos numéricos foram preenchidos corretamente."); 
+            alert("Erro ao salvar ficha de custos: Verifique se todos os campos numéricos foram preenchidos corretamente.");
         }
         setSaving(false);
     };
@@ -323,7 +326,58 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         try { await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`).doc(id).delete(); } catch (err) {}
     };
 
-    const fichasFiltradas = fichas.filter(f => (f.nome || '').toLowerCase().includes(busca.toLowerCase()));
+    // =========================================================================
+    // FILTRAGEM E AGRUPAMENTO POR CATEGORIA
+    // =========================================================================
+    const obterCategoriaFicha = (f) => {
+        const cat = (f.categoria || f.category || '').trim();
+        return cat ? cat : 'Sem Categoria';
+    };
+
+    const categoriasDisponiveis = useMemo(() => {
+        const contagem = {};
+        fichas.forEach(f => {
+            const cat = obterCategoriaFicha(f);
+            contagem[cat] = (contagem[cat] || 0) + 1;
+        });
+
+        const nomes = Object.keys(contagem).sort((a, b) => {
+            if (a === 'Sem Categoria') return 1;
+            if (b === 'Sem Categoria') return -1;
+            return a.localeCompare(b);
+        });
+
+        return nomes.map(nome => ({ nome, qtd: contagem[nome] }));
+    }, [fichas]);
+
+    const fichasFiltradas = useMemo(() => {
+        return fichas.filter(f => {
+            const matchBusca = (f.nome || '').toLowerCase().includes(busca.toLowerCase());
+            const catFicha = obterCategoriaFicha(f);
+            const matchCat = categoriaFiltro === 'todas' || catFicha.toLowerCase() === categoriaFiltro.toLowerCase();
+            return matchBusca && matchCat;
+        });
+    }, [fichas, busca, categoriaFiltro]);
+
+    const fichasAgrupadas = useMemo(() => {
+        const grupos = {};
+        fichasFiltradas.forEach(f => {
+            const cat = obterCategoriaFicha(f);
+            if (!grupos[cat]) grupos[cat] = [];
+            grupos[cat].push(f);
+        });
+
+        return Object.keys(grupos)
+            .sort((a, b) => {
+                if (a === 'Sem Categoria') return 1;
+                if (b === 'Sem Categoria') return -1;
+                return a.localeCompare(b);
+            })
+            .map(categoria => ({
+                categoria,
+                itens: grupos[categoria].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+            }));
+    }, [fichasFiltradas]);
 
     return (
         <div className="p-4 md:p-6 space-y-6 font-sans min-h-screen bg-slate-100 text-slate-800">
@@ -373,10 +427,56 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 </div>
             </div>
 
+            {/* BARRA DE BUSCA + FILTRO DE CATEGORIAS */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-                <div className="p-4 border-b border-slate-100">
-                    <input type="text" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar produto na ficha de custos..." className="w-full max-w-md px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-500" />
+                <div className="p-4 border-b border-slate-100 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <input
+                            type="text"
+                            value={busca}
+                            onChange={e => setBusca(e.target.value)}
+                            placeholder="Buscar produto na ficha de custos..."
+                            className="w-full max-w-md px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-500"
+                        />
+                        <span className="text-[11px] font-black uppercase text-slate-400">
+                            {fichasFiltradas.length} {fichasFiltradas.length === 1 ? 'ficha exibida' : 'fichas exibidas'}
+                        </span>
+                    </div>
+
+                    {/* Pílulas de Filtro por Categoria */}
+                    {categoriasDisponiveis.length > 0 && (
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                            <button
+                                type="button"
+                                onClick={() => setCategoriaFiltro('todas')}
+                                className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer border ${
+                                    categoriaFiltro === 'todas'
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                }`}
+                            >
+                                Todas ({fichas.length})
+                            </button>
+
+                            {categoriasDisponiveis.map(cat => (
+                                <button
+                                    key={cat.nome}
+                                    type="button"
+                                    onClick={() => setCategoriaFiltro(cat.nome)}
+                                    className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer border ${
+                                        categoriaFiltro.toLowerCase() === cat.nome.toLowerCase()
+                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    {cat.nome} ({cat.qtd})
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
+
+                {/* TABELA AGRUPADA POR CATEGORIA */}
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
@@ -394,37 +494,59 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                         <tbody>
                             {loading ? (
                                 <tr><td colSpan="8" className="p-10 text-center text-xs font-bold text-slate-400">Carregando...</td></tr>
-                            ) : fichasFiltradas.length === 0 ? (
-                                <tr><td colSpan="8" className="p-12 text-center text-xs font-black uppercase text-slate-400">Nenhuma ficha cadastrada.</td></tr>
+                            ) : fichasAgrupadas.length === 0 ? (
+                                <tr><td colSpan="8" className="p-12 text-center text-xs font-black uppercase text-slate-400">Nenhuma ficha encontrada.</td></tr>
                             ) : (
-                                fichasFiltradas.map(f => {
-                                    const minSalvos = f.tempoTotalMaquinaMinutos !== undefined ? safeNum(f.tempoTotalMaquinaMinutos) : (safeNum(f.tempoMaquinaHoras) * 60) + safeNum(f.tempoMaquinaMinutos);
-                                    const sugerido = f.precoSugerido || 0;
-                                    return (
-                                        <tr key={f.id} className="border-b border-slate-100 hover:bg-slate-50/80 text-xs">
-                                            <td className="p-4">
-                                                <span className="font-black text-slate-800 block">{f.nome}</span>
-                                                <span className="text-[9px] font-bold uppercase text-slate-400 block mt-0.5">{f.categoria || f.category || 'Sem Categoria'}</span>
-                                            </td>
-                                            <td className="p-4 text-center font-bold text-slate-500">{formatarMinutosParaTexto(minSalvos)}</td>
-                                            <td className="p-4 text-right font-bold text-slate-600">{formatMoney(f.custoMateriais)}</td>
-                                            <td className="p-4 text-right font-black text-rose-600">{formatMoney(f.custoTotal)}</td>
-                                            <td className="p-4 text-right font-black text-indigo-600 bg-indigo-50/30">{formatMoney(sugerido)}</td>
-                                            <td className="p-4 text-right">
-                                                <span className="font-black text-emerald-600 block">{formatMoney(f.precoVenda)}</span>
-                                                {f.custoVendaMarketplace > 0 && <span className="text-[9px] text-slate-400 font-bold block">-{formatMoney(f.custoVendaMarketplace)} taxas</span>}
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2.5 py-1 rounded-full text-[10px]">{formatMoney(f.lucroBruto)} ({safeNum(f.margemLucro).toFixed(0)}%)</span>
-                                            </td>
-                                            <td className="p-4 text-right whitespace-nowrap">
-                                                <button onClick={() => abrirModalNovaFicha(f, true)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg mr-1 cursor-pointer" title="Duplicar"><Icon name="copy" size={16} /></button>
-                                                <button onClick={() => abrirModalNovaFicha(f)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1 cursor-pointer" title="Editar"><Icon name="edit" size={16} /></button>
-                                                <button onClick={() => handleExcluirFicha(f.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg cursor-pointer" title="Excluir"><Icon name="trash-2" size={16} /></button>
+                                fichasAgrupadas.map(grupo => (
+                                    <React.Fragment key={grupo.categoria}>
+                                        {/* CABEÇALHO DIVISÓRIO DA CATEGORIA */}
+                                        <tr className="bg-indigo-50/70 border-y border-indigo-100">
+                                            <td colSpan="8" className="px-4 py-2.5">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block" />
+                                                        <span className="text-xs font-black uppercase tracking-wider text-indigo-900">
+                                                            {grupo.categoria}
+                                                        </span>
+                                                        <span className="text-[10px] font-black bg-white text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">
+                                                            {grupo.itens.length} {grupo.itens.length === 1 ? 'produto' : 'produtos'}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </td>
                                         </tr>
-                                    );
-                                })
+
+                                        {/* ITENS DA CATEGORIA */}
+                                        {grupo.itens.map(f => {
+                                            const minSalvos = f.tempoTotalMaquinaMinutos !== undefined ? safeNum(f.tempoTotalMaquinaMinutos) : (safeNum(f.tempoMaquinaHoras) * 60) + safeNum(f.tempoMaquinaMinutos);
+                                            const sugerido = f.precoSugerido || 0;
+                                            return (
+                                                <tr key={f.id} className="border-b border-slate-100 hover:bg-slate-50/80 text-xs">
+                                                    <td className="p-4">
+                                                        <span className="font-black text-slate-800 block">{f.nome}</span>
+                                                        <span className="text-[9px] font-bold uppercase text-slate-400 block mt-0.5">{obterCategoriaFicha(f)}</span>
+                                                    </td>
+                                                    <td className="p-4 text-center font-bold text-slate-500">{formatarMinutosParaTexto(minSalvos)}</td>
+                                                    <td className="p-4 text-right font-bold text-slate-600">{formatMoney(f.custoMateriais)}</td>
+                                                    <td className="p-4 text-right font-black text-rose-600">{formatMoney(f.custoTotal)}</td>
+                                                    <td className="p-4 text-right font-black text-indigo-600 bg-indigo-50/30">{formatMoney(sugerido)}</td>
+                                                    <td className="p-4 text-right">
+                                                        <span className="font-black text-emerald-600 block">{formatMoney(f.precoVenda)}</span>
+                                                        {f.custoVendaMarketplace > 0 && <span className="text-[9px] text-slate-400 font-bold block">-{formatMoney(f.custoVendaMarketplace)} taxas</span>}
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2.5 py-1 rounded-full text-[10px]">{formatMoney(f.lucroBruto)} ({safeNum(f.margemLucro).toFixed(0)}%)</span>
+                                                    </td>
+                                                    <td className="p-4 text-right whitespace-nowrap">
+                                                        <button onClick={() => abrirModalNovaFicha(f, true)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg mr-1 cursor-pointer" title="Duplicar"><Icon name="copy" size={16} /></button>
+                                                        <button onClick={() => abrirModalNovaFicha(f)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1 cursor-pointer" title="Editar"><Icon name="edit" size={16} /></button>
+                                                        <button onClick={() => handleExcluirFicha(f.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg cursor-pointer" title="Excluir"><Icon name="trash-2" size={16} /></button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </React.Fragment>
+                                ))
                             )}
                         </tbody>
                     </table>
