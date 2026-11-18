@@ -438,7 +438,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
 
     const handleLoginCliente = async (e) => {
         e.preventDefault();
-        if (!uidLoja) return;
+        if (!uidLoja) return alert("Erro: Loja não identificada.");
         setProcessandoAuth(true);
 
         try {
@@ -1227,7 +1227,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                         )}
 
                         <div className="space-y-5">
-                            {/* Linha Superior do Mosaico: Alinhada pela proporção escolhida em cada foto */}
+                            {/* Linha Superior do Mosaico */}
                             <div className="grid grid-cols-12 gap-5 items-start">
                                 {/* Posição 1 (Esquerda) */}
                                 {categoriasMosaicoAtual[0] && renderCardMosaico(
@@ -1317,7 +1317,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                 )}
 
                 {/* ========================================================================= */}
-                {/* 6. GRADE DE PRODUTOS                                                      */}
+                {/* 6. GRADE DE PRODUTOS (2 COLUNAS NO MOBILE E 5 NO DESKTOP)                  */}
                 {/* ========================================================================= */}
                 <section id="vitrine" className="space-y-4 md:space-y-6">
                     <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-2.5 gap-2">
@@ -1388,7 +1388,8 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                             <div>
                                                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-orange-500 block truncate">{p.category || 'Geral'}</span>
                                                 <h3 onClick={() => abrirZoomProduto(p)} className="font-bold text-xs sm:text-sm text-slate-800 group-hover:text-[var(--cor-primaria)] transition-colors line-clamp-2 min-h-[34px] sm:min-h-[40px] cursor-pointer">{p.name}</h3>
-                                                {p.description && <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-1 sm:line-clamp-2 mt-0.5">{p.description}</p>}
+                                                {/* Adicionado whitespace-pre-line na descrição do card também, se houver descrição curta */}
+                                                {p.description && <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-1 sm:line-clamp-2 mt-0.5 whitespace-pre-line">{p.description}</p>}
                                             </div>
                                             <div className="pt-1.5">
                                                 <div className="flex items-center gap-0.5 text-orange-400 text-[10px] sm:text-xs"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
@@ -1726,7 +1727,8 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                         </span>
                                     )}
                                 </div>
-                                <p className="text-xs md:text-sm text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+                                {/* O SEGREDINHO DA QUEBRA DE LINHA ESTÁ AQUI: whitespace-pre-line */}
+                                <p className="text-xs md:text-sm text-slate-600 leading-relaxed pt-2 border-t border-slate-100 whitespace-pre-line">
                                     {produtoZoom.description || 'Peça produzida com materiais de alta resistência e acabamento de precisão.'}
                                 </p>
                             </div>
