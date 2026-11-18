@@ -16,21 +16,16 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
     const [editingId, setEditingId] = useState(null);
 
     const [configTaxas, setConfigTaxas] = useState({
-        tarifaKwh: 0.95,
-        potenciaMediaWatts: 180,
-        custoHoraMaquina: 1.20,
-        custoHoraMaoDeObra: 25.00,
-        taxaFalhaPadrao: 5,
-        markupSugeridoPadrao: 3.0,
-        taxaMarketplacePerc: 18, 
-        taxaMarketplaceFixa: 3.00
+        tarifaKwh: 0.95, potenciaMediaWatts: 180, custoHoraMaquina: 1.20,
+        custoHoraMaoDeObra: 25.00, taxaFalhaPadrao: 5, markupSugeridoPadrao: 3.0,
+        taxaMarketplacePerc: 18, taxaMarketplaceFixa: 3.00
     });
 
     const [formData, setFormData] = useState({
         nome: '', precoVenda: '', markupEscolhido: 3.0, taxaMarketplacePerc: 18, taxaMarketplaceFixa: 3.00,
         peso: 0.000, comprimento: 0, largura: 0, altura: 0,
         tempoTotalMaquinaMinutos: 0, potenciaWatts: 180, tarifaKwh: 0.95, custoHoraMaquina: 1.20,
-        tempoManualMinutos: 0, custoHoraMaoDeObra: 25.00, taxaFalhaPerc: 5, embalagemCusto: 0, ingredientes: []
+        tempoManualMinutos: 0, custoHoraMaoDeObra: 25.00, taxaFalhaPerc: 5, embalagemCusto: 0, ingredientes: [], variations: []
     });
 
     const [insumoSelectId, setInsumoSelectId] = useState('');
@@ -39,23 +34,22 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
     const [ingQtdUsada, setIngQtdUsada] = useState('');
     const [ingCustoUnitario, setIngCustoUnitario] = useState('');
 
+    const [newVarName, setNewVarName] = useState('');
+    const [newVarOptions, setNewVarOptions] = useState('');
+
     useEffect(() => {
         if (!donoUid) return;
-
         db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/cost_rates`).get().then(doc => {
             if (doc.exists) setConfigTaxas(prev => ({ ...prev, ...doc.data() }));
         });
-
         db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/estoque`).get().then(snap => {
             setEstoqueInsumos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         }).catch(() => {});
-
         const unsub = db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`)
             .onSnapshot(snap => {
                 setFichas(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                 setLoading(false);
             }, () => setLoading(false));
-
         return () => unsub();
     }, [donoUid]);
 
@@ -76,7 +70,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         const q = Number(qtd || 0);
         const p = Number(precoBase || 0);
         const un = String(unidade || 'g').toLowerCase();
-
         if (un === 'g' || un === 'g_kg' || un === 'gramas' || un === 'kg') return p > 1 ? (p / 1000) * q : p * q;
         if (un === 'ml' || un === 'l') return p > 1 ? (p / 1000) * q : p * q;
         return p * q;
@@ -96,26 +89,33 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         } catch (err) { alert("Erro ao salvar tarifas."); }
     };
 
-    const abrirModalNovaFicha = (ficha = null) => {
-        if (ficha) {
-            setEditingId(ficha.id);
-            const minConv = ficha.tempoTotalMaquinaMinutos !== undefined ? Number(ficha.tempoTotalMaquinaMinutos) : (Number(ficha.tempoMaquinaHoras || 0) * 60) + Number(ficha.tempoMaquinaMinutos || 0);
-            
-            const ingCorrigidos = (Array.isArray(ficha.ingredientes) ? ficha.ingredientes : []).map(ing => {
-                if ((ing.unidade === 'g' || ing.unidade === 'ml' || ing.modoCalculo === 'g_kg') && Number(ing.custoBaseInformado) > 1 && Number(ing.custoTotal) > Number(ing.custoBaseInformado)) {
-                    return { ...ing, custoTotal: Number(((Number(ing.custoBaseInformado) / 1000) * Number(ing.qtd)).toFixed(4)) };
-                }
-                return ing;
-            });
+    const prepararFichaCorrigida = (ficha, ehDuplicacao = false) => {
+        const minConv = ficha.tempoTotalMaquinaMinutos !== undefined ? Number(ficha.tempoTotalMaquinaMinutos) : (Number(ficha.tempoMaquinaHoras || 0) * 60) + Number(ficha.tempoMaquinaMinutos || 0);
+        const ingCorrigidos = (Array.isArray(ficha.ingredientes) ? ficha.ingredientes : []).map(ing => {
+            const ingAjustado = { ...ing };
+            if (ehDuplicacao) ingAjustado.id = crypto.randomUUID();
+            if ((ing.unidade === 'g' || ing.unidade === 'ml' || ing.modoCalculo === 'g_kg') && Number(ing.custoBaseInformado) > 1 && Number(ing.custoTotal) > Number(ing.custoBaseInformado)) {
+                ingAjustado.custoTotal = Number(((Number(ing.custoBaseInformado) / 1000) * Number(ing.qtd)).toFixed(4));
+            }
+            return ingAjustado;
+        });
 
-            setFormData({
-                ...ficha,
-                markupEscolhido: ficha.markupEscolhido ?? configTaxas.markupSugeridoPadrao ?? 3.0,
-                taxaMarketplacePerc: ficha.taxaMarketplacePerc ?? configTaxas.taxaMarketplacePerc ?? 0,
-                taxaMarketplaceFixa: ficha.taxaMarketplaceFixa ?? configTaxas.taxaMarketplaceFixa ?? 0,
-                tempoTotalMaquinaMinutos: minConv,
-                ingredientes: ingCorrigidos
-            });
+        return {
+            ...ficha,
+            nome: ehDuplicacao ? `${ficha.nome || ficha.name} (Cópia)` : (ficha.nome || ficha.name || ''),
+            markupEscolhido: ficha.markupEscolhido ?? configTaxas.markupSugeridoPadrao ?? 3.0,
+            taxaMarketplacePerc: ficha.taxaMarketplacePerc ?? configTaxas.taxaMarketplacePerc ?? 0,
+            taxaMarketplaceFixa: ficha.taxaMarketplaceFixa ?? configTaxas.taxaMarketplaceFixa ?? 0,
+            tempoTotalMaquinaMinutos: minConv,
+            ingredientes: ingCorrigidos,
+            variations: Array.isArray(ficha.variations) ? ficha.variations : []
+        };
+    };
+
+    const abrirModalNovaFicha = (ficha = null, modoCopiar = false) => {
+        if (ficha) {
+            setEditingId(modoCopiar ? null : ficha.id);
+            setFormData(prepararFichaCorrigida(ficha, modoCopiar));
         } else {
             setEditingId(null);
             setFormData({
@@ -126,10 +126,11 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 tempoTotalMaquinaMinutos: 0, potenciaWatts: configTaxas.potenciaMediaWatts,
                 tarifaKwh: configTaxas.tarifaKwh, custoHoraMaquina: configTaxas.custoHoraMaquina,
                 tempoManualMinutos: 0, custoHoraMaoDeObra: configTaxas.custoHoraMaoDeObra,
-                taxaFalhaPerc: configTaxas.taxaFalhaPadrao, embalagemCusto: 0, ingredientes: []
+                taxaFalhaPerc: configTaxas.taxaFalhaPadrao, embalagemCusto: 0, ingredientes: [], variations: []
             });
         }
         setInsumoSelectId(''); setIngNome(''); setIngUnidade('g'); setIngQtdUsada(''); setIngCustoUnitario('');
+        setNewVarName(''); setNewVarOptions('');
         setIsModalOpen(true);
     };
 
@@ -163,9 +164,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
         setFormData(prev => {
             let novoPeso = Number(prev.peso || 0);
             let novoCustoEmb = Number(prev.embalagemCusto || 0);
-            let novoC = prev.comprimento || 0;
-            let novoL = prev.largura || 0;
-            let novoA = prev.altura || 0;
+            let novoC = prev.comprimento || 0; let novoL = prev.largura || 0; let novoA = prev.altura || 0;
             const nomeMin = ingNome.toLowerCase();
 
             if (novoIng.unidade === 'g' || novoIng.unidade === 'ml') novoPeso += (qtd / 1000);
@@ -190,6 +189,44 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
     const removerIngrediente = (id) => {
         setFormData(prev => ({ ...prev, ingredientes: prev.ingredientes.filter(i => i.id !== id) }));
+    };
+
+    // Parser Inteligente de Variações: Detecta o "+valor" automaticamente
+    const handleAddVariation = () => {
+        if (!newVarName || !newVarOptions) return;
+        const optionsArray = newVarOptions.split(',').map(opt => {
+            let raw = opt.trim();
+            let extraPrice = 0;
+            let label = raw;
+            
+            // Remove parenteses de fechamento se o usuario digitar "(+15)"
+            let cleaned = raw.replace(/\)$/, '').trim();
+            
+            // Procura padrao: + 15.90 ou + 15,90 no final
+            const match = cleaned.match(/\+\s*R?\$?\s*(\d+[.,]?\d*)$/i);
+            
+            if (match) {
+                extraPrice = Number(match[1].replace(',', '.'));
+                label = cleaned.replace(match[0], '').replace(/\($/, '').trim();
+            }
+            return { label, extraPrice };
+        }).filter(opt => opt.label !== '');
+
+        if (optionsArray.length === 0) return;
+
+        setFormData(prev => ({
+            ...prev,
+            variations: [...(prev.variations || []), { name: newVarName.trim(), options: optionsArray }]
+        }));
+        setNewVarName('');
+        setNewVarOptions('');
+    };
+
+    const handleRemoveVariation = (index) => {
+        setFormData(prev => ({
+            ...prev,
+            variations: prev.variations.filter((_, i) => i !== index)
+        }));
     };
 
     const resumoCalculado = useMemo(() => {
@@ -276,7 +313,20 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 updatedAt: new Date().toISOString()
             };
 
+            // Atualiza direto no banco (e reflete automaticamente na loja, pois a Vitrine lê desta coleção ou do espelho que você ajustou anteriormente)
             await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`).doc(idDoc).set(payload, { merge: true });
+            
+            // Espelha no catálogo principal para garantir compatibilidade
+            const snap = await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).get();
+            if (snap.exists) {
+                let catData = snap.data().products || [];
+                const existIdx = catData.findIndex(p => p.id === idDoc);
+                if (existIdx >= 0) catData[existIdx] = { ...catData[existIdx], ...payload };
+                else catData.push(payload);
+                await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set({ products: catData }, { merge: true });
+                await db.doc(`lojas/${donoUid}`).set({ products: catData, produtos: catData }, { merge: true });
+            }
+
             setIsModalOpen(false);
         } catch (err) { alert("Erro ao salvar ficha de custos."); }
         setSaving(false);
@@ -379,8 +429,9 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2.5 py-1 rounded-full text-[10px]">{formatMoney(f.lucroBruto)} ({Number(f.margemLucro || 0).toFixed(0)}%)</span>
                                             </td>
                                             <td className="p-4 text-right whitespace-nowrap">
-                                                <button onClick={() => abrirModalNovaFicha(f)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1 cursor-pointer"><Icon name="edit" size={16} /></button>
-                                                <button onClick={() => handleExcluirFicha(f.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg cursor-pointer"><Icon name="trash-2" size={16} /></button>
+                                                <button onClick={() => abrirModalNovaFicha(f, true)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg mr-1 cursor-pointer" title="Duplicar"><Icon name="copy" size={16} /></button>
+                                                <button onClick={() => abrirModalNovaFicha(f)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1 cursor-pointer" title="Editar"><Icon name="edit" size={16} /></button>
+                                                <button onClick={() => handleExcluirFicha(f.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg cursor-pointer" title="Excluir"><Icon name="trash-2" size={16} /></button>
                                             </td>
                                         </tr>
                                     );
@@ -391,6 +442,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                 </div>
             </div>
 
+            {/* MODAL: NOVA FICHA DE CUSTOS COM MARKETPLACE E AUTOMAÇÃO */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
@@ -405,6 +457,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                         <form onSubmit={handleSalvarFicha} className="flex flex-col flex-1 min-h-0 overflow-hidden">
                             <div className="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
                                 <div className="lg:col-span-6 space-y-4">
+                                    
                                     {/* 1. INFO BASE */}
                                     <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3.5">
                                         <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block border-b border-slate-100 pb-2">1. Produto & Taxas Marketplace</span>
@@ -424,7 +477,7 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                         </div>
                                         <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3 space-y-2.5 mt-2">
                                             <div className="flex items-center justify-between">
-                                                <span className="text-[10px] font-black uppercase text-emerald-800 flex items-center gap-1">💡 Preço Sugerido Seguro:</span>
+                                                <span className="text-[10px] font-black uppercase text-emerald-800 flex items-center gap-1">💡 Preço Sugerido Seguro (Cobre as Taxas):</span>
                                                 <div className="flex items-center gap-1 text-[10px] font-black text-indigo-700">
                                                     <span>Markup:</span>
                                                     <input type="number" step="0.1" min="1.1" value={formData.markupEscolhido} onChange={e => setFormData({ ...formData, markupEscolhido: e.target.value })} className="w-12 p-1 bg-white border border-indigo-300 rounded text-center font-black" />
@@ -515,6 +568,47 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
 
                                 {/* COLUNA DIREITA */}
                                 <div className="lg:col-span-6 flex flex-col justify-between space-y-4">
+                                    
+                                    {/* BLOCO DE VARIAÇÕES (COBRAR MAIS) */}
+                                    <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-4">
+                                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                            <span className="text-xs font-black uppercase text-indigo-700 tracking-wider">🎨 Opções & Variações</span>
+                                        </div>
+                                        {Array.isArray(formData.variations) && formData.variations.length > 0 && (
+                                            <div className="space-y-2.5 mb-2">
+                                                {formData.variations.map((v, idx) => (
+                                                    <div key={idx} className="flex flex-col bg-slate-50 p-3 rounded-lg border border-slate-200 shadow-sm">
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <span className="font-black text-xs text-slate-800">{v.name}:</span>
+                                                            <button type="button" onClick={() => handleRemoveVariation(idx)} className="text-red-400 hover:text-red-600"><Icon name="trash" size={14}/></button>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {(v.options || []).map((opt, i) => {
+                                                                const l = typeof opt === 'string' ? opt : opt.label;
+                                                                const p = typeof opt === 'object' && opt.extraPrice ? ` (+ R$ ${opt.extraPrice.toFixed(2).replace('.',',')})` : '';
+                                                                return <span key={i} className="text-[10px] font-bold bg-white text-slate-700 px-2 py-1 rounded border border-slate-200 shadow-xs">{l}{p}</span>;
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex flex-col md:flex-row gap-2 items-end">
+                                            <div className="w-full md:w-1/3 space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Tipo (Ex: Kit)</label>
+                                                <input type="text" value={newVarName} onChange={e => setNewVarName(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs outline-none focus:border-indigo-600" />
+                                            </div>
+                                            <div className="w-full md:flex-1 space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-emerald-600 ml-1">Opções (Use +Valor p/ cobrar extra)</label>
+                                                <input type="text" value={newVarOptions} onChange={e => setNewVarOptions(e.target.value)} placeholder="Ex: Só Boneco, Com Tinta +15, Com Tudo +25.50..." className="w-full p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg font-bold text-xs outline-none focus:border-emerald-600" />
+                                            </div>
+                                            <button type="button" onClick={handleAddVariation} className="w-full md:w-auto p-2.5 bg-slate-800 text-white rounded-lg font-black uppercase text-xs hover:bg-black transition-colors shrink-0 cursor-pointer">
+                                                Adicionar
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* 4. MATERIAIS */}
                                     <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-4 flex-1 flex flex-col">
                                         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                                             <span className="text-xs font-black uppercase text-indigo-700 tracking-wider">📦 4. Matéria-Prima & Insumos</span>
@@ -522,7 +616,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                         </div>
 
                                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3.5">
-                                            {/* SELECT AGORA ESTÁ SEMPRE VISÍVEL! */}
                                             <div>
                                                 <select value={insumoSelectId} onChange={handleSelecionarInsumoEstoque} className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold outline-none cursor-pointer">
                                                     <option value="">-- Puxar material cadastrado no Estoque --</option>
@@ -566,11 +659,11 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                                 </div>
                                             )}
                                             <button type="button" onClick={handleAdicionarIngrediente} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase cursor-pointer shadow-xs transition-colors">
-                                                + Adicionar Material
+                                                + Adicionar Insumo
                                             </button>
                                         </div>
 
-                                        <div className="flex-1 overflow-y-auto max-h-48 space-y-2 pr-1">
+                                        <div className="flex-1 overflow-y-auto max-h-40 space-y-2 pr-1">
                                             {formData.ingredientes.map(item => (
                                                 <div key={item.id} className="flex items-center justify-between bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs">
                                                     <div>
@@ -617,36 +710,6 @@ export default function CustosProdutos({ user, permissoes, donoUid: propDonoUid 
                                 <button type="submit" disabled={saving} className="px-7 py-3 bg-slate-900 hover:bg-black text-white rounded-xl font-black text-xs uppercase shadow-md flex items-center gap-2 cursor-pointer">
                                     <Icon name="save" size={16} /> {saving ? 'Salvando...' : 'Salvar Custos'}
                                 </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* MODAL CONFIGURACOES */}
-            {isConfigOpen && (
-                <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
-                            <h3 className="font-black text-base uppercase">Configurações & Marketplace</h3>
-                            <button type="button" onClick={() => setIsConfigOpen(false)} className="text-white/70 hover:text-white text-xl cursor-pointer">✕</button>
-                        </div>
-                        <form onSubmit={handleSalvarConfigTaxas} className="p-6 space-y-4 text-xs">
-                            <div className="grid grid-cols-2 gap-3">
-                                <div><label className="font-black uppercase text-slate-600 block mb-1">Tarifa Luz (R$/kWh)</label><input type="number" step="any" value={configTaxas.tarifaKwh} onChange={e => setConfigTaxas({ ...configTaxas, tarifaKwh: Number(e.target.value) })} className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold outline-none" /></div>
-                                <div><label className="font-black uppercase text-slate-600 block mb-1">Potência (Watts)</label><input type="number" step="any" value={configTaxas.potenciaMediaWatts} onChange={e => setConfigTaxas({ ...configTaxas, potenciaMediaWatts: Number(e.target.value) })} className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold outline-none" /></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div><label className="font-black uppercase text-slate-600 block mb-1">Hora-Máquina (R$/h)</label><input type="number" step="any" value={configTaxas.custoHoraMaquina} onChange={e => setConfigTaxas({ ...configTaxas, custoHoraMaquina: Number(e.target.value) })} className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold outline-none" /></div>
-                                <div><label className="font-black uppercase text-slate-600 block mb-1">Mão de Obra (R$/h)</label><input type="number" step="any" value={configTaxas.custoHoraMaoDeObra} onChange={e => setConfigTaxas({ ...configTaxas, custoHoraMaoDeObra: Number(e.target.value) })} className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold outline-none" /></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 p-3 bg-indigo-50 border border-indigo-200 rounded-xl mt-2">
-                                <div><label className="font-black uppercase text-indigo-700 block mb-1">Shopee / ML (%)</label><input type="number" step="any" value={configTaxas.taxaMarketplacePerc} onChange={e => setConfigTaxas({ ...configTaxas, taxaMarketplacePerc: Number(e.target.value) })} className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl font-bold outline-none" /></div>
-                                <div><label className="font-black uppercase text-indigo-700 block mb-1">Taxa Fixa (R$)</label><input type="number" step="any" value={configTaxas.taxaMarketplaceFixa} onChange={e => setConfigTaxas({ ...configTaxas, taxaMarketplaceFixa: Number(e.target.value) })} className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl font-bold outline-none" /></div>
-                            </div>
-                            <div className="flex justify-end gap-2 pt-3">
-                                <button type="button" onClick={() => setIsConfigOpen(false)} className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black uppercase cursor-pointer">Cancelar</button>
-                                <button type="submit" className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase cursor-pointer">Salvar</button>
                             </div>
                         </form>
                     </div>

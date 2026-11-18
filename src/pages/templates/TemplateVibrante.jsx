@@ -785,7 +785,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
         const tagExibida = cat.tag !== undefined ? cat.tag : tagPadrao;
         const qtdItens = contarProdutosCategoria(cat.name);
 
-        // Respeita a proporção salva na categoria ('1:1', '3:2', '16:9') ou a proporção do slot
         const aspectEscolhido = aspectPadraoSlot || cat.aspect || '1:1';
         const classeAspecto =
             aspectEscolhido === '1:1' ? 'aspect-square' :
@@ -802,29 +801,33 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                 }`}
             >
                 {cat.imageUrl ? (
-                    <img
-                        src={cat.imageUrl}
-                        alt={cat.name}
-                        className="w-full h-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105"
-                    />
+                    <>
+                        <img
+                            src={cat.imageUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className="absolute inset-0 w-full h-full object-cover object-center scale-125 blur-xl opacity-65 pointer-events-none"
+                        />
+                        <img
+                            src={cat.imageUrl}
+                            alt={cat.name}
+                            className="relative z-[1] w-full h-full object-contain object-center transition-transform duration-700 ease-out group-hover:scale-105"
+                        />
+                    </>
                 ) : (
                     <div className="w-full h-full min-h-[220px] bg-gradient-to-br from-slate-800 to-slate-950 flex items-center justify-center text-slate-600">
                         <Icon name="box" size={56} />
                     </div>
                 )}
 
-                {/* Gradiente discreto apenas no rodapé para destacar o nome da categoria */}
                 <div className="absolute inset-x-0 bottom-0 h-24 z-[2] bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent pointer-events-none" />
 
-                {/* Feixe de Brilho Diagonal no Hover */}
                 <div className="absolute -inset-full top-0 z-[3] block w-1/2 -skew-x-12 bg-gradient-to-r from-transparent to-white/25 opacity-0 group-hover:opacity-100 group-hover:translate-x-[360%] transition-all duration-1000 ease-out pointer-events-none" />
 
-                {/* Contador flutuante no canto superior direito */}
                 <div className="absolute top-3.5 right-3.5 z-10 bg-black/55 backdrop-blur-md border border-white/20 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
                     {qtdItens} {qtdItens === 1 ? 'item' : 'itens'}
                 </div>
 
-                {/* Título e Selo na Base */}
                 <div className="absolute inset-x-0 bottom-0 p-4 md:p-5 z-10 flex items-end justify-between gap-3">
                     <div className="transform transition-transform duration-300 group-hover:-translate-y-0.5">
                         {tagExibida && (
@@ -1111,7 +1114,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
             <main className="w-full px-3 md:px-10 xl:px-16 py-4 md:py-8 space-y-6 md:space-y-12 flex-1">
                 
                 {/* ========================================================================= */}
-                {/* 5A. MOBILE: CARROSSEL HORIZONTAL DESLIZANTE (LEVE E DIRETO AO PRODUTO)     */}
+                {/* 5A. MOBILE: CARROSSEL HORIZONTAL DESLIZANTE                               */}
                 {/* ========================================================================= */}
                 {categorias.length > 0 && (
                     <section className="md:hidden space-y-2">
@@ -1162,7 +1165,10 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                         }`}
                                     >
                                         {cat.imageUrl ? (
-                                            <img src={cat.imageUrl} alt={cat.name} className="w-full h-full object-cover object-center" />
+                                            <>
+                                                <img src={cat.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover scale-125 blur-md opacity-60" />
+                                                <img src={cat.imageUrl} alt={cat.name} className="relative z-[1] w-full h-full object-contain" />
+                                            </>
                                         ) : (
                                             <div className="absolute inset-0 bg-slate-800 flex items-center justify-center text-slate-500">
                                                 <Icon name="box" size={24} />
@@ -1223,7 +1229,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                         <div className="space-y-5">
                             {/* Linha Superior do Mosaico: Alinhada pela proporção escolhida em cada foto */}
                             <div className="grid grid-cols-12 gap-5 items-start">
-                                {/* Posição 1 (Esquerda): Encaixe nativo 1:1 Quadrado (ou a proporção que você escolher) */}
+                                {/* Posição 1 (Esquerda) */}
                                 {categoriasMosaicoAtual[0] && renderCardMosaico(
                                     categoriasMosaicoAtual[0],
                                     'col-span-4',
@@ -1232,7 +1238,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                     categoriasMosaicoAtual[0].aspect || '1:1'
                                 )}
 
-                                {/* Posições 2 e 3 (Centro): 2 Cards Empilhados */}
+                                {/* Posições 2 e 3 (Centro) */}
                                 {(categoriasMosaicoAtual[1] || categoriasMosaicoAtual[2]) && (
                                     <div className="col-span-4 flex flex-col gap-5 justify-between">
                                         {categoriasMosaicoAtual[1] && renderCardMosaico(
@@ -1252,7 +1258,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                     </div>
                                 )}
 
-                                {/* Posição 4 (Direita): Encaixe nativo 1:1 Quadrado ou 3:2 conforme você selecionar na foto */}
+                                {/* Posição 4 (Direita) */}
                                 {categoriasMosaicoAtual[3] && renderCardMosaico(
                                     categoriasMosaicoAtual[3],
                                     'col-span-4',
@@ -1262,7 +1268,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                 )}
                             </div>
 
-                            {/* Linha Inferior do Mosaico: Cada card encaixa exatamente na proporção escolhida (1:1, 3:2 ou 16:9) */}
+                            {/* Linha Inferior do Mosaico */}
                             {categoriasMosaicoAtual.length > 4 && (() => {
                                 const itensInferiores = categoriasMosaicoAtual.slice(4, 8);
                                 const qtdInf = itensInferiores.length;
@@ -1311,7 +1317,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                 )}
 
                 {/* ========================================================================= */}
-                {/* 6. GRADE DE PRODUTOS (2 COLUNAS NO MOBILE E 5 NO DESKTOP)                  */}
+                {/* 6. GRADE DE PRODUTOS                                                      */}
                 {/* ========================================================================= */}
                 <section id="vitrine" className="space-y-4 md:space-y-6">
                     <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-2.5 gap-2">
@@ -1909,6 +1915,37 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                     </div>
                                 </div>
 
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Número</label>
+                                        <input type="text" value={regNumero} onChange={e => setRegNumero(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Complemento</label>
+                                        <input type="text" value={regComplemento} onChange={e => setRegComplemento(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-5 gap-2">
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Bairro</label>
+                                        <input type="text" value={regBairro} onChange={e => setRegBairro(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">Cidade</label>
+                                        <input type="text" value={regCidade} onChange={e => setRegCidade(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">UF</label>
+                                        <input type="text" maxLength={2} value={regUf} onChange={e => setRegUf(e.target.value.toUpperCase())} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-center" />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">E-mail</label>
+                                    <input type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                                </div>
+
                                 <div className="flex justify-between items-center pt-3 gap-3">
                                     <button type="button" onClick={handleLogout} className="px-4 py-3 bg-red-50 text-red-600 rounded-xl font-black text-xs uppercase hover:bg-red-100">
                                         Sair da Conta
@@ -1925,7 +1962,8 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                 ) : meusPedidos.length === 0 ? (
                                     <div className="text-center py-10 space-y-2">
                                         <Icon name="package" size={44} className="mx-auto text-slate-300" />
-                                        <p className="font-black text-slate-600 text-sm uppercase">Nenhum pedido encontrado</p>
+                                        <p className="font-black text-slate-600 text-sm uppercase">Nenhum pedido encontrado para esta conta</p>
+                                        <p className="text-xs text-slate-400">Assim que você finalizar uma compra no carrinho, poderá acompanhar cada etapa da produção e entrega aqui.</p>
                                     </div>
                                 ) : (
                                     meusPedidos.map(ped => {
@@ -1945,6 +1983,9 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                                     </div>
                                                     <div className="text-right">
                                                         <span className="font-black text-base text-emerald-600">{formatMoney(ped.total || ped.valorTotal)}</span>
+                                                        <span className="block text-[10px] font-bold text-slate-400 uppercase">
+                                                            {ped.modalidadeFrete || 'Envio Padrão'} • {ped.formaPagamento || 'PIX'}
+                                                        </span>
                                                     </div>
                                                 </div>
 
@@ -1969,10 +2010,23 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
 
                                                 <div className="bg-white p-3 rounded-xl border border-slate-200/80 text-xs space-y-1">
                                                     <p className="font-black text-slate-800">{ped.resumoItens || (ped.items || []).map(i => `${i.qtd}x ${i.name}`).join(', ')}</p>
+                                                    {(ped.endereco || ped.address) && (
+                                                        <p className="text-[11px] text-slate-500"><strong>Entrega:</strong> {ped.endereco || ped.address}</p>
+                                                    )}
                                                     {rastreio && (
-                                                        <p className="text-[11px] font-black text-blue-700 uppercase pt-1">
-                                                            🚚 Rastreio: {rastreio}
-                                                        </p>
+                                                        <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between">
+                                                            <span className="text-[11px] font-black text-blue-700 uppercase">
+                                                                🚚 Código de Rastreio: <span className="bg-blue-50 px-2 py-0.5 rounded border border-blue-200">{rastreio}</span>
+                                                            </span>
+                                                            <a
+                                                                href={`https://rastreamento.correios.com.br/app/index.php`}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="text-[11px] font-black text-orange-600 hover:underline"
+                                                            >
+                                                                Rastrear Objeto →
+                                                            </a>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -2003,6 +2057,14 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                     ✓
                                 </div>
                                 <h4 className="font-black text-xl uppercase text-slate-800">Pedido #{pedidoConfirmado.orderNumber} Recebido!</h4>
+                                <p className="text-xs font-bold text-slate-500 max-w-xs mx-auto leading-relaxed">
+                                    Seu pedido já está na fila de produção da {loja.nomeLoja}. Você pode acompanhar cada etapa em <strong>Meus Pedidos</strong>.
+                                </p>
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left text-xs space-y-1.5">
+                                    <p><strong>Itens:</strong> {pedidoConfirmado.resumoItens}</p>
+                                    <p><strong>Entrega ({pedidoConfirmado.modalidadeFrete}):</strong> {pedidoConfirmado.endereco}</p>
+                                    <p><strong>Total com Frete:</strong> <span className="text-emerald-600 font-black">{formatMoney(pedidoConfirmado.total)}</span></p>
+                                </div>
                                 <div className="pt-3 flex flex-col gap-2">
                                     <button
                                         type="button"
@@ -2015,12 +2077,22 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                     >
                                         Acompanhar em Meus Pedidos
                                     </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setPedidoConfirmado(null); setShowCartModal(false); }}
+                                        className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase text-xs"
+                                    >
+                                        Continuar na Loja
+                                    </button>
                                 </div>
                             </div>
                         ) : carrinho.length === 0 ? (
                             <div className="my-auto text-center py-12 space-y-3">
                                 <Icon name="shopping-cart" size={44} className="mx-auto text-slate-300" />
                                 <p className="text-slate-400 font-bold text-sm">Seu carrinho está vazio.</p>
+                                <button onClick={() => setShowCartModal(false)} className="text-xs font-black uppercase text-orange-500 hover:underline">
+                                    Continuar Comprando
+                                </button>
                             </div>
                         ) : (
                             <form onSubmit={handleFinalizarPedidoNoSistema} className="flex-1 flex flex-col justify-between space-y-4 pt-4 overflow-y-auto">
@@ -2044,6 +2116,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                 </div>
 
                                 <div className="space-y-2.5 border-t border-slate-200 pt-3">
+                                    <h4 className="font-black text-xs uppercase text-slate-700 tracking-wider">1. Dados do Cliente</h4>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
                                             <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Seu Nome *</label>
@@ -2055,6 +2128,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                         </div>
                                     </div>
 
+                                    <h4 className="font-black text-xs uppercase text-slate-700 tracking-wider pt-2">2. CEP e Endereço de Envio</h4>
                                     <div className="grid grid-cols-3 gap-2">
                                         <div>
                                             <label className="text-[10px] font-black uppercase text-orange-600 block mb-0.5">
@@ -2082,7 +2156,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                         </div>
                                         <div className="col-span-2">
                                             <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Complemento</label>
-                                            <input type="text" value={checkoutComplemento} onChange={e => setCheckoutComplemento(e.target.value)} placeholder="Apto, Bloco..." className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
+                                            <input type="text" value={checkoutComplemento} onChange={e => setCheckoutComplemento(e.target.value)} placeholder="Apto, Bloco, Ponto de ref." className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
                                         </div>
                                     </div>
 
@@ -2103,6 +2177,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
 
                                     {opcoesFreteCalculadas.length > 0 && (
                                         <div className="pt-1 space-y-1.5">
+                                            <label className="text-[10px] font-black uppercase text-emerald-700 block">Escolha a Modalidade de Entrega:</label>
                                             {opcoesFreteCalculadas.map(op => (
                                                 <label key={op.id} className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer ${checkoutModalidadeFrete === op.id ? 'border-emerald-500 bg-emerald-50/50 font-black' : 'border-slate-200 bg-white'}`}>
                                                     <div className="flex items-center gap-2">
@@ -2123,10 +2198,34 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                             ))}
                                         </div>
                                     )}
+
+                                    <div className="grid grid-cols-2 gap-2 pt-1">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Pagamento</label>
+                                            <select value={checkoutPagamento} onChange={e => setCheckoutPagamento(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold">
+                                                <option value="PIX">PIX</option>
+                                                <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                                <option value="Cartão de Débito">Cartão de Débito</option>
+                                                <option value="Boleto">Boleto</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-0.5">Observações da Peça</label>
+                                            <input type="text" value={checkoutObs} onChange={e => setCheckoutObs(e.target.value)} placeholder="Cor, nome p/ gravar..." className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold" />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="border-t border-slate-200 pt-3 space-y-2 shrink-0">
-                                    <div className="flex justify-between items-center font-black text-base pt-1">
+                                    <div className="flex justify-between text-xs font-bold text-slate-500">
+                                        <span>Subtotal dos Produtos:</span>
+                                        <span>{formatMoney(subtotalCarrinho)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs font-bold text-slate-500">
+                                        <span>Frete ({checkoutModalidadeFrete}):</span>
+                                        <span>{checkoutValorFrete === 0 ? 'A combinar / Grátis' : formatMoney(checkoutValorFrete)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center font-black text-base pt-1 border-t border-slate-100">
                                         <span>Total do Pedido:</span>
                                         <span className="text-emerald-600 text-xl">{formatMoney(totalComFrete)}</span>
                                     </div>
