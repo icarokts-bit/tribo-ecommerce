@@ -76,9 +76,10 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
     const [deptOpen, setDeptOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-    // Estado do Modal de Visualização Ampliada (Lightbox / Zoom da Foto)
+    // Estado do Modal de Visualização Ampliada (Lightbox / Zoom da Foto + Variações)
     const [produtoZoom, setProdutoZoom] = useState(null);
     const [superZoomAtivo, setSuperZoomAtivo] = useState(false);
+    const [variacoesSelecionadas, setVariacoesSelecionadas] = useState({});
 
     // Estado do Cliente Logado + Pedidos Sincronizados com Firebase
     const [clienteLogado, setClienteLogado] = useState(null);
@@ -168,7 +169,30 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
 
     const abrirZoomProduto = (produto) => {
         setSuperZoomAtivo(false);
+        const iniciais = {};
+        if (Array.isArray(produto.variations)) {
+            produto.variations.forEach(group => {
+                if (Array.isArray(group.options) && group.options.length > 0) {
+                    const firstOpt = group.options[0];
+                    iniciais[group.name] = typeof firstOpt === 'string'
+                        ? { name: firstOpt, price: null }
+                        : firstOpt;
+                }
+            });
+        }
+        setVariacoesSelecionadas(iniciais);
         setProdutoZoom(produto);
+    };
+
+    const obterPrecoComVariacao = (produto, selecionadas) => {
+        if (!produto) return 0;
+        let precoFinal = Number(produto.sellingPrice || produto.price || 0);
+        Object.values(selecionadas || {}).forEach(opt => {
+            if (opt && opt.price !== null && opt.price !== undefined && Number(opt.price) > 0) {
+                precoFinal = Number(opt.price);
+            }
+        });
+        return precoFinal;
     };
 
     // =====================================================
@@ -529,7 +553,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
         exibirNotificacao("Você saiu da sua conta.");
     };
 
-    // Carrinho e envio com sequência (0001, 0002...)
+    // Carrinho com suporte a variações e preço dinâmico
     const toggleFavorito = (id) => {
         setFavoritos(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
     };
@@ -550,17 +574,38 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
         }
     };
 
-    const adicionarAoCarrinho = (produto, abrirModalCarrinho = false) => {
+    const adicionarAoCarrinho = (produto, abrirModalCarrinho = false, variacoesEscolhidas = null) => {
+        if (!variacoesEscolhidas && Array.isArray(produto.variations) && produto.variations.length > 0) {
+            abrirZoomProduto(produto);
+            return;
+        }
+
+        const textoVariacao = variacoesEscolhidas
+            ? Object.entries(variacoesEscolhidas)
+                .map(([grupo, opt]) => `${grupo}: ${opt.name}`)
+                .join(' • ')
+            : '';
+
+        const precoUnitario = variacoesEscolhidas
+            ? obterPrecoComVariacao(produto, variacoesEscolhidas)
+            : Number(produto.sellingPrice || produto.price || 0);
+
+        const cartItemId = textoVariacao ? `${produto.id}__${textoVariacao}` : produto.id;
+        const nomeExibicao = textoVariacao ? `${produto.name} (${textoVariacao})` : produto.name;
+
         setPedidoConfirmado(null);
         setCarrinho(prev => {
-            const existe = prev.find(item => item.id === produto.id);
-            if (existe) return prev.map(item => item.id === produto.id ? { ...item, qtd: item.qtd + 1 } : item);
-            return [...prev, { ...produto, qtd: 1 }];
+            const existe = prev.find(item => item.id === cartItemId);
+            if (existe) {
+                return prev.map(item => item.id === cartItemId ? { ...item, qtd: item.qtd + 1 } : item);
+            }
+            return [...prev, { ...produto, id: cartItemId, productIdOriginal: produto.id, name: nomeExibicao, sellingPrice: precoUnitario, qtd: 1 }];
         });
+
         if (abrirModalCarrinho) {
             setShowCartModal(true);
         } else {
-            exibirNotificacao(`"${produto.name}" foi adicionado ao seu carrinho!`);
+            exibirNotificacao(`"${nomeExibicao}" foi adicionado ao seu carrinho!`);
         }
     };
 
@@ -572,8 +617,8 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
         );
     };
 
-    const handleComprarDireto = (produto) => {
-        adicionarAoCarrinho(produto, true);
+    const handleComprarDireto = (produto, variacoesEscolhidas = null) => {
+        adicionarAoCarrinho(produto, true, variacoesEscolhidas);
     };
 
     const subtotalCarrinho = carrinho.reduce((acc, item) => acc + (Number(item.sellingPrice || 0) * item.qtd), 0);
@@ -622,8 +667,8 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
             }
 
             const itensFormatados = carrinho.map(item => ({
-                id: item.id,
-                productId: item.id,
+                id: item.productIdOriginal || item.id,
+                productId: item.productIdOriginal || item.id,
                 name: item.name,
                 nome: item.name,
                 sku: item.sku || '',
@@ -821,7 +866,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                 )}
 
                 <div className="absolute inset-x-0 bottom-0 h-24 z-[2] bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent pointer-events-none" />
-
                 <div className="absolute -inset-full top-0 z-[3] block w-1/2 -skew-x-12 bg-gradient-to-r from-transparent to-white/25 opacity-0 group-hover:opacity-100 group-hover:translate-x-[360%] transition-all duration-1000 ease-out pointer-events-none" />
 
                 <div className="absolute top-3.5 right-3.5 z-10 bg-black/55 backdrop-blur-md border border-white/20 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
@@ -898,11 +942,9 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                 </div>
             </div>
 
-            {/* 3. HEADER PRINCIPAL COMPACTO NO MOBILE E AMPLO NO DESKTOP */}
+            {/* 3. HEADER PRINCIPAL */}
             <header className="w-full bg-white py-2.5 md:py-5 px-3 md:px-10 xl:px-16 border-b border-slate-200 sticky top-0 z-40 shadow-xs">
                 <div className="w-full flex flex-wrap lg:flex-nowrap items-center justify-between gap-2.5 md:gap-6">
-                    
-                    {/* LOGO + NOME */}
                     <div onClick={() => { setCategoriaFiltro('todas'); setBusca(''); }} className="flex items-center gap-2.5 md:gap-5 cursor-pointer shrink-0">
                         {loja.logoUrl ? (
                             <img 
@@ -925,7 +967,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                         </div>
                     </div>
 
-                    {/* CONTA + CARRINHO */}
                     <div className="flex items-center gap-2 sm:gap-4 shrink-0 order-2 lg:order-3">
                         {telefoneAjustes && (
                             <a 
@@ -1014,7 +1055,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                         </button>
                     </div>
 
-                    {/* SELETOR DE CATEGORIAS + BUSCA EM LINHA ÚNICA */}
                     <div className="w-full lg:flex-1 lg:max-w-3xl flex flex-row items-stretch gap-2 relative order-3 lg:order-2">
                         <div className="relative shrink-0">
                             <button 
@@ -1070,7 +1110,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                 </div>
             </header>
 
-            {/* 4. BARRA DE NAVEGAÇÃO HORIZONTAL (Somente no Computador) */}
+            {/* 4. BARRA DE NAVEGAÇÃO HORIZONTAL (Desktop) */}
             <nav className="hidden md:block w-full bg-white border-b border-slate-200 px-4 md:px-10 xl:px-16 shadow-xs">
                 <div className="w-full flex items-center justify-between py-3.5 gap-6 overflow-x-auto no-scrollbar">
                     <div className="flex items-center gap-7 text-sm md:text-base font-extrabold text-slate-700 whitespace-nowrap">
@@ -1113,9 +1153,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
             {/* CONTEÚDO PRINCIPAL */}
             <main className="w-full px-3 md:px-10 xl:px-16 py-4 md:py-8 space-y-6 md:space-y-12 flex-1">
                 
-                {/* ========================================================================= */}
-                {/* 5A. MOBILE: CARROSSEL HORIZONTAL DESLIZANTE                               */}
-                {/* ========================================================================= */}
+                {/* 5A. MOBILE: CARROSSEL HORIZONTAL DESLIZANTE */}
                 {categorias.length > 0 && (
                     <section className="md:hidden space-y-2">
                         <div className="flex items-center justify-between px-0.5">
@@ -1175,7 +1213,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                             </div>
                                         )}
                                         <div className="absolute inset-x-0 bottom-0 h-14 z-[2] bg-gradient-to-t from-slate-950/95 via-slate-900/45 to-transparent" />
-                                        
                                         {cat.tag && (
                                             <span className="absolute top-1.5 left-2 z-10 bg-orange-500/95 text-white text-[7px] font-black uppercase px-1.5 py-0.5 rounded">
                                                 {cat.tag}
@@ -1184,7 +1221,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                         <span className="absolute top-1.5 right-2 z-10 bg-black/55 backdrop-blur-xs text-white text-[8px] font-black px-1.5 py-0.5 rounded-full">
                                             {qtd}
                                         </span>
-
                                         <div className="absolute bottom-2 left-2.5 right-2.5 z-10">
                                             <h3 className="text-xs font-black text-white leading-tight line-clamp-1 drop-shadow">
                                                 {cat.name}
@@ -1197,9 +1233,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                     </section>
                 )}
 
-                {/* ========================================================================= */}
-                {/* 5B. COMPUTADOR (DESKTOP): MOSAICO QUE ENCAIXA EXATAMENTE NA PROPORÇÃO     */}
-                {/* ========================================================================= */}
+                {/* 5B. COMPUTADOR (DESKTOP): MOSAICO */}
                 {categorias.length > 0 && (
                     <section className="hidden md:block relative py-2">
                         {totalPaginasMosaico > 1 && (
@@ -1227,9 +1261,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                         )}
 
                         <div className="space-y-5">
-                            {/* Linha Superior do Mosaico */}
                             <div className="grid grid-cols-12 gap-5 items-start">
-                                {/* Posição 1 (Esquerda) */}
                                 {categoriasMosaicoAtual[0] && renderCardMosaico(
                                     categoriasMosaicoAtual[0],
                                     'col-span-4',
@@ -1238,7 +1270,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                     categoriasMosaicoAtual[0].aspect || '1:1'
                                 )}
 
-                                {/* Posições 2 e 3 (Centro) */}
                                 {(categoriasMosaicoAtual[1] || categoriasMosaicoAtual[2]) && (
                                     <div className="col-span-4 flex flex-col gap-5 justify-between">
                                         {categoriasMosaicoAtual[1] && renderCardMosaico(
@@ -1258,7 +1289,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                     </div>
                                 )}
 
-                                {/* Posição 4 (Direita) */}
                                 {categoriasMosaicoAtual[3] && renderCardMosaico(
                                     categoriasMosaicoAtual[3],
                                     'col-span-4',
@@ -1268,7 +1298,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                 )}
                             </div>
 
-                            {/* Linha Inferior do Mosaico */}
                             {categoriasMosaicoAtual.length > 4 && (() => {
                                 const itensInferiores = categoriasMosaicoAtual.slice(4, 8);
                                 const qtdInf = itensInferiores.length;
@@ -1316,9 +1345,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                     </section>
                 )}
 
-                {/* ========================================================================= */}
-                {/* 6. GRADE DE PRODUTOS (2 COLUNAS NO MOBILE E 5 NO DESKTOP)                  */}
-                {/* ========================================================================= */}
+                {/* 6. GRADE DE PRODUTOS */}
                 <section id="vitrine" className="space-y-4 md:space-y-6">
                     <div className="flex flex-wrap justify-between items-center border-b border-slate-200 pb-2.5 gap-2">
                         <div>
@@ -1347,6 +1374,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                             {produtosFiltrados.map(p => {
                                 const descontoPerc = p.isPromo && p.price > 0 ? Math.round(((p.price - p.promoPrice) / p.price) * 100) : 0;
                                 const isFav = favoritos.includes(p.id);
+                                const temVariacoes = Array.isArray(p.variations) && p.variations.length > 0;
                                 return (
                                     <div key={p.id} className="bg-white rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 hover:border-[var(--cor-primaria)] hover:shadow-xl transition-all duration-300 flex flex-col justify-between group relative">
                                         <div className="absolute top-2.5 left-2.5 z-20 flex flex-col gap-1 items-start pointer-events-none">
@@ -1375,7 +1403,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                                     <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover/foto:scale-110 transition-transform duration-500" />
                                                     <div className="absolute inset-0 bg-slate-900/35 opacity-0 group-hover/foto:opacity-100 transition-opacity duration-200 flex items-center justify-center">
                                                         <span className="bg-white/95 text-slate-900 px-3 py-1.5 rounded-full font-black text-[10px] uppercase tracking-wider shadow-xl flex items-center gap-1">
-                                                            <Icon name="maximize" size={12} className="text-orange-500" /> Ampliar
+                                                            <Icon name="maximize" size={12} className="text-orange-500" /> {temVariacoes ? 'Ver Opções' : 'Ampliar'}
                                                         </span>
                                                     </div>
                                                 </>
@@ -1388,7 +1416,6 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                             <div>
                                                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-orange-500 block truncate">{p.category || 'Geral'}</span>
                                                 <h3 onClick={() => abrirZoomProduto(p)} className="font-bold text-xs sm:text-sm text-slate-800 group-hover:text-[var(--cor-primaria)] transition-colors line-clamp-2 min-h-[34px] sm:min-h-[40px] cursor-pointer">{p.name}</h3>
-                                                {/* Adicionado whitespace-pre-line na descrição do card também, se houver descrição curta */}
                                                 {p.description && <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-1 sm:line-clamp-2 mt-0.5 whitespace-pre-line">{p.description}</p>}
                                             </div>
                                             <div className="pt-1.5">
@@ -1402,7 +1429,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
 
                                         <div className="mt-3 pt-2.5 border-t border-slate-100 grid grid-cols-2 gap-1.5 sm:gap-2">
                                             <button onClick={() => adicionarAoCarrinho(p, false)} className="py-2 px-1.5 bg-orange-50 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200 font-black text-[10px] sm:text-[11px] uppercase rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer">
-                                                <Icon name="shopping-cart" size={12} /> <span className="truncate">+ Carrinho</span>
+                                                <Icon name="shopping-cart" size={12} /> <span className="truncate">{temVariacoes ? 'Opções' : '+ Carrinho'}</span>
                                             </button>
                                             <button onClick={() => handleComprarDireto(p)} className="py-2 px-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] sm:text-[11px] uppercase rounded-xl flex items-center justify-center gap-1 shadow-xs transition-colors cursor-pointer">
                                                 Comprar
@@ -1671,7 +1698,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                 </div>
             </a>
 
-            {/* MODAL LIGHTBOX DE VISUALIZAÇÃO GRANDE DA FOTO E DETALHES DO PRODUTO */}
+            {/* MODAL LIGHTBOX DE VISUALIZAÇÃO GRANDE DA FOTO, VARIAÇÕES E DETALHES DO PRODUTO */}
             {produtoZoom && (
                 <div
                     onClick={() => setProdutoZoom(null)}
@@ -1709,7 +1736,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                             </span>
                         </div>
 
-                        <div className="md:col-span-5 p-6 md:p-8 flex flex-col justify-between space-y-6 bg-white">
+                        <div className="md:col-span-5 p-6 md:p-8 flex flex-col justify-between space-y-5 bg-white max-h-[85vh] overflow-y-auto">
                             <div className="space-y-3">
                                 <span className="text-[10px] font-black uppercase bg-orange-100 text-orange-700 px-2.5 py-0.5 rounded-full">
                                     {produtoZoom.category || 'Categoria'}
@@ -1719,7 +1746,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                 </h3>
                                 <div className="pt-1 flex items-baseline gap-3">
                                     <span className="text-2xl sm:text-3xl font-black text-rose-600">
-                                        {formatMoney(produtoZoom.sellingPrice)}
+                                        {formatMoney(obterPrecoComVariacao(produtoZoom, variacoesSelecionadas))}
                                     </span>
                                     {produtoZoom.isPromo && (
                                         <span className="text-sm text-slate-400 line-through font-bold">
@@ -1727,7 +1754,45 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                         </span>
                                     )}
                                 </div>
-                                {/* O SEGREDINHO DA QUEBRA DE LINHA ESTÁ AQUI: whitespace-pre-line */}
+
+                                {/* SELETOR DE VARIAÇÕES DE COMPRA */}
+                                {Array.isArray(produtoZoom.variations) && produtoZoom.variations.length > 0 && (
+                                    <div className="space-y-3 pt-3 border-t border-slate-100">
+                                        {produtoZoom.variations.map((group, gIdx) => (
+                                            <div key={gIdx} className="space-y-1.5">
+                                                <label className="text-[11px] font-black uppercase text-slate-700 block">
+                                                    {group.name}:
+                                                </label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {(group.options || []).map((opt, oIdx) => {
+                                                        const optObj = typeof opt === 'string' ? { name: opt, price: null } : opt;
+                                                        const selecionada = variacoesSelecionadas[group.name]?.name === optObj.name;
+                                                        return (
+                                                            <button
+                                                                key={oIdx}
+                                                                type="button"
+                                                                onClick={() => setVariacoesSelecionadas(prev => ({ ...prev, [group.name]: optObj }))}
+                                                                className={`px-3 py-2 rounded-xl text-xs font-black border-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                                                                    selecionada
+                                                                        ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-xs'
+                                                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'
+                                                                }`}
+                                                            >
+                                                                <span>{optObj.name}</span>
+                                                                {optObj.price > 0 && (
+                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${selecionada ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                                                                        {formatMoney(optObj.price)}
+                                                                    </span>
+                                                                )}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
                                 <p className="text-xs md:text-sm text-slate-600 leading-relaxed pt-2 border-t border-slate-100 whitespace-pre-line">
                                     {produtoZoom.description || 'Peça produzida com materiais de alta resistência e acabamento de precisão.'}
                                 </p>
@@ -1738,8 +1803,9 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                     type="button"
                                     onClick={() => {
                                         const prod = produtoZoom;
+                                        const vars = variacoesSelecionadas;
                                         setProdutoZoom(null);
-                                        handleComprarDireto(prod);
+                                        handleComprarDireto(prod, vars);
                                     }}
                                     className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-lg transition-colors cursor-pointer"
                                 >
@@ -1748,7 +1814,7 @@ export default function TemplateVibrante({ loja, produtos: propProdutos = [], ca
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        adicionarAoCarrinho(produtoZoom, false);
+                                        adicionarAoCarrinho(produtoZoom, false, variacoesSelecionadas);
                                         setProdutoZoom(null);
                                     }}
                                     className="w-full py-3 bg-orange-50 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-200 rounded-xl font-black uppercase text-xs tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer"
