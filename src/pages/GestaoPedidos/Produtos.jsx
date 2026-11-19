@@ -2,13 +2,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
 import Icon from '../../components/Icon';
 
+const safeNum = (v) => {
+    if (typeof v === 'number') return isNaN(v) ? 0 : v;
+    if (!v) return 0;
+    const n = Number(String(v).replace(',', '.'));
+    return isNaN(n) ? 0 : n;
+};
+
 export default function Produtos({ user, permissoes }) {
     const [products, setProducts] = useState([]);
     const [categoriesList, setCategoriesList] = useState([]);
-    const [produtosDoCusto, setProdutosDoCusto] = useState([]); 
+    const [produtosDoCusto, setProdutosDoCusto] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busca, setBusca] = useState('');
-    
+
     // Modais
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isCatModalOpen, setIsCatModalOpen] = useState(false);
@@ -17,66 +24,67 @@ export default function Produtos({ user, permissoes }) {
 
     // Crop Modal
     const [cropModal, setCropModal] = useState({
-        open: false, 
-        rawImage: '', 
-        target: 'product', 
-        aspect: '1:1', 
-        mode: 'cover', 
-        zoom: 1, 
-        offsetX: 0, 
+        open: false,
+        rawImage: '',
+        target: 'product',
+        aspect: '1:1',
+        mode: 'cover',
+        zoom: 1,
+        offsetX: 0,
         offsetY: 0
     });
-    
     const canvasPreviewRef = useRef(null);
     const loadedImgRef = useRef(null);
 
     const [formData, setFormData] = useState({
-        name: '', 
-        sku: '', 
-        description: '', 
-        category: '', 
+        name: '',
+        sku: '',
+        description: '',
+        category: '',
         imageUrl: '',
-        price: 0, 
-        promoPrice: 0, 
-        isPromo: false, 
-        isActive: true, 
-        destaque: false, 
-        novidade: false, 
+        price: 0,
+        promoPrice: 0,
+        isPromo: false,
+        isActive: true,
+        destaque: false,
+        novidade: false,
         maisVendido: false,
-        weight: 0, 
-        dimensions: { length: 0, width: 0, height: 0 }, 
+        weight: 0,
+        dimensions: { length: 0, width: 0, height: 0 },
         variations: []
     });
 
-    const [catForm, setCatForm] = useState({ 
-        id: '', 
-        name: '', 
-        imageUrl: '', 
-        aspect: '1:1', 
-        tagOption: 'DESTAQUE', 
-        customTag: '' 
+    const [catForm, setCatForm] = useState({
+        id: '',
+        name: '',
+        imageUrl: '',
+        aspect: '1:1',
+        tagOption: 'DESTAQUE',
+        customTag: ''
     });
-    
-    const [newVarName, setNewVarName] = useState('');
-    const [newVarOptions, setNewVarOptions] = useState('');
+
+    // Estados para o criador de Variações com Preço
+    const [varGroupName, setVarGroupName] = useState('');
+    const [varOptionName, setVarOptionName] = useState('');
+    const [varOptionPrice, setVarOptionPrice] = useState('');
+
     const donoUid = permissoes?.donoUid || user?.uid;
 
     const sincronizarCatalogoPublico = async (novosProdutos, novasCategorias) => {
         if (!donoUid) throw new Error("Usuário não autenticado.");
+
         const payload = { updatedAt: new Date().toISOString() };
-        
-        if (novosProdutos !== undefined) {
-            Object.assign(payload, { products: novosProdutos, produtos: novosProdutos });
-        }
-        if (novasCategorias !== undefined) {
-            Object.assign(payload, { categories: novasCategorias, categorias: novasCategorias });
-        }
-        
+        if (novosProdutos !== undefined) payload.products = novosProdutos;
+        if (novasCategorias !== undefined) payload.categories = novasCategorias;
+
+        // Grava apenas os campos oficiais (products e categories) sem duplicar o tamanho
         await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/delivery/catalog_state`).set(payload, { merge: true });
-        
-        try { 
-            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/loja`).set(payload, { merge: true }); 
-        } catch (e) {}
+
+        try {
+            await db.doc(`artifacts/tribo-burger-financeiro/users/${donoUid}/settings/loja`).set(payload, { merge: true });
+        } catch (e) {
+            console.warn("Aviso ao espelhar em settings/loja:", e);
+        }
     };
 
     useEffect(() => {
@@ -91,7 +99,9 @@ export default function Produtos({ user, permissoes }) {
                 }
                 const recSnap = await db.collection(`artifacts/tribo-burger-financeiro/users/${donoUid}/ecommerce_products`).get();
                 setProdutosDoCusto(recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            } catch (error) {}
+            } catch (error) {
+                console.error("Erro ao buscar dados:", error);
+            }
             setLoading(false);
         };
         fetchData();
@@ -116,15 +126,15 @@ export default function Produtos({ user, permissoes }) {
                 const ratio = img.width / img.height;
                 propDetectada = ratio > 1.6 ? '16:9' : ratio > 1.2 ? '3:2' : '1:1';
             }
-            setCropModal({ 
-                open: true, 
-                rawImage: imgSrc, 
-                target: destino, 
-                aspect: propDetectada, 
-                mode: 'cover', 
-                zoom: 1, 
-                offsetX: 0, 
-                offsetY: 0 
+            setCropModal({
+                open: true,
+                rawImage: imgSrc,
+                target: destino,
+                aspect: propDetectada,
+                mode: 'cover',
+                zoom: 1,
+                offsetX: 0,
+                offsetY: 0
             });
         };
     };
@@ -134,56 +144,47 @@ export default function Produtos({ user, permissoes }) {
         const canvas = canvasPreviewRef.current;
         const ctx = canvas.getContext('2d');
         const img = loadedImgRef.current;
-        
-        let W = 560; 
-        let H = 560;
-        
-        if (cropModal.aspect === '3:2') { 
-            W = 600; 
-            H = 400; 
-        } else if (cropModal.aspect === '16:9') { 
-            W = 640; 
-            H = 360; 
+
+        let W = 480;
+        let H = 480;
+        if (cropModal.aspect === '3:2') {
+            W = 540;
+            H = 360;
+        } else if (cropModal.aspect === '16:9') {
+            W = 560;
+            H = 315;
         } else if (cropModal.aspect === 'original') {
-            const maxDim = 580;
-            if (img.width >= img.height) {
-                W = maxDim;
-                H = Math.max(240, Math.round((img.height / img.width) * maxDim));
-            } else {
-                H = maxDim;
-                W = Math.max(240, Math.round((img.width / img.height) * maxDim));
-            }
+            const maxDim = 480;
+            W = img.width >= img.height ? maxDim : Math.max(220, Math.round((img.width / img.height) * maxDim));
+            H = img.width >= img.height ? Math.max(220, Math.round((img.height / img.width) * maxDim)) : maxDim;
         }
-        
-        canvas.width = W; 
+
+        canvas.width = W;
         canvas.height = H;
-        
-        ctx.fillStyle = '#FFFFFF'; 
+        ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, W, H);
-        
-        const baseScale = cropModal.mode === 'cover' 
-            ? Math.max(W / img.width, H / img.height) 
+
+        const baseScale = cropModal.mode === 'cover'
+            ? Math.max(W / img.width, H / img.height)
             : Math.min(W / img.width, H / img.height);
-            
         const finalScale = baseScale * Number(cropModal.zoom || 1);
-        const drawWidth = img.width * finalScale; 
+        const drawWidth = img.width * finalScale;
         const drawHeight = img.height * finalScale;
-        
-        const maxShiftX = Math.max(180, Math.abs(drawWidth - W) / 2 + 120);
-        const maxShiftY = Math.max(180, Math.abs(drawHeight - H) / 2 + 120);
+
+        const maxShiftX = Math.max(160, Math.abs(drawWidth - W) / 2 + 100);
+        const maxShiftY = Math.max(160, Math.abs(drawHeight - H) / 2 + 100);
         const centerX = (W - drawWidth) / 2 + (Number(cropModal.offsetX) / 100) * maxShiftX;
         const centerY = (H - drawHeight) / 2 + (Number(cropModal.offsetY) / 100) * maxShiftY;
-        
+
         ctx.drawImage(img, centerX, centerY, drawWidth, drawHeight);
     }, [cropModal]);
 
     const confirmarRecortePadraoSite = () => {
         if (!canvasPreviewRef.current) return;
-        let urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/webp', 0.75);
-        if (urlFinalPadronizada.length > 135000) {
-            urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/jpeg', 0.68);
+        let urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/webp', 0.7);
+        if (urlFinalPadronizada.length > 75000) {
+            urlFinalPadronizada = canvasPreviewRef.current.toDataURL('image/jpeg', 0.65);
         }
-        
         if (cropModal.target === 'product') {
             setFormData(prev => ({ ...prev, imageUrl: urlFinalPadronizada }));
         } else {
@@ -192,43 +193,41 @@ export default function Produtos({ user, permissoes }) {
         setCropModal(prev => ({ ...prev, open: false }));
     };
 
-    const handleImageUpload = (e) => { 
-        const file = e.target.files[0]; 
-        if (file) abrirRecortadorComArquivo(file, 'product'); 
-        e.target.value = ''; 
+    const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) abrirRecortadorComArquivo(file, 'product');
+        e.target.value = '';
     };
-    
-    const handleCatImageUpload = (e) => { 
-        const file = e.target.files[0]; 
-        if (file) abrirRecortadorComArquivo(file, 'category'); 
-        e.target.value = ''; 
+
+    const handleCatImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) abrirRecortadorComArquivo(file, 'category');
+        e.target.value = '';
     };
 
     const comprimirImagemBase64Antiga = (base64Str) => {
         return new Promise((resolve) => {
-            if (!base64Str || !base64Str.startsWith('data:image') || base64Str.length < 115000) {
+            if (!base64Str || !base64Str.startsWith('data:image') || base64Str.length < 75000) {
                 return resolve(base64Str);
             }
-            const img = new Image(); 
+            const img = new Image();
             img.src = base64Str;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                let w = img.width; 
-                let h = img.height; 
-                const maxDim = 550;
-                
-                if (w >= h && w > maxDim) { 
-                    h = Math.round((h * maxDim) / w); 
-                    w = maxDim; 
-                } else if (h > w && h > maxDim) { 
-                    w = Math.round((w * maxDim) / h); 
-                    h = maxDim; 
+                let w = img.width;
+                let h = img.height;
+                const maxDim = 480;
+                if (w >= h && w > maxDim) {
+                    h = Math.round((h * maxDim) / w);
+                    w = maxDim;
+                } else if (h > w && h > maxDim) {
+                    w = Math.round((w * maxDim) / h);
+                    h = maxDim;
                 }
-                
-                canvas.width = w; 
+                canvas.width = w;
                 canvas.height = h;
                 canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                resolve(canvas.toDataURL('image/jpeg', 0.68));
+                resolve(canvas.toDataURL('image/jpeg', 0.65));
             };
             img.onerror = () => resolve(base64Str);
         });
@@ -246,28 +245,27 @@ export default function Produtos({ user, permissoes }) {
     const moverPosicaoCategoria = async (indexAtual, direcao) => {
         const novoIndex = indexAtual + direcao;
         if (novoIndex < 0 || novoIndex >= categoriesList.length) return;
-        
         const novaLista = [...categoriesList];
         const [itemMovido] = novaLista.splice(indexAtual, 1);
         novaLista.splice(novoIndex, 0, itemMovido);
-        
         setCategoriesList(novaLista);
-        try { 
-            await sincronizarCatalogoPublico(undefined, novaLista); 
-        } catch (err) {}
+        try {
+            await sincronizarCatalogoPublico(undefined, novaLista);
+        } catch (err) {
+            alert("Erro ao reordenar posição no mosaico.");
+        }
     };
 
     const selecionarCategoriaParaEditar = (cat) => {
         const tagAtual = cat.tag !== undefined ? cat.tag : 'DESTAQUE';
-        const opcoesPadraoTag = ['DESTAQUE', 'LANÇAMENTOS', 'OFERTAS', 'MAIS VENDIDOS', 'NOVIDADES', 'PERSONALIZADOS', 'CATEGORIA', ''];
-        
-        setCatForm({ 
-            id: cat.id, 
-            name: cat.name || '', 
-            imageUrl: cat.imageUrl || '', 
-            aspect: cat.aspect || '1:1', 
-            tagOption: opcoesPadraoTag.includes(tagAtual) ? tagAtual : 'OUTRO', 
-            customTag: opcoesPadraoTag.includes(tagAtual) ? '' : tagAtual 
+        const opcoesPadrao = ['DESTAQUE', 'LANÇAMENTOS', 'OFERTAS', 'MAIS VENDIDOS', 'NOVIDADES', 'PERSONALIZADOS', 'CATEGORIA', ''];
+        setCatForm({
+            id: cat.id,
+            name: cat.name || '',
+            imageUrl: cat.imageUrl || '',
+            aspect: cat.aspect || '1:1',
+            tagOption: opcoesPadrao.includes(tagAtual) ? tagAtual : 'OUTRO',
+            customTag: opcoesPadrao.includes(tagAtual) ? '' : tagAtual
         });
     };
 
@@ -277,21 +275,30 @@ export default function Produtos({ user, permissoes }) {
         setSaving(true);
         try {
             const tagFinal = catForm.tagOption === 'OUTRO' ? catForm.customTag.trim().toUpperCase() : catForm.tagOption;
-            const newCat = { 
-                id: catForm.id || crypto.randomUUID(), 
-                name: catForm.name.trim(), 
-                imageUrl: await comprimirImagemBase64Antiga(catForm.imageUrl || ''), 
-                aspect: catForm.aspect || '1:1', 
-                tag: tagFinal 
+            const newCat = {
+                id: catForm.id || crypto.randomUUID(),
+                name: catForm.name.trim(),
+                imageUrl: await comprimirImagemBase64Antiga(catForm.imageUrl || ''),
+                aspect: catForm.aspect || '1:1',
+                tag: tagFinal
             };
-            const rawUpdatedCats = catForm.id ? categoriesList.map(c => c.id === catForm.id ? newCat : c) : [...categoriesList, newCat];
-            const updatedCats = await Promise.all(rawUpdatedCats.map(async (c) => ({ ...c, imageUrl: await comprimirImagemBase64Antiga(c.imageUrl || '') })));
-            
+            const rawUpdatedCats = catForm.id
+                ? categoriesList.map(c => c.id === catForm.id ? newCat : c)
+                : [...categoriesList, newCat];
+
+            const updatedCats = await Promise.all(
+                rawUpdatedCats.map(async (c) => ({
+                    ...c,
+                    imageUrl: await comprimirImagemBase64Antiga(c.imageUrl || '')
+                }))
+            );
+
             await sincronizarCatalogoPublico(undefined, updatedCats);
             setCategoriesList(updatedCats);
             setCatForm({ id: '', name: '', imageUrl: '', aspect: '1:1', tagOption: 'DESTAQUE', customTag: '' });
-        } catch (error) { 
-            alert("Erro ao salvar categoria."); 
+        } catch (error) {
+            console.error("Erro ao salvar categoria:", error);
+            alert("Erro ao salvar categoria: " + (error.message || "Tente novamente."));
         }
         setSaving(false);
     };
@@ -306,34 +313,51 @@ export default function Produtos({ user, permissoes }) {
     const openModal = (product = null) => {
         if (product) {
             setEditingId(product.id);
+            const normalizedVariations = (product.variations || []).map(v => ({
+                name: v.name,
+                options: v.options.map(opt => typeof opt === 'string' ? { name: opt, price: null } : opt)
+            }));
+
             setFormData({
-                name: product.name || '', 
-                sku: product.sku || '', 
-                description: product.description || '', 
-                category: product.category || '', 
+                name: product.name || '',
+                sku: product.sku || '',
+                description: product.description || '',
+                category: product.category || '',
                 imageUrl: product.imageUrl || '',
-                price: product.price || 0, 
-                promoPrice: product.promoPrice || 0, 
-                isPromo: product.isPromo || false, 
+                price: product.price || 0,
+                promoPrice: product.promoPrice || 0,
+                isPromo: product.isPromo || false,
                 isActive: product.isActive !== false,
-                destaque: product.destaque || false, 
-                novidade: product.novidade || false, 
+                destaque: product.destaque || false,
+                novidade: product.novidade || false,
                 maisVendido: product.maisVendido || false,
-                weight: product.weight || 0, 
-                dimensions: product.dimensions || { length: 0, width: 0, height: 0 }, 
-                variations: product.variations || []
+                weight: product.weight || 0,
+                dimensions: product.dimensions || { length: 0, width: 0, height: 0 },
+                variations: normalizedVariations
             });
         } else {
             setEditingId(null);
             setFormData({
-                name: '', sku: '', description: '', category: categoriesList[0]?.name || '', imageUrl: '', 
-                price: 0, promoPrice: 0, isPromo: false, isActive: true,
-                destaque: false, novidade: false, maisVendido: false, 
-                weight: 0, dimensions: { length: 0, width: 0, height: 0 }, variations: []
+                name: '',
+                sku: '',
+                description: '',
+                category: categoriesList[0]?.name || '',
+                imageUrl: '',
+                price: 0,
+                promoPrice: 0,
+                isPromo: false,
+                isActive: true,
+                destaque: false,
+                novidade: false,
+                maisVendido: false,
+                weight: 0,
+                dimensions: { length: 0, width: 0, height: 0 },
+                variations: []
             });
         }
-        setNewVarName(''); 
-        setNewVarOptions(''); 
+        setVarGroupName('');
+        setVarOptionName('');
+        setVarOptionPrice('');
         setIsModalOpen(true);
     };
 
@@ -342,69 +366,98 @@ export default function Produtos({ user, permissoes }) {
         if (!idEscolhido) return;
         const prodCusto = produtosDoCusto.find(p => p.id === idEscolhido);
         if (prodCusto) {
-            setFormData(prev => ({ 
-                ...prev, 
-                name: prodCusto.nome || '', 
-                price: prodCusto.precoVenda || prodCusto.precoSugerido || 0, 
-                weight: prodCusto.peso || 0, 
-                dimensions: { 
-                    length: prodCusto.comprimento || 0, 
-                    width: prodCusto.largura || 0, 
-                    height: prodCusto.altura || 0 
-                } 
+            setFormData(prev => ({
+                ...prev,
+                name: prodCusto.nome || '',
+                category: prodCusto.categoria || prev.category,
+                price: prodCusto.precoVenda || prodCusto.precoSugerido || 0,
+                weight: prodCusto.peso || 0,
+                dimensions: {
+                    length: prodCusto.comprimento || 0,
+                    width: prodCusto.largura || 0,
+                    height: prodCusto.altura || 0
+                }
             }));
         }
     };
 
-    const handleAddVariation = () => {
-        if (!newVarName || !newVarOptions) return;
-        const optionsArray = newVarOptions.split(',').map(opt => opt.trim()).filter(opt => opt);
-        setFormData(prev => ({ 
-            ...prev, 
-            variations: [...prev.variations, { name: newVarName.trim(), options: optionsArray }] 
-        }));
-        setNewVarName(''); 
-        setNewVarOptions('');
+    const handleAddVariationOption = () => {
+        if (!varGroupName.trim() || !varOptionName.trim()) return;
+        const priceNum = varOptionPrice ? safeNum(varOptionPrice) : null;
+
+        setFormData(prev => {
+            const existingGroupIndex = prev.variations.findIndex(v => v.name.toLowerCase() === varGroupName.toLowerCase().trim());
+            const newOption = { name: varOptionName.trim(), price: priceNum };
+
+            if (existingGroupIndex >= 0) {
+                const updatedVariations = [...prev.variations];
+                updatedVariations[existingGroupIndex] = {
+                    ...updatedVariations[existingGroupIndex],
+                    options: [...updatedVariations[existingGroupIndex].options, newOption]
+                };
+                return { ...prev, variations: updatedVariations };
+            } else {
+                return { ...prev, variations: [...prev.variations, { name: varGroupName.trim(), options: [newOption] }] };
+            }
+        });
+
+        setVarOptionName('');
+        setVarOptionPrice('');
     };
 
-    const handleRemoveVariation = (index) => {
-        setFormData(prev => ({ 
-            ...prev, 
-            variations: prev.variations.filter((_, i) => i !== index) 
-        }));
+    const handleRemoveVariationOption = (groupIndex, optionIndex) => {
+        setFormData(prev => {
+            const updatedVariations = prev.variations
+                .map((group, idx) => {
+                    if (idx !== groupIndex) return group;
+                    return {
+                        ...group,
+                        options: group.options.filter((_, oIdx) => oIdx !== optionIndex)
+                    };
+                })
+                .filter(group => group.options.length > 0);
+            return { ...prev, variations: updatedVariations };
+        });
     };
 
     const handleSave = async (e) => {
         e.preventDefault();
         setSaving(true);
         try {
-            const precoNormal = Number(formData.price || 0);
-            const precoPromocional = Number(formData.promoPrice || 0);
-            const precoFinalVenda = formData.isPromo && precoPromocional > 0 ? precoPromocional : precoNormal;
-            
+            const precoNormal = safeNum(formData.price);
+            const precoPromocional = safeNum(formData.promoPrice);
             const newProduct = {
-                id: editingId || crypto.randomUUID(), 
+                id: editingId || crypto.randomUUID(),
                 ...formData,
                 imageUrl: await comprimirImagemBase64Antiga(formData.imageUrl || ''),
-                price: precoNormal, 
-                promoPrice: precoPromocional, 
-                sellingPrice: precoFinalVenda,
-                weight: Number(formData.weight || 0),
-                dimensions: { 
-                    length: Number(formData.dimensions.length || 0), 
-                    width: Number(formData.dimensions.width || 0), 
-                    height: Number(formData.dimensions.height || 0) 
+                price: precoNormal,
+                promoPrice: precoPromocional,
+                sellingPrice: formData.isPromo && precoPromocional > 0 ? precoPromocional : precoNormal,
+                weight: safeNum(formData.weight),
+                dimensions: {
+                    length: safeNum(formData.dimensions?.length),
+                    width: safeNum(formData.dimensions?.width),
+                    height: safeNum(formData.dimensions?.height)
                 }
             };
-            
-            const rawUpdatedProducts = editingId ? products.map(p => p.id === editingId ? newProduct : p) : [...products, newProduct];
-            const updatedProducts = await Promise.all(rawUpdatedProducts.map(async (p) => ({ ...p, imageUrl: await comprimirImagemBase64Antiga(p.imageUrl || '') })));
-            
+
+            const rawUpdatedProducts = editingId
+                ? products.map(p => p.id === editingId ? newProduct : p)
+                : [...products, newProduct];
+
+            const updatedProducts = await Promise.all(
+                rawUpdatedProducts.map(async (p) => ({
+                    ...p,
+                    imageUrl: await comprimirImagemBase64Antiga(p.imageUrl || '')
+                }))
+            );
+
             await sincronizarCatalogoPublico(updatedProducts, undefined);
             setProducts(updatedProducts);
             setIsModalOpen(false);
-        } catch (error) { 
-            alert("Erro ao salvar produto."); 
+        } catch (error) {
+            console.error("Erro ao salvar produto:", error);
+            alert("Erro ao salvar produto: " + (error.message || "Tente novamente."));
         }
         setSaving(false);
     };
@@ -416,8 +469,8 @@ export default function Produtos({ user, permissoes }) {
         setProducts(updatedProducts);
     };
 
-    const formatMoney = (val) => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    
+    const formatMoney = (val) => safeNum(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
     if (loading) return <div className="p-8 flex justify-center"><Icon name="loader" size={32} className="animate-spin text-slate-400" /></div>;
 
     return (
@@ -448,7 +501,7 @@ export default function Produtos({ user, permissoes }) {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-widest text-slate-500 font-black">
-                                <th className="p-4">Produto</th>
+                                <th className="p-4">Produto / Selos</th>
                                 <th className="p-4">SKU / Categoria</th>
                                 <th className="p-4">Preço</th>
                                 <th className="p-4 text-center">Status</th>
@@ -465,6 +518,7 @@ export default function Produtos({ user, permissoes }) {
                                             <div className="flex flex-wrap gap-1 mt-1">
                                                 {product.destaque && <span className="text-[9px] bg-emerald-100 text-emerald-700 font-black px-1.5 py-0.5 rounded uppercase">Top</span>}
                                                 {product.novidade && <span className="text-[9px] bg-blue-100 text-blue-700 font-black px-1.5 py-0.5 rounded uppercase">Novo</span>}
+                                                {product.maisVendido && <span className="text-[9px] bg-amber-100 text-amber-700 font-black px-1.5 py-0.5 rounded uppercase">Mais Vendido</span>}
                                             </div>
                                         </div>
                                     </td>
@@ -484,8 +538,8 @@ export default function Produtos({ user, permissoes }) {
                                         </span>
                                     </td>
                                     <td className="p-4 text-right">
-                                        <button onClick={() => openModal(product)} className="text-blue-500 hover:text-blue-700 p-2"><Icon name="edit" size={18}/></button>
-                                        <button onClick={() => handleDelete(product.id)} className="text-red-400 hover:text-red-600 p-2"><Icon name="trash-2" size={18}/></button>
+                                        <button onClick={() => openModal(product)} className="text-blue-500 hover:text-blue-700 p-2 cursor-pointer"><Icon name="edit" size={18}/></button>
+                                        <button onClick={() => handleDelete(product.id)} className="text-red-400 hover:text-red-600 p-2 cursor-pointer"><Icon name="trash-2" size={18}/></button>
                                     </td>
                                 </tr>
                             ))}
@@ -500,7 +554,7 @@ export default function Produtos({ user, permissoes }) {
                     <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
                         <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                             <div><h3 className="font-black text-slate-800 text-lg uppercase">Categorias & Posição no Mosaico</h3></div>
-                            <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-black"><Icon name="x" size={24} /></button>
+                            <button onClick={() => setIsCatModalOpen(false)} className="text-slate-400 hover:text-black cursor-pointer"><Icon name="x" size={24} /></button>
                         </div>
                         <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
                             <form onSubmit={handleSaveCategory} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
@@ -518,7 +572,7 @@ export default function Produtos({ user, permissoes }) {
                                             <input type="file" accept="image/*" onChange={handleCatImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
                                         </div>
                                         {catForm.imageUrl && (
-                                            <button type="button" onClick={() => iniciarModalCrop(catForm.imageUrl, 'category', catForm.aspect)} className="text-[10px] font-black uppercase text-indigo-600 hover:underline">
+                                            <button type="button" onClick={() => iniciarModalCrop(catForm.imageUrl, 'category', catForm.aspect)} className="text-[10px] font-black uppercase text-indigo-600 hover:underline cursor-pointer">
                                                 ✂️ Ajustar ({catForm.aspect || '1:1'})
                                             </button>
                                         )}
@@ -558,22 +612,22 @@ export default function Produtos({ user, permissoes }) {
                                     {catForm.id && (
                                         <button type="button" onClick={() => setCatForm({ id: '', name: '', imageUrl: '', aspect: '1:1', tagOption: 'DESTAQUE', customTag: '' })} className="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg font-black text-xs uppercase cursor-pointer">Cancelar</button>
                                     )}
-                                    <button type="submit" disabled={saving} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-xs uppercase">
+                                    <button type="submit" disabled={saving} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-xs uppercase cursor-pointer">
                                         {saving ? 'Salvando...' : catForm.id ? 'Atualizar Categoria' : 'Adicionar Categoria'}
                                     </button>
                                 </div>
                             </form>
-                            
+
                             <div className="space-y-2.5">
                                 {categoriesList.map((cat, index) => (
                                     <div key={cat.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-xs hover:border-indigo-300">
                                         <div className="flex items-center gap-3.5">
                                             <div className="flex flex-col gap-1">
-                                                <button type="button" disabled={index === 0} onClick={() => moverPosicaoCategoria(index, -1)} className="w-6 h-6 rounded bg-slate-100 hover:bg-indigo-600 hover:text-white disabled:opacity-30 text-slate-700 font-black text-xs">↑</button>
-                                                <button type="button" disabled={index === categoriesList.length - 1} onClick={() => moverPosicaoCategoria(index, 1)} className="w-6 h-6 rounded bg-slate-100 hover:bg-indigo-600 hover:text-white disabled:opacity-30 text-slate-700 font-black text-xs">↓</button>
+                                                <button type="button" disabled={index === 0} onClick={() => moverPosicaoCategoria(index, -1)} className="w-6 h-6 rounded bg-slate-100 hover:bg-indigo-600 hover:text-white disabled:opacity-30 text-slate-700 font-black text-xs cursor-pointer">↑</button>
+                                                <button type="button" disabled={index === categoriesList.length - 1} onClick={() => moverPosicaoCategoria(index, 1)} className="w-6 h-6 rounded bg-slate-100 hover:bg-indigo-600 hover:text-white disabled:opacity-30 text-slate-700 font-black text-xs cursor-pointer">↓</button>
                                             </div>
                                             <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
-                                                {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-cover" /> : <Icon name="image" size={18} className="text-slate-300" />}
+                                                {cat.imageUrl ? <img src={cat.imageUrl} className="w-full h-full object-cover" alt={cat.name} /> : <Icon name="image" size={18} className="text-slate-300" />}
                                             </div>
                                             <div>
                                                 <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
@@ -585,9 +639,9 @@ export default function Produtos({ user, permissoes }) {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-1">
-                                            <button type="button" onClick={() => { selecionarCategoriaParaEditar(cat); if (cat.imageUrl) iniciarModalCrop(cat.imageUrl, 'category', cat.aspect || '1:1'); }} className="px-2.5 py-1.5 text-xs font-black uppercase text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg">✂️ Enquadrar</button>
-                                            <button onClick={() => selecionarCategoriaParaEditar(cat)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Icon name="edit-2" size={16}/></button>
-                                            <button onClick={() => handleDeleteCategory(cat.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Icon name="trash" size={16}/></button>
+                                            <button type="button" onClick={() => { selecionarCategoriaParaEditar(cat); if (cat.imageUrl) iniciarModalCrop(cat.imageUrl, 'category', cat.aspect || '1:1'); }} className="px-2.5 py-1.5 text-xs font-black uppercase text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg cursor-pointer">✂️ Enquadrar</button>
+                                            <button onClick={() => selecionarCategoriaParaEditar(cat)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg cursor-pointer"><Icon name="edit-2" size={16}/></button>
+                                            <button onClick={() => handleDeleteCategory(cat.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg cursor-pointer"><Icon name="trash" size={16}/></button>
                                         </div>
                                     </div>
                                 ))}
@@ -615,10 +669,10 @@ export default function Produtos({ user, permissoes }) {
                                     <select onChange={handleImportarDoCusto} className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none text-slate-700 focus:border-emerald-500 cursor-pointer">
                                         <option value="">{produtosDoCusto.length > 0 ? "Selecione um produto cadastrado no custo..." : "Você ainda não cadastrou nenhuma ficha técnica..."}</option>
                                         {produtosDoCusto.map(prod => {
-                                            const custo = Number(prod.custoTotal || 0);
-                                            const markup = Number(prod.markupEscolhido || 3);
+                                            const custo = safeNum(prod.custoTotal);
+                                            const markup = safeNum(prod.markupEscolhido || 3);
                                             const precoLoja = custo * markup;
-                                            const precoMkt = Number(prod.precoSugerido || prod.precoVenda || 0);
+                                            const precoMkt = safeNum(prod.precoSugerido || prod.precoVenda);
                                             return (
                                                 <option key={prod.id} value={prod.id}>
                                                     {prod.nome} (Custo: {formatMoney(custo)} • Sug. Loja: {formatMoney(precoLoja)} • Sug. Mkt: {formatMoney(precoMkt)})
@@ -680,17 +734,17 @@ export default function Produtos({ user, permissoes }) {
                                 )}
                             </div>
 
-                            {/* CAIXA DE DESCRIÇÃO AMPLIADA E RESPONSIVA (PULOS DE LINHA MANTIDOS) */}
+                            {/* CAIXA DE DESCRIÇÃO AMPLIADA E RESPONSIVA */}
                             <div className="space-y-1 w-full">
                                 <label className="text-[10px] font-black uppercase text-slate-500 ml-1 block mb-1">
                                     Descrição Comercial <span className="text-indigo-600 lowercase font-bold">(pode usar pular linha)</span>
                                 </label>
-                                <textarea 
-                                    rows="6" 
-                                    value={formData.description} 
-                                    onChange={e => setFormData({...formData, description: e.target.value})} 
+                                <textarea
+                                    rows="6"
+                                    value={formData.description}
+                                    onChange={e => setFormData({...formData, description: e.target.value})}
                                     placeholder="Descreva todos os detalhes, brindes ou instruções de personalização..."
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-800 outline-none focus:border-indigo-500 focus:bg-white resize-y whitespace-pre-line" 
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-800 outline-none focus:border-indigo-500 focus:bg-white resize-y whitespace-pre-line"
                                 />
                             </div>
 
@@ -714,32 +768,20 @@ export default function Produtos({ user, permissoes }) {
                                         </label>
                                     </div>
                                 </div>
-
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-slate-500 ml-1 block mb-2">Selos de Destaque na Vitrine</label>
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-xl border transition-all ${formData.destaque ? 'bg-emerald-50 border-emerald-400' : 'bg-white border-slate-200'}`}>
                                             <input type="checkbox" checked={formData.destaque} onChange={e => setFormData({...formData, destaque: e.target.checked})} className="w-4 h-4 accent-emerald-600" />
-                                            <div>
-                                                <span className="text-xs font-black uppercase text-emerald-700 block leading-none">★ Selo TOP</span>
-                                                <span className="text-[10px] text-slate-400 font-bold">Vai p/ Carrossel Destaque</span>
-                                            </div>
+                                            <div><span className="text-xs font-black uppercase text-emerald-700 block leading-none">★ Selo TOP</span><span className="text-[10px] text-slate-400 font-bold">Vai p/ Carrossel Destaque</span></div>
                                         </label>
-
                                         <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-xl border transition-all ${formData.novidade ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200'}`}>
                                             <input type="checkbox" checked={formData.novidade} onChange={e => setFormData({...formData, novidade: e.target.checked})} className="w-4 h-4 accent-blue-600" />
-                                            <div>
-                                                <span className="text-xs font-black uppercase text-blue-700 block leading-none">✨ Selo NOVIDADE</span>
-                                                <span className="text-[10px] text-slate-400 font-bold">Destaca lançamento</span>
-                                            </div>
+                                            <div><span className="text-xs font-black uppercase text-blue-700 block leading-none">✨ Selo NOVIDADE</span><span className="text-[10px] text-slate-400 font-bold">Destaca lançamento</span></div>
                                         </label>
-
                                         <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-xl border transition-all ${formData.maisVendido ? 'bg-amber-50 border-amber-400' : 'bg-white border-slate-200'}`}>
                                             <input type="checkbox" checked={formData.maisVendido} onChange={e => setFormData({...formData, maisVendido: e.target.checked})} className="w-4 h-4 accent-amber-600" />
-                                            <div>
-                                                <span className="text-xs font-black uppercase text-amber-700 block leading-none">🔥 MAIS VENDIDO</span>
-                                                <span className="text-[10px] text-slate-400 font-bold">Campeão de vendas</span>
-                                            </div>
+                                            <div><span className="text-xs font-black uppercase text-amber-700 block leading-none">🔥 MAIS VENDIDO</span><span className="text-[10px] text-slate-400 font-bold">Campeão de vendas</span></div>
                                         </label>
                                     </div>
                                 </div>
@@ -767,33 +809,69 @@ export default function Produtos({ user, permissoes }) {
                                 </div>
                             </div>
 
-                            <div className="p-4 border border-slate-200 rounded-xl space-y-4 bg-slate-50/50">
-                                <h4 className="font-black text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-2"><Icon name="layers" size={16}/> Variações (Cor, Tamanho, Material)</h4>
+                            {/* PAINEL DE VARIAÇÕES COM PREÇO ESPECÍFICO */}
+                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                                <h4 className="font-black text-slate-800 text-sm mb-4">Opções e Variações de Preço (Ex: Kits, Modelos)</h4>
+
                                 {formData.variations.length > 0 && (
-                                    <div className="space-y-2 mb-4">
-                                        {formData.variations.map((v, idx) => (
-                                            <div key={idx} className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-                                                <div>
-                                                    <span className="font-black text-xs text-slate-800 mr-2">{v.name}:</span>
-                                                    <span className="text-xs font-bold text-slate-500">{v.options.join(', ')}</span>
+                                    <div className="space-y-3 mb-5">
+                                        {formData.variations.map((group, gIdx) => (
+                                            <div key={gIdx} className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
+                                                <span className="font-black text-xs uppercase text-indigo-700 block mb-3 border-b border-slate-100 pb-2">
+                                                    Opção de Compra: {group.name}
+                                                </span>
+                                                <div className="flex flex-col gap-2">
+                                                    {group.options.map((opt, oIdx) => {
+                                                        const optName = typeof opt === 'string' ? opt : opt.name;
+                                                        const optPrice = typeof opt === 'string' ? null : opt.price;
+
+                                                        return (
+                                                            <div key={oIdx} className="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="font-bold text-sm text-slate-700">{optName}</span>
+                                                                    {optPrice ? (
+                                                                        <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-black text-[11px] uppercase">
+                                                                            {formatMoney(optPrice)}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400 font-bold text-[10px] uppercase">
+                                                                            (Usa preço normal do produto)
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <button type="button" onClick={() => handleRemoveVariationOption(gIdx, oIdx)} className="text-red-400 hover:text-red-600 transition-colors p-1 cursor-pointer" title="Remover Opção">
+                                                                    <Icon name="trash" size={16} />
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
-                                                <button type="button" onClick={() => handleRemoveVariation(idx)} className="text-red-400 hover:text-red-600"><Icon name="trash" size={16}/></button>
                                             </div>
                                         ))}
                                     </div>
                                 )}
-                                <div className="flex flex-col md:flex-row gap-2 items-end bg-white p-4 rounded-xl border border-slate-200">
-                                    <div className="w-full md:w-1/3 space-y-1">
-                                        <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Tipo (Ex: Cor)</label>
-                                        <input type="text" value={newVarName} onChange={e => setNewVarName(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-black" />
+
+                                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                    <div className="md:col-span-3 space-y-1">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">Nome do Grupo</label>
+                                        <input type="text" value={varGroupName} onChange={e => setVarGroupName(e.target.value)} placeholder="Ex: Modelo, Kit..." className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs outline-none focus:border-indigo-500" />
                                     </div>
-                                    <div className="w-full md:flex-1 space-y-1">
-                                        <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Opções (Separadas por vírgula)</label>
-                                        <input type="text" value={newVarOptions} onChange={e => setNewVarOptions(e.target.value)} placeholder="Preto, Branco, Cinza..." className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none focus:border-black" />
+                                    <div className="md:col-span-4 space-y-1">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">Nome da Opção</label>
+                                        <input type="text" value={varOptionName} onChange={e => setVarOptionName(e.target.value)} placeholder="Ex: Boneco + Tinta" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs outline-none focus:border-indigo-500" />
                                     </div>
-                                    <button type="button" onClick={handleAddVariation} className="w-full md:w-auto p-2.5 bg-slate-800 text-white rounded-lg font-black uppercase text-xs hover:bg-black transition-colors shrink-0 cursor-pointer">
-                                        Adicionar
-                                    </button>
+                                    <div className="md:col-span-3 space-y-1">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">Preço Opcional (R$)</label>
+                                        <input type="number" step="any" value={varOptionPrice} onChange={e => setVarOptionPrice(e.target.value)} placeholder="Ex: 54,90" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-black text-xs outline-none focus:border-indigo-500" />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <button type="button" onClick={handleAddVariationOption} className="w-full p-2.5 bg-slate-900 hover:bg-black text-white rounded-lg font-black uppercase text-xs transition-colors shadow-sm cursor-pointer">
+                                            Adicionar
+                                        </button>
+                                    </div>
+                                    <div className="md:col-span-12">
+                                        <span className="text-[9px] font-bold text-slate-400">*Deixe o preço vazio se a variação for do mesmo valor do produto.</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -813,9 +891,7 @@ export default function Produtos({ user, permissoes }) {
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
                         <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
-                            <div>
-                                <h3 className="font-black text-sm uppercase tracking-wider">✂️ Escolher Proporção e Enquadrar</h3>
-                            </div>
+                            <div><h3 className="font-black text-sm uppercase tracking-wider">✂️ Escolher Proporção e Enquadrar</h3></div>
                             <button type="button" onClick={() => setCropModal(prev => ({ ...prev, open: false }))} className="text-white/70 hover:text-white text-xl cursor-pointer">✕</button>
                         </div>
                         <div className="p-5 space-y-3.5">
@@ -850,6 +926,7 @@ export default function Produtos({ user, permissoes }) {
                     </div>
                 </div>
             )}
+
             <style jsx>{`.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }`}</style>
         </div>
     );
